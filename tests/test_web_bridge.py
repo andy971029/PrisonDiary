@@ -139,6 +139,40 @@ class TestWebSession(FeedMixin, unittest.TestCase):
         self.assertFalse(session.occluded, out["message"])
         self.assertEqual(out["exp_abs"], 623456, out["message"])
 
+    def green_bracket_screen(self, text: str) -> np.ndarray:
+        """合成畫面加上遊戲的綠色 ]（最後一個字元的那幾欄染綠）。"""
+        screen = make_screen(text)
+        width = testfont.render_mask(text, padding=0).shape[1]
+        right = 180 + width                     # make_screen 預設 text_x=180
+        tail = screen[262:290, right - 3 : right, :3]
+        tail[tail.max(axis=2) > 200] = (60, 220, 90)
+        return screen
+
+    def feed_screen(self, session: bridge.WebSession, screen: np.ndarray) -> dict:
+        h, w = screen.shape[:2]
+        session.feed_frame(rgba_bytes(screen), w, h)
+        return json.loads(session.tick())
+
+    def test_shorter_exp_after_levelup_is_not_occluded(self):
+        """升級後經驗歸零、數字變短，] 往左移但沒被擋住；不能一直卡在「無法讀取」。"""
+        session = bridge.WebSession(templates=self.templates)      # 預設要求括號
+        out = self.feed_screen(session, self.green_bracket_screen("1147106[99.99%]"))
+        self.assertFalse(session.occluded, out["message"])
+        out = self.feed_screen(session, self.green_bracket_screen("1556[0.13%]"))
+        self.assertFalse(session.occluded, out["message"])
+        self.assertTrue(out["raw_exp"].startswith("1556[0.13%"), out)
+
+    def test_longer_exp_refits_the_roi(self):
+        """數字變長、] 跑出 ROI 右邊太遠：連續被當成擋住後重新定位，看得到 ] 就採用。"""
+        session = bridge.WebSession(templates=self.templates)
+        self.feed_screen(session, self.green_bracket_screen("1556[0.13%]"))
+        self.assertFalse(session.occluded)
+        screen = self.green_bracket_screen("1147106[99.99%]")
+        for _ in range(bridge.RELOCATE_AFTER_MISSES + 1):
+            out = self.feed_screen(session, screen)
+        self.assertFalse(session.occluded, out["message"])
+        self.assertTrue(out["raw_exp"].startswith("1147106[99.99%"), out)
+
     def test_map_name_is_found_via_minimap_title_then_read(self):
         """小地圖標題列 OCR 成「小地圖」→ 內容區定位 → 指紋穩定換圖 → 名稱 OCR。"""
         from test_identity import make_panel
@@ -316,6 +350,12 @@ class TestIdentityOcr(unittest.TestCase):
         session = self.make_session()
         session._finish_level(FakeZone(), ["45", "5", "45", "45"])
         self.assertEqual(session.level, 45)
+
+    def test_spaced_digits_count_as_an_answer(self):
+        """實測 56 在某個倍率讀成 "5 6"，加上 "56" 正好湊滿兩個。"""
+        session = self.make_session()
+        session._finish_level(FakeZone(), ["6", "56", "6", "5 6"])
+        self.assertEqual(session.level, 56)
 
     def test_level_digit_count_mismatch_is_not_taught(self):
         """切出兩個字形、辨識卻說是三位數：用這個教模板會把錯的字形記起來。"""

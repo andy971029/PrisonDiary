@@ -141,15 +141,20 @@ def locate_exp_field(
     return fallback
 
 
-def closing_bracket_columns(client_bgra: np.ndarray, rect: tuple[int, int, int, int]) -> list[int]:
+def closing_bracket_columns(
+    client_bgra: np.ndarray,
+    rect: tuple[int, int, int, int],
+    left_reach: int = BRACKET_REACH,
+) -> list[int]:
     """欄位右緣附近、屬於綠色 ``]`` 的畫面 x 座標；空串列代表看不到它。
 
     ``]`` 是欄位裡最後一個字元，它被擋住就表示後面的資料可能不完整（連帶百分比也
-    可能讀成別的數字），呼叫端可以拿來判斷這一格該不該信。
+    可能讀成別的數字），呼叫端可以拿來判斷這一格該不該信。``left_reach`` 是從右緣
+    往左找多遠：數字變短（升級後經驗歸零）時 ``]`` 會整個往左移。
     """
     left, top, right, bottom = rect
     height, width = client_bgra.shape[:2]
-    x0 = max(0, right - BRACKET_REACH)
+    x0 = max(0, right - left_reach)
     x1 = min(width, right + BRACKET_REACH)
     rows = client_bgra[max(0, top - 1) : min(height, bottom + 1), x0:x1].astype(np.int16)
     if rows.size == 0:

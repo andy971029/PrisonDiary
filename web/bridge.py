@@ -265,11 +265,16 @@ class WebSession:
             # 連續讀不到可能是視窗被縮放、ROI 偏了。跟桌面版 auto_configure 一樣：
             # 先試讀舊 ROI，讀不到才重新定位，定位也失敗就沿用舊的等它回來。
             # 被擋住時重新定位只會抓到殘缺的一截，等它露出來比較好。
-            if snapshot.consecutive_misses >= RELOCATE_AFTER_MISSES and not self.occluded:
+            # 被擋住太久也重找一次（例如數字變長、``]`` 跑出 ROI 右邊），但只接受看得到
+            # ``]`` 的結果：真的被擋住時找到的是殘缺的一截，不會拿來蓋掉好的 ROI。
+            if snapshot.consecutive_misses >= RELOCATE_AFTER_MISSES:
                 now = time.monotonic()
                 if now - self._relocated_at >= RELOCATE_INTERVAL_SEC:
                     self._relocated_at = now
-                    self._locate(force=False)
+                    if self.occluded:
+                        self._refit_roi(require_wider=False)
+                    else:
+                        self._locate(force=False)
         else:
             self.message = ""
         return self._payload(snapshot, reading.raw_exp)
@@ -293,7 +298,9 @@ class WebSession:
         frame = self.capturer.frame
         if not self.require_bracket or not reading.ok or rect is None or frame is None:
             return reading
-        if closing_bracket_columns(frame, rect):
+        # 整個欄位內都找：升級後經驗歸零、數字變短，``]`` 會離開 ROI 的右緣往左移，
+        # 但資料是完整的。只看右緣的話每一格都會被當成被擋住，永遠卡在「無法讀取」。
+        if closing_bracket_columns(frame, rect, left_reach=rect[2] - rect[0]):
             return reading
         self.occluded = True
         return StatusReading.failed(
@@ -312,21 +319,33 @@ class WebSession:
         if now - self._widen_checked_at < WIDEN_CHECK_SEC:
             return
         self._widen_checked_at = now
+        self._refit_roi(require_wider=True)
+
+    def _refit_roi(self, require_wider: bool) -> bool:
+        """重新定位經驗值欄位，條件符合才換掉目前的 ROI。
+
+        ``require_wider``：只接受更寬的（讀得到時的定期檢查）。不要求更寬時改成要求
+        看得到綠色 ``]``，代表找到的是完整的欄位而不是被擋住的一截。
+        """
         frame = self.capturer.frame
         roi = self.cfg.reader.exp_roi
         if frame is None or not roi.is_set():
-            return
+            return False
         found = locate_exp_field(frame, self.templates)
         if found is None or not found.confident:
-            return
+            return False
         left, _top, right, _bottom = self._current_rect() or (0, 0, 0, 0)
-        if found.rect[2] - found.rect[0] <= right - left:
-            return
+        if require_wider:
+            if found.rect[2] - found.rect[0] <= right - left:
+                return False
+        elif self.require_bracket and not closing_bracket_columns(frame, found.rect):
+            return False
         self.cfg.reader.exp_roi = found.roi
         self.cfg.reader.threshold = found.threshold
         self.cfg.reader.invert = found.invert
         self.cfg.reader.ink_color = None
         self.rect = found.rect
+        return True
 
     # ---------------------------------------------------------------- 身分
 
@@ -583,7 +602,9 @@ class WebSession:
         """
         self._level_last_try = time.monotonic()
         expected = len(zone.digits)
-        raw = [(t or "").translate(ident._DIGIT_LOOKALIKES).strip() for t in texts or []]
+        # 兩位數之間的縫比較寬，Tesseract 常把 56 讀成 "5 6"；數字中間的空白一律拿掉，
+        # 不然這個倍率就被當成不是數字，剩下的答案湊不到兩個。
+        raw = ["".join((t or "").translate(ident._DIGIT_LOOKALIKES).split()) for t in texts or []]
         valid = [int(t) for t in raw if t.isdigit() and 1 <= int(t) <= ident.MAX_LEVEL]
         exact = [v for v in valid if len(str(v)) == expected]
         self.level_status = "OCR：" + " / ".join(t or "空" for t in raw)
