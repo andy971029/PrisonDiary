@@ -1,0 +1,4 @@
+# 只有本機跑測試需要；瀏覽器裡的 numpy 由 Pyodide 提供。
+numpy>=1.26
+# 選用：test_gamedata 有幾個案例要解 lz4 壓縮，沒裝會 skip。
+lz4>=4.3

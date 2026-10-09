@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+# 打包產物：serve.cmd 每次啟動都會重新產生
+web/mapleexp.zip
+
+# Claude Code
+CLAUDE.md
+CLAUDE.local.md
+.claude/
