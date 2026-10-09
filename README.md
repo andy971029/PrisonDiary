@@ -9,6 +9,11 @@
 
 ## 使用
 
+直接用 Chrome 或 Edge 開 https://andy971029.github.io/PrisonDiary/ ，什麼都不用裝。
+每次 push 到 main，GitHub Actions 會先跑測試，通過才重新打包並發布。
+
+### 在自己電腦跑
+
 需要 Python 3.11 以上（只用來打包與開本機伺服器）和 Chrome 或 Edge。
 
 ```powershell

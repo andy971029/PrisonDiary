@@ -1,0 +1,57 @@
+# push 到 main 就重新打包並發布到 GitHub Pages。
+# mapleexp.zip 是打包產物、不進 git，所以要在這裡用 build_web.py 現做。
+# 只發布網頁真正會載入的四個檔案，src/、tests/ 這些不必放上網站。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 連續 push 時只留最後一次部署，舊的直接取消。
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 測試沒過就不發布，免得把壞掉的版本給朋友用。
+      - name: Test
+        run: |
+          python -m pip install -r requirements.txt
+          python -m unittest discover -s tests -t tests
+
+      - name: Build site
+        run: |
+          python scripts/build_web.py
+          mkdir _site
+          cp web/index.html web/bridge.py web/mapvocab.json web/mapleexp.zip _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
