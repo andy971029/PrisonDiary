@@ -12,8 +12,8 @@
 需要 Python 3.11 以上（只用來打包與開本機伺服器）和 Chrome 或 Edge。
 
 ```powershell
-git clone https://github.com/andy971029/MapleExpWeb.git
-cd MapleExpWeb
+git clone https://github.com/andy971029/PrisonDiary.git
+cd PrisonDiary
 .\web\serve.cmd
 ```
 
