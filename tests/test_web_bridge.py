@@ -29,14 +29,7 @@ def rgba_bytes(screen_bgra: np.ndarray) -> bytes:
     return np.ascontiguousarray(screen_bgra[..., [2, 1, 0, 3]]).tobytes()
 
 
-class TestWebSession(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.templates = testfont.build_template_set()
-
-    def make_session(self) -> bridge.WebSession:
-        return bridge.WebSession(templates=self.templates, require_bracket=False)
-
+class FeedMixin:
     def feed_over_time(self, session: bridge.WebSession, texts: list[str]) -> dict:
         """速率要有時間差才算得出來；合成畫面瞬間餵完，所以讓時鐘每格走 1 秒。"""
         clock = iter(range(1000, 1000 + 10 * len(texts)))
@@ -51,6 +44,15 @@ class TestWebSession(unittest.TestCase):
         h, w = screen.shape[:2]
         session.feed_frame(rgba_bytes(screen), w, h)
         return json.loads(session.tick())
+
+
+class TestWebSession(FeedMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = testfont.build_template_set()
+
+    def make_session(self) -> bridge.WebSession:
+        return bridge.WebSession(templates=self.templates, require_bracket=False)
 
     def test_rgba_from_canvas_becomes_bgra(self):
         """canvas 給 RGBA、辨識層要 BGRA；換錯通道整條管線都會讀錯色。"""
@@ -359,6 +361,68 @@ class TestIdentityOcr(unittest.TestCase):
         session.ocr_result("x", json.dumps(["1"]))     # 結果回來後才能再掛同一件
         session._request_ocr("x", "digits", ["img"], {})
         self.assertEqual(len(session._take_ocr_outbox()), 1)
+
+
+class TestCharacterSwitch(FeedMixin, unittest.TestCase):
+    """換角色：兩隻角色的經驗值沒有關係，接著算會亂跳，所以統計要重新算。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = testfont.build_template_set()
+
+    def make_session(self) -> bridge.WebSession:
+        return bridge.WebSession(templates=self.templates, require_bracket=False)
+
+    def test_switching_character_resets_the_stats(self):
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]", "624456[12.36%]"])
+        session.job, session.character = "獵人", "舊角色"
+        self.assertGreater(session.tracker.snapshot().cum_net, 0)
+        session._finish_character({"key": "k2"}, [["法師\n"], ["新的人\n"]])
+        self.assertEqual(session.character, "新的人")
+        self.assertEqual(session.tracker.snapshot().cum_net, 0)
+        out = self.feed(session, "100[1.00%]")
+        self.assertEqual(out["exp_abs"], 100, out["message"])
+        self.assertEqual(out["totals"]["cum_net"], 0)
+        self.assertEqual(len(out["notices"]), 1)
+
+    def test_one_misread_character_does_not_reset(self):
+        """同一隻角色重讀時錯一個字，不能把統計歸零。"""
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]"])
+        session.character = "卍弘法艾德卍"
+        session._finish_character({"key": "k2"}, [["獵人\n"], ["卍弘法艾德出\n"]])
+        self.assertGreater(session.tracker.snapshot().cum_net, 0)
+        self.assertEqual(session._take_notices(), [])
+
+    def test_exp_bar_returning_waits_for_character_check(self):
+        """欄位消失（選角畫面）後回來，先確認角色名才把讀數餵給 tracker。"""
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]"])
+        session.set_ocr_ready(True)
+        session.character = "舊角色"
+        session.tracker._state = bridge.PAUSED
+        samples = session.tracker.snapshot().samples
+        out = self.feed(session, "100[1.00%]")
+        self.assertEqual(out["message"], "確認角色中…")
+        self.assertEqual(session.tracker.snapshot().samples, samples)
+        session._finish_character({"key": "k2"}, [["法師\n"], ["新的人\n"]])
+        out = self.feed(session, "100[1.00%]")
+        self.assertEqual(out["exp_abs"], 100, out["message"])
+        self.assertEqual(out["totals"]["cum_net"], 0)
+        self.assertEqual(out["deaths"], 0)
+
+    def test_character_check_gives_up_when_ocr_never_answers(self):
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]"])
+        session.set_ocr_ready(True)
+        session.character = "舊角色"
+        session.tracker._state = bridge.PAUSED
+        self.feed(session, "624456[12.36%]")
+        session._verify_until = 0.0         # 等到逾時
+        out = self.feed(session, "624456[12.36%]")
+        self.assertEqual(out["exp_abs"], 624456, out["message"])
+        self.assertNotEqual(out["message"], "確認角色中…")
 
 
 if __name__ == "__main__":

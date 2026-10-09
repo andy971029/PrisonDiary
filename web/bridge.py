@@ -21,6 +21,7 @@ SQLite 與 Windows 視窗管理。經驗值（模板比對）已經在真實畫�
 from __future__ import annotations
 
 import base64
+import difflib
 import json
 import time
 
@@ -62,6 +63,13 @@ RATE_WINDOW_SEC = 600
 CHARACTER_RECHECK_SEC = 5.0
 # 中文兩行各用這幾個倍率辨識、取字數最多的（桌面版 recognize_best 同一招）。
 CHARACTER_OCR_SCALES = (3, 4, 6)
+# 換角色一定會經過選角畫面，經驗值欄位會消失好幾格（tracker 進入 PAUSED）。欄位回來
+# 時先不餵 tracker，馬上重讀角色名，確認是不是同一隻再接著算；最多等這麼久，OCR 沒回來
+# 就照常接續。不等的話，新角色的經驗會在名字讀出來之前就被當成舊角色的增量或死亡。
+CHARACTER_VERIFY_SEC = 6.0
+# 兩次讀到的名字相似度低於這個值才算換角色。同一隻角色換倍率重讀，偶爾會錯一個字，
+# 不能因為這樣就把統計歸零。
+CHARACTER_SAME_RATIO = 0.5
 # 等級方塊只有 22x13，要多個倍率互相印證。實測 Tesseract 的英文模型在 3/4/6/8 倍
 # 都讀出 45，沒有分歧；中文模型讀同一塊則 4 個倍率只有 2 個有回答，所以數字走英文模型。
 LEVEL_OCR_SCALES = (3, 4, 6, 8)
@@ -154,6 +162,9 @@ class WebSession:
         self.level_status = ""
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
+        self._verify_until: float | None = None
+        self._pause_verified = False
+        self._notices: list[str] = []
         self._ocr_outbox: list[dict] = []
         self._ocr_inflight: dict[str, dict] = {}
         self._ocr_ready = False
@@ -208,6 +219,8 @@ class WebSession:
         self.character = ""
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
+        self._verify_until = None
+        self._pause_verified = False
         self._level_misses.clear()
         self.level_status = ""
         self._forget_minimap()
@@ -232,9 +245,18 @@ class WebSession:
             return self._payload(None)
 
         reading = self._reject_if_occluded(reading)
+        if reading.ok and self.tracker.state == PAUSED:
+            self._begin_character_verify()
+        if reading.ok and self._verifying():
+            # 先不餵：等角色名確認完，下一筆讀數再跟中斷前的基準比（或換角色後重新起算）。
+            self._scan_identity()
+            snapshot = self.tracker.snapshot()
+            self.message = "確認角色中…"
+            return self._payload(snapshot, reading.raw_exp)
         self.tracker.feed(reading)
         snapshot = self.tracker.snapshot()
         if reading.ok:
+            self._pause_verified = False
             self._scan_identity()
             self._maybe_widen_roi()
 
@@ -493,6 +515,34 @@ class WebSession:
         ]
         self._request_ocr(f"character:{key}", "text", images, {"key": key})
 
+    def _begin_character_verify(self) -> None:
+        """經驗值欄位消失後又回來：可能剛換了角色，強制馬上重讀角色名。"""
+        if not self._ocr_ready or not self.character or self._pause_verified:
+            return
+        self._pause_verified = True
+        self._verify_until = time.monotonic() + CHARACTER_VERIFY_SEC
+        self._character_key = ""
+        self._character_checked_at = -CHARACTER_RECHECK_SEC
+
+    def _verifying(self) -> bool:
+        if self._verify_until is None:
+            return False
+        if time.monotonic() >= self._verify_until:
+            self._verify_until = None       # OCR 沒回來：當作同一隻，照常接續
+            return False
+        return True
+
+    def _switch_character(self, old: str, new: str) -> None:
+        """換角色：統計整個重新算。兩隻角色的經驗值之間沒有任何關係，接著算只會亂跳。
+
+        版面位置、地圖都留著（同一個視窗、可能同一張圖）；等級下一格會重讀。
+        """
+        self.tracker.reset()
+        self.level = None
+        self._level_misses.clear()
+        self.level_status = ""
+        self._notices.append(f"換角色：{old} → {new}，統計重新計算。")
+
     def _request_ocr(self, rid: str, kind: str, images: list, ctx: dict) -> None:
         if rid in self._ocr_inflight:
             return
@@ -553,6 +603,7 @@ class WebSession:
 
     def _finish_character(self, ctx: dict, texts) -> None:
         """``texts`` 是 [[行1各倍率], [行2各倍率]]，每行取字數最多的。"""
+        self._verify_until = None
         if not texts:
             return      # 讀不到就保留上一次的結果，不要把已知的名字洗掉
         lines = []
@@ -562,14 +613,22 @@ class WebSession:
                 lines.append(best)
         if not lines:
             return
+        name = lines[1] if len(lines) >= 2 else lines[0]
+        old = self.character
+        switched = bool(old) and not _same_character(old, name)
+        if switched:
+            self._switch_character(old, name)
+            self.job = ""
         if len(lines) >= 2:
             guess = jobvocab.identify(lines[0])
             # 配不上清單時不要蓋掉已經讀對的職業；還沒有職業時才照原文存。
             self.job = guess.name if guess.matched or not self.job else self.job
-            self.character = lines[1]
-        else:
-            self.character = lines[0]
+        self.character = name
         self._character_key = ctx["key"]
+
+    def _take_notices(self) -> list[str]:
+        notices, self._notices = self._notices, []
+        return notices
 
     def _take_ocr_outbox(self) -> list[dict]:
         outbox, self._ocr_outbox = self._ocr_outbox, []
@@ -601,6 +660,7 @@ class WebSession:
             "level_status": self.level_status if self.level is None else "",
             "map_status": self.map_status if self._minimap_body is None else "",
             "ocr": self._take_ocr_outbox(),
+            "notices": self._take_notices(),
             "rois": {"exp": list(rect) if rect else None,
                      **{k: list(v) if v else None for k, v in self._rois.items()}},
         }
@@ -661,6 +721,13 @@ class WebSession:
             "deaths": snapshot.deaths,
         })
         return json.dumps(data, ensure_ascii=False)
+
+
+def _same_character(a: str, b: str) -> bool:
+    """兩次 OCR 讀到的名字是不是同一隻角色（容許錯一兩個字）。"""
+    if a == b:
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= CHARACTER_SAME_RATIO
 
 
 def trailing_numeral_bars(image: np.ndarray, band: tuple[int, int]) -> int:

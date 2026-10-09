@@ -656,6 +656,8 @@ function tick() {
     return;
   }
   render(out, performance.now() - started);
+  // 換角色時 tracker 已經歸零；歷史暫存以角色為 key，舊角色那段照樣留著等結算。
+  for (const text of out.notices || []) log(text);
   syncMini();
   trackHistory(out);
   if (ocr) for (const req of out.ocr || []) runOcr(req);
