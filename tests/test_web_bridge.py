@@ -403,6 +403,55 @@ class TestIdentityOcr(unittest.TestCase):
         self.assertEqual(len(session._take_ocr_outbox()), 1)
 
 
+class TestMapSwitch(FeedMixin, unittest.TestCase):
+    """在跟上次不同的地圖拿到經驗就重算：回村莊交任務的大筆經驗不能混進打怪的速率。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = testfont.build_template_set()
+
+    def make_session(self) -> bridge.WebSession:
+        return bridge.WebSession(templates=self.templates, require_bracket=False)
+
+    def walk(self, session: bridge.WebSession, steps: list[tuple[str, str]]) -> list[dict]:
+        """依序在 (地圖, 經驗字串) 上各餵一格，時鐘每格走 1 秒。"""
+        clock = iter(range(1000, 1000 + 10 * len(steps)))
+        outs = []
+        with mock.patch("mapleexp.vision.reader.time.perf_counter", lambda: float(next(clock))):
+            for map_id, text in steps:
+                session.map_id = map_id
+                outs.append(self.feed(session, text))
+        return outs
+
+    def test_gain_on_another_map_restarts_from_that_gain(self):
+        session = self.make_session()
+        outs = self.walk(session, [
+            ("A", "623456[12.34%]"), ("A", "623956[12.35%]"), ("A", "624456[12.36%]"),
+            ("B", "624956[12.37%]"),
+        ])
+        self.assertEqual(outs[-2]["totals"]["cum_net"], 1000)
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 500)   # 觸發的那筆留著，之前的不算
+        self.assertEqual(outs[-1]["epoch"], outs[-2]["epoch"] + 1)
+        self.assertEqual(len(outs[-1]["notices"]), 1)
+
+    def test_passing_through_a_map_without_gain_does_not_restart(self):
+        session = self.make_session()
+        outs = self.walk(session, [
+            ("A", "623456[12.34%]"), ("A", "623956[12.35%]"),
+            ("B", "623956[12.35%]"), ("A", "624456[12.36%]"),
+        ])
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 1000)
+        self.assertFalse(any(out["notices"] for out in outs))
+
+    def test_unknown_map_does_not_restart(self):
+        session = self.make_session()
+        outs = self.walk(session, [
+            ("A", "623456[12.34%]"), ("A", "623956[12.35%]"),
+            ("", "624456[12.36%]"), ("A", "624956[12.37%]"),
+        ])
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 1500)
+
+
 class TestCharacterSwitch(FeedMixin, unittest.TestCase):
     """換角色：兩隻角色的經驗值沒有關係，接著算會亂跳，所以統計要重新算。"""
 

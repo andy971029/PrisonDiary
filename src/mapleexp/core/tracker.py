@@ -153,6 +153,11 @@ class Tracker:
     def state(self) -> str:
         return self._state
 
+    @property
+    def baseline(self) -> StatusReading | None:
+        """目前拿來跟下一筆比較的那筆取樣（還沒有就是 None）。"""
+        return self._committed
+
     def mark_discontinuity(self) -> None:
         """下一筆可用的取樣只當新基準，不跟上一筆比。
 

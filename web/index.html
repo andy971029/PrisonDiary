@@ -714,11 +714,13 @@ function trackHistory(out) {
   const t = out.totals;
   if (!t) return;
   const now = {
-    net: t.cum_net, active: t.active_sec, idle: t.idle_sec,
+    net: t.cum_net, active: t.active_sec, idle: t.idle_sec, epoch: out.epoch,
   };
-  const prev = lastTotals;
+  let prev = lastTotals;
   lastTotals = now;
   if (!prev) return;
+  // tracker 重算過（換角色、換地圖拿經驗）：新的累計值全是重算之後的，整筆算給這一格。
+  if (prev.epoch !== now.epoch) prev = { net: 0, active: 0, idle: 0 };
   // 任何一項變小代表 tracker 被重設，這一格只當新基準，不算增量。
   const d = {
     net: now.net - prev.net, active: now.active - prev.active, idle: now.idle - prev.idle,

@@ -185,6 +185,11 @@ class WebSession:
         self.map_status = "等待文字辨識引擎"
         self._map_misses = 0
         self._map_name_checked_at = -MAP_NAME_RETRY_SEC
+        # 上一次拿到經驗是在哪張圖。在別張圖拿到經驗就整個重算（例如回村莊交任務的大筆經驗，
+        # 不該混進接下來打怪的速率）；只看「拿到經驗的地方」，路過的圖不算。
+        self._gain_map_id = ""
+        # tracker 每重算一次就 +1，頁面看到它變了就知道累計值是從零重新起算的。
+        self.epoch = 0
 
     # ------------------------------------------------------------------ #
 
@@ -230,7 +235,12 @@ class WebSession:
 
     def reset(self) -> None:
         """重新計算，但 ROI 留著（視窗沒動就不用重找）。"""
+        self._restart_tracker()
+
+    def _restart_tracker(self) -> None:
         self.tracker.reset()
+        self._gain_map_id = ""
+        self.epoch += 1
 
     def tick(self) -> str:
         if self.reader is None:
@@ -253,7 +263,7 @@ class WebSession:
             snapshot = self.tracker.snapshot()
             self.message = "確認角色中…"
             return self._payload(snapshot, reading.raw_exp)
-        self.tracker.feed(reading)
+        self._feed_tracker(reading)
         snapshot = self.tracker.snapshot()
         if reading.ok:
             self._pause_verified = False
@@ -278,6 +288,26 @@ class WebSession:
         else:
             self.message = ""
         return self._payload(snapshot, reading.raw_exp)
+
+    def _feed_tracker(self, reading: StatusReading) -> None:
+        """餵 tracker；這筆經驗若是在跟上一筆不同的地圖拿到的，就從這筆重新算起。
+
+        讓觸發的那筆經驗留在新的統計裡：從換圖前的最後一個基準重新起算，再餵這一筆。
+        地圖還認不出來（小地圖沒開、換圖中）時不判斷，也不更新紀錄。
+        """
+        base = self.tracker.baseline
+        gains = self.tracker.snapshot().gain_events
+        self.tracker.feed(reading)
+        if self.tracker.snapshot().gain_events == gains or not self.map_id:
+            return
+        if self._gain_map_id and self._gain_map_id != self.map_id:
+            self._restart_tracker()
+            if base is not None:
+                self.tracker.feed(base)
+                self.tracker.feed(reading)
+            name = self.map_name or "新地圖"
+            self._notices.append(f"在{name}拿到經驗，跟上次不同地圖，統計重新計算。")
+        self._gain_map_id = self.map_id
 
     # ------------------------------------------------------------------ #
 
@@ -369,6 +399,7 @@ class WebSession:
             self._forget_minimap()
             self.map_watcher = ident.MapWatcher()
             self.map_id = self.map_name = ""
+            self._gain_map_id = ""          # 解析度變了指紋也會變，不能拿來比
         job_rect, name_rect = _band_rects(found.name_rect, found.name_image)
         for key, value in (("level", found.level_rect), ("job", job_rect), ("name", name_rect)):
             if value is not None:
@@ -556,7 +587,7 @@ class WebSession:
 
         版面位置、地圖都留著（同一個視窗、可能同一張圖）；等級下一格會重讀。
         """
-        self.tracker.reset()
+        self._restart_tracker()
         self.level = None
         self._level_misses.clear()
         self.level_status = ""
@@ -678,6 +709,7 @@ class WebSession:
             "character": self.character,
             "map_name": self.map_name,
             "map_id": self.map_id,
+            "epoch": self.epoch,
             "level_status": self.level_status if self.level is None else "",
             "map_status": self.map_status if self._minimap_body is None else "",
             "ocr": self._take_ocr_outbox(),
