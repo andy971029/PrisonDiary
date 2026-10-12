@@ -413,13 +413,16 @@ class TestMapSwitch(FeedMixin, unittest.TestCase):
     def make_session(self) -> bridge.WebSession:
         return bridge.WebSession(templates=self.templates, require_bracket=False)
 
-    def walk(self, session: bridge.WebSession, steps: list[tuple[str, str]]) -> list[dict]:
-        """依序在 (地圖, 經驗字串) 上各餵一格，時鐘每格走 1 秒。"""
+    def walk(self, session: bridge.WebSession, steps: list[tuple]) -> list[dict]:
+        """依序在 (地圖, 經驗字串) 上各餵一格，時鐘每格走 1 秒。
+
+        地圖寫一個字串時指紋與名稱同名；寫 (指紋, 名稱) 可以分開指定。
+        """
         clock = iter(range(1000, 1000 + 10 * len(steps)))
         outs = []
         with mock.patch("mapleexp.vision.reader.time.perf_counter", lambda: float(next(clock))):
-            for map_id, text in steps:
-                session.map_id = map_id
+            for where, text in steps:
+                session.map_id, session.map_name = where if isinstance(where, tuple) else (where, where)
                 outs.append(self.feed(session, text))
         return outs
 
@@ -450,6 +453,33 @@ class TestMapSwitch(FeedMixin, unittest.TestCase):
             ("", "624456[12.36%]"), ("A", "624956[12.37%]"),
         ])
         self.assertEqual(outs[-1]["totals"]["cum_net"], 1500)
+
+    def test_unread_map_name_does_not_restart(self):
+        session = self.make_session()
+        outs = self.walk(session, [
+            (("a", "A"), "623456[12.34%]"), (("a", "A"), "623956[12.35%]"),
+            (("b", ""), "624456[12.36%]"), (("a", "A"), "624956[12.37%]"),
+        ])
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 1500)
+
+    def test_same_map_with_a_new_fingerprint_does_not_restart(self):
+        # 同一張圖的指紋會跳（框框偏 1px、半透明底下的場景），名字一樣就是同一張圖。
+        session = self.make_session()
+        outs = self.walk(session, [
+            (("a1", "A"), "623456[12.34%]"), (("a1", "A"), "623956[12.35%]"),
+            (("a2", "A"), "624456[12.36%]"), (("a3", "A"), "624956[12.37%]"),
+        ])
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 1500)
+        self.assertFalse(any(out["notices"] for out in outs))
+
+    def test_reread_name_on_the_same_fingerprint_does_not_restart(self):
+        session = self.make_session()
+        outs = self.walk(session, [
+            (("a", "A?"), "623456[12.34%]"), (("a", "A?"), "623956[12.35%]"),
+            (("a", "A"), "624456[12.36%]"), (("a", "A"), "624956[12.37%]"),
+        ])
+        self.assertEqual(outs[-1]["totals"]["cum_net"], 1500)
+        self.assertFalse(any(out["notices"] for out in outs))
 
 
 class TestCharacterSwitch(FeedMixin, unittest.TestCase):

@@ -187,7 +187,10 @@ class WebSession:
         self._map_name_checked_at = -MAP_NAME_RETRY_SEC
         # 上一次拿到經驗是在哪張圖。在別張圖拿到經驗就整個重算（例如回村莊交任務的大筆經驗，
         # 不該混進接下來打怪的速率）；只看「拿到經驗的地方」，路過的圖不算。
+        # 比的是辨識出來的地圖名稱：像素指紋對同一張圖不穩（框框偏 1px、半透明底下的場景
+        # 都會換一個指紋），拿它比會動不動就重算。指紋只用來認出「名字是同一張圖重讀的」。
         self._gain_map_id = ""
+        self._gain_map_name = ""
         # tracker 每重算一次就 +1，頁面看到它變了就知道累計值是從零重新起算的。
         self.epoch = 0
 
@@ -239,7 +242,7 @@ class WebSession:
 
     def _restart_tracker(self) -> None:
         self.tracker.reset()
-        self._gain_map_id = ""
+        self._gain_map_id = self._gain_map_name = ""
         self.epoch += 1
 
     def tick(self) -> str:
@@ -293,21 +296,26 @@ class WebSession:
         """餵 tracker；這筆經驗若是在跟上一筆不同的地圖拿到的，就從這筆重新算起。
 
         讓觸發的那筆經驗留在新的統計裡：從換圖前的最後一個基準重新起算，再餵這一筆。
-        地圖還認不出來（小地圖沒開、換圖中）時不判斷，也不更新紀錄。
+        地圖名稱還沒讀出來（小地圖沒開、換圖中、OCR 還沒回來）時不判斷，也不更新紀錄。
+        同一個指紋的名字被重讀改掉（OCR 這次讀得比較好）不算換圖。
         """
         base = self.tracker.baseline
         gains = self.tracker.snapshot().gain_events
         self.tracker.feed(reading)
-        if self.tracker.snapshot().gain_events == gains or not self.map_id:
+        if self.tracker.snapshot().gain_events == gains or not self.map_id or not self.map_name:
             return
-        if self._gain_map_id and self._gain_map_id != self.map_id:
+        if (
+            self._gain_map_name
+            and self._gain_map_name != self.map_name
+            and self._gain_map_id != self.map_id
+        ):
             self._restart_tracker()
             if base is not None:
                 self.tracker.feed(base)
                 self.tracker.feed(reading)
-            name = self.map_name or "新地圖"
-            self._notices.append(f"在{name}拿到經驗，跟上次不同地圖，統計重新計算。")
+            self._notices.append(f"在{self.map_name}拿到經驗，跟上次不同地圖，統計重新計算。")
         self._gain_map_id = self.map_id
+        self._gain_map_name = self.map_name
 
     # ------------------------------------------------------------------ #
 
@@ -399,7 +407,6 @@ class WebSession:
             self._forget_minimap()
             self.map_watcher = ident.MapWatcher()
             self.map_id = self.map_name = ""
-            self._gain_map_id = ""          # 解析度變了指紋也會變，不能拿來比
         job_rect, name_rect = _band_rects(found.name_rect, found.name_image)
         for key, value in (("level", found.level_rect), ("job", job_rect), ("name", name_rect)):
             if value is not None:
