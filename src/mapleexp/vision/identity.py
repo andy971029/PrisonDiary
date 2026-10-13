@@ -404,6 +404,8 @@ MAP_TEXT_GAP = 4
 # 圖示的特徵：接近正方形、而且幾乎佔滿整條名稱區的高度。
 ICON_MAX_ASPECT_DIFF = 0.35
 ICON_MIN_HEIGHT_RATIO = 0.75
+# 面板的右框線：地圖名短、面板窄的時候它會落在名稱區裡（實測 3 像素寬、貫穿整條帶）。
+BORDER_MAX_WIDTH = 4
 
 # 地圖要連續這麼多次讀到相同指紋才算換圖。
 # 這是真正的把關：UI 是靜態的，遊戲畫面每一幀都在動，動的東西穩定不下來。
@@ -472,6 +474,7 @@ def locate_map_zone(
         kept = [
             g for g in groups
             if not _looks_like_icon(text, g, band_bottom - band_top)
+            and not _looks_like_border(text, g, band_bottom - band_top)
         ]
         if not kept:
             continue
@@ -571,6 +574,22 @@ def _looks_like_icon(
         return True
     aspect = abs(group_width - group_height) / max(group_width, group_height)
     return aspect <= ICON_MAX_ASPECT_DIFF
+
+
+def _looks_like_border(
+    text: np.ndarray, group: tuple[int, int], band_height: int
+) -> bool:
+    """面板的框線：很細、幾乎貫穿整條名稱區。
+
+    留著的話裁切範圍會一路延伸到框線，而且這條線每一列都有像素，
+    :func:`text_bands` 就切不開兩行字，整塊黏成一行送去辨識（實測讀成亂碼後
+    被配到「龍VS龍 第一次的對決」）。
+    """
+    left, right = group
+    if right - left > BORDER_MAX_WIDTH:
+        return False
+    rows = np.flatnonzero(text[:, left:right].any(axis=1))
+    return rows.size > 0 and int(rows[-1] - rows[0]) + 1 >= band_height * ICON_MIN_HEIGHT_RATIO
 
 
 class MapWatcher:

@@ -211,6 +211,14 @@ class TestMapZoneValidation(unittest.TestCase):
         self.assertGreater(left, icon_right, "圖示沒有被排除")
         self.assertLess(right - left, 70)
 
+    def test_drops_the_panel_border(self):
+        """面板窄的時候右框線落在名稱區裡，留著會讓兩行字切不開（實測讀成別張地圖）。"""
+        screen = make_panel(text="1234", with_icon=True)
+        screen[20:64, 126:129, :3] = 40
+        rect = locate_map_zone(screen)
+        self.assertIsNotNone(rect)
+        self.assertLess(rect[2], 126, "框線被當成文字")
+
     def test_works_without_icon(self):
         rect = locate_map_zone(make_panel(text="1234", with_icon=False))
         self.assertIsNotNone(rect)
