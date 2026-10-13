@@ -196,7 +196,7 @@
       justify-content: center; border-width: 1px; }
     .m-btns button .ic { margin: 0; width: 12px; height: 12px; }
     .m-btns button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
-    /* 精簡模式：只留狀態燈、速率、目前經驗%、升級倒數，一行就好，盡量少擋遊戲畫面 */
+    /* 精簡模式：只留狀態燈、速率、每小時經驗%、升級倒數，一行就好，盡量少擋遊戲畫面 */
     body.mini.compact { height: auto; padding: 6px 10px 8px; }
     body.compact > :not(.m-compact), body:not(.compact) > .m-compact { display: none; }
     .m-compact { display: flex; align-items: center; gap: 10px; }
@@ -248,7 +248,7 @@
   <div class="m-compact m-btns">
     <span id="m-cstate" class="pill"><i></i></span>
     <span id="m-crate" class="rate-num">--</span><span class="rate-unit">EXP / hr</span>
-    <span class="m-ceta lead"><small>目前經驗</small><b id="m-cpct">--</b></span>
+    <span class="m-ceta lead"><small>每小時約</small><b id="m-cpct">--</b></span>
     <span class="m-ceta"><small>升級剩餘</small><b id="m-ceta">--</b></span>
     <button class="secondary" id="m-grow" data-mode="full"></button>
   </div>
@@ -1019,7 +1019,7 @@ const MINI_TEXT = [
   ["m-rate", "rate-main"], ["m-rate-pct", "rate-pct"],
   ["m-bar-pct", "bar-pct"], ["m-bar-text", "bar-text"],
   ["m-eta", "eta"], ["m-times", "times"],
-  ["m-crate", "rate-main"], ["m-cpct", "bar-pct"], ["m-ceta", "eta"],
+  ["m-crate", "rate-main"], ["m-ceta", "eta"],
 ];
 let miniWin = null;
 let miniCompact = false;      // 記住上次的模式，重開浮窗時沿用
@@ -1032,6 +1032,9 @@ function syncMini() {
     const el = doc.getElementById(mid);
     if (el) el.textContent = $(id).textContent;
   }
+  // 精簡列位置不夠，拿掉「≈ 」，約略的意思交給標籤「每小時約」。
+  const cpct = doc.getElementById("m-cpct");
+  if (cpct) cpct.textContent = $("rate-pct").textContent.replace(/^≈\s*/, "") || "--";
   const fill = doc.getElementById("m-bar-fill");
   if (fill) fill.style.width = $("bar-fill").style.width;
   const pill = doc.getElementById("m-state");
@@ -1080,7 +1083,7 @@ function mountMini(win) {
   }
   for (const btn of doc.querySelectorAll("[data-mode]")) {
     const compact = btn.dataset.mode === "compact";
-    const label = compact ? "縮小（只留速率、經驗%與倒數）" : "展開完整資訊";
+    const label = compact ? "縮小（只留速率、每小時%與倒數）" : "展開完整資訊";
     btn.innerHTML = compact ? ICONS.shrink : ICONS.grow;
     btn.title = label;
     btn.setAttribute("aria-label", label);
