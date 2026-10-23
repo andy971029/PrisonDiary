@@ -90,6 +90,16 @@ class TestWebSession(FeedMixin, unittest.TestCase):
         self.assertEqual(stats["per_half_hour"], bridge.format_exp(rate / 2))
         self.assertNotEqual(stats["average"], "--")
 
+    def test_idle_threshold_comes_from_the_page(self):
+        """經驗停滯多久算閒置是頁面設定的；0 代表永遠不判定閒置。"""
+        stalled = ["623456[12.34%]", "623956[12.35%]"] + ["623956[12.35%]"] * 6
+        quick = self.make_session()
+        quick.set_timing(1, 2)
+        self.assertEqual(self.feed_over_time(quick, stalled)["state_key"], "idle")
+        never = self.make_session()
+        never.set_timing(1, 0)
+        self.assertEqual(self.feed_over_time(never, stalled)["state_key"], "active")
+
     def test_stats_before_any_gain_are_placeholders(self):
         out = self.feed(self.make_session(), "623456[12.34%]")
         self.assertFalse(out["stats"]["recent_valid"])

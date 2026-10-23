@@ -130,7 +130,7 @@ EMPTY_ROIS: dict[str, tuple[int, int, int, int] | None] = {
 
 
 class WebSession:
-    """一場追蹤。JS 每秒呼叫一次 ``tick()``，拿回 JSON 字串畫到頁面上。"""
+    """一場追蹤。JS 每隔設定的秒數（預設 1 秒）呼叫一次 ``tick()``，拿回 JSON 字串畫到頁面上。"""
 
     def __init__(self, templates: TemplateSet | None = None, require_bracket: bool = True) -> None:
         # 綠色的 ``]`` 看不到就代表欄位被擋住，這一格不計。合成畫面沒有綠色括號，
@@ -202,6 +202,15 @@ class WebSession:
     def set_boost(self, factor: float) -> None:
         """經驗加倍券試算：只放大「收益」類的顯示數字，剩餘經驗與存檔用的原始累計不動。"""
         self.boost = max(1.0, float(factor))
+
+    def set_timing(self, interval_sec: float, idle_sec: float) -> None:
+        """頁面設定：幾秒取樣一次、經驗停多久算閒置（0 = 不判定閒置）。馬上生效，不用重算。
+
+        tracker 每次都直接讀設定物件，改了下一格就照新門檻算；已經累計的活躍／閒置不回頭改。
+        取樣間隔本身由 JS 的 setInterval 控制，這裡只記著，讓 tracker 的設定跟實際一致。
+        """
+        self.cfg.tracker.sample_interval = max(0.1, float(interval_sec))
+        self.cfg.tracker.idle_pause_sec = max(0.0, float(idle_sec))
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
