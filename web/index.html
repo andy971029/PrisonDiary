@@ -64,7 +64,6 @@
   .field span { flex: 1; }
   .field input { width: 72px; font: 700 15px var(--mono); text-align: right; padding: 4px 6px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
-  dialog.settings .note { margin: 4px 0 0; line-height: 1.5; }
   dialog.settings .btns { margin-top: 20px; }
   dialog.settings .btns .lead { margin-right: auto; }
   dialog.settings h3 { margin: 20px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line);
@@ -410,13 +409,10 @@
   <h2>設定</h2>
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
-  <p class="note">調長比較省電腦資源，但升級、換圖、換角色會晚一點反應。範圍 1–10 秒。</p>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <p class="note">停滯超過這個秒數的時間不算進活躍時間（走路、補給、掛機）。打一隻怪要很久的話要調大，不然速率會偏高；設 0 代表不判定閒置。</p>
   <h3>神聖祈禱（掛7）設定</h3>
   <label class="field"><span>祈禱等級</span><input type="number" id="set-level" min="1" max="30" step="1" required> 級<output id="set-level-sec"></output></label>
   <label class="field"><span>警示倒數</span><input type="number" id="set-warn" min="1" max="30" step="1" required> 秒</label>
-  <p class="note">倒數剩這麼多秒時開始警示。範圍 1–30 秒。</p>
   <div class="field"><span>警示方式</span></div>
   <div class="opt">
     <label class="switch"><input type="checkbox" id="set-flash"><i></i>浮窗閃爍</label>
@@ -429,7 +425,6 @@
     <button id="set-preview" class="secondary">試聽</button>
   </div>
   <label class="field"><span>警示時長</span><input type="number" id="set-alert" min="1" max="30" step="1" required> 秒</label>
-  <p class="note">警示要持續多久，最長等於警示倒數。</p>
   <div class="btns">
     <button id="set-default" class="secondary lead">恢復預設</button>
     <button id="set-cancel" class="secondary">取消</button>
