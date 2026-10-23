@@ -74,6 +74,10 @@
   .opt select { flex: 1; min-width: 0; font: 500 14px var(--body); padding: 4px 6px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
   .opt button { padding: 4px 12px; font-size: 13px; }
+  .opt .opt-label { min-width: 104px; padding-left: 42px; font-weight: 500; }
+  .opt input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ok); }
+  .opt input[type="range"]:disabled { opacity: .4; }
+  .opt output { font: 700 13px var(--mono); color: var(--accent); min-width: 4ch; text-align: right; }
   .opt .chip { width: 18px; height: 18px; flex: none; border: 1px solid var(--line); border-radius: 50%; }
   /* 開關：藏起原生 checkbox，外觀換成滑動開關；鍵盤一樣能用空白鍵切換。 */
   .switch { display: inline-flex; align-items: center; gap: 8px; min-width: 104px; cursor: pointer; font-weight: 500; position: relative; }
@@ -424,6 +428,11 @@
     <select id="set-sound-pick" aria-label="提示音效"></select>
     <button id="set-preview" class="secondary">試聽</button>
   </div>
+  <div class="opt">
+    <span class="opt-label">音量</span>
+    <input type="range" id="set-volume" min="0" max="100" step="5" aria-label="音量">
+    <output id="set-volume-val"></output>
+  </div>
   <label class="field"><span>警示時長</span><input type="number" id="set-alert" min="1" max="30" step="1" required> 秒</label>
   <div class="btns">
     <button id="set-default" class="secondary lead">恢復預設</button>
@@ -450,10 +459,10 @@ const SETTINGS_KEY = "mapleexp.settings.v1";
 const DEFAULT_SETTINGS = {
   intervalSec: 1, idleSec: 10,
   prayerLevel: 30, warnSec: 10, alertSec: 10,
-  flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone",
+  flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
-const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], prayerLevel: [1, 30], warnSec: [1, 30], alertSec: [1, 30] };
+const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], prayerLevel: [1, 30], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
 // 神聖祈禱各等級的持續秒數（技能說明表）。20 級是 90 秒，不是照每級 +3 推出來的 89，所以整張列出來。
 const PRAYER_SEC = [32, 35, 38, 41, 44, 47, 50, 53, 56, 59, 62, 65, 68, 71, 74, 77, 80, 83, 86, 90,
   93, 96, 99, 102, 105, 108, 111, 114, 117, 120];
@@ -1303,6 +1312,7 @@ function fillSettings(values) {
   $("set-color").value = values.flashColor;
   $("set-sound").checked = values.soundOn;
   $("set-sound-pick").value = values.sound;
+  $("set-volume").value = values.volume;
   syncSettingsForm();
 }
 
@@ -1315,7 +1325,8 @@ function syncSettingsForm() {
   if (Number($("set-alert").value) > warn) $("set-alert").value = warn;
   $("set-color-chip").style.background = $("set-color").value;
   $("set-color").disabled = !$("set-flash").checked;
-  $("set-sound-pick").disabled = $("set-preview").disabled = !$("set-sound").checked;
+  $("set-sound-pick").disabled = $("set-preview").disabled = $("set-volume").disabled = !$("set-sound").checked;
+  $("set-volume-val").textContent = `${$("set-volume").value}%`;
 }
 
 for (const [color, name] of FLASH_COLORS) {
@@ -1324,11 +1335,12 @@ for (const [color, name] of FLASH_COLORS) {
   $("set-color").add(opt);
 }
 for (const [id, name] of SOUNDS) $("set-sound-pick").add(new Option(name, id));
-for (const id of ["set-level", "set-warn", "set-color", "set-flash", "set-sound"]) {
+for (const id of ["set-level", "set-warn", "set-color", "set-flash", "set-sound", "set-volume"]) {
   $(id).addEventListener("input", syncSettingsForm);
   $(id).addEventListener("change", syncSettingsForm);
 }
-$("set-preview").addEventListener("click", () => playSound($("set-sound-pick").value));
+// 試聽用對話框裡目前的音量，還沒按「套用」也聽得出調整後的大小。
+$("set-preview").addEventListener("click", () => playSound($("set-sound-pick").value, $("set-volume").value));
 
 $("settings").addEventListener("click", () => {
   fillSettings(prefs);
@@ -1347,6 +1359,7 @@ $("set-save").addEventListener("click", () => {
     flashColor: $("set-color").value,
     soundOn: $("set-sound").checked,
     sound: $("set-sound-pick").value,
+    volume: $("set-volume").value,
   }));
   $("settings-dlg").close();
 });
@@ -1362,8 +1375,9 @@ let prayerTimer = null;
 let prayerSoundKey = "";        // 這一秒的音效播過了沒
 const soundCache = {};
 
-function playSound(id) {
+function playSound(id, volume = prefs.volume) {
   const audio = soundCache[id] || (soundCache[id] = new Audio(`sounds/${id}.ogg`));
+  audio.volume = Math.min(100, Math.max(0, Number(volume))) / 100;
   audio.currentTime = 0;
   audio.play().catch((err) => log("音效播放失敗：" + err.message));
 }
