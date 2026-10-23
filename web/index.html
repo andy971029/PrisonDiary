@@ -242,7 +242,7 @@
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
     <div class="m-btns">
-      <button class="halt" data-for="share"></button>
+      <button data-for="share"></button>
       <button class="secondary" data-for="pause"></button>
       <button class="secondary" data-for="reset"></button>
       <button class="secondary" data-for="settings"></button>
@@ -566,14 +566,25 @@ function syncButtons() {
   syncMini();
 }
 
-async function share() {
-  if (!navigator.mediaDevices?.getDisplayMedia) {
+// 從浮窗開始分享：getDisplayMedia 要求「剛點過」的那一頁來叫。Chrome 的置頂小視窗會把
+// 點擊同步給主頁，那就用主頁的，串流才不會跟浮窗綁在一起；同步不到（一般彈出視窗）
+// 才用浮窗自己的，這時關掉浮窗，分享可能會跟著結束。
+function mediaFor(win) {
+  if (navigator.userActivation?.isActive || !win.navigator.mediaDevices?.getDisplayMedia) {
+    return navigator.mediaDevices;
+  }
+  log("從彈出視窗開始分享：關掉小浮窗的話，分享可能會跟著結束。");
+  return win.navigator.mediaDevices;
+}
+
+async function share(media = navigator.mediaDevices) {
+  if (!media?.getDisplayMedia) {
     log("這個瀏覽器不支援 getDisplayMedia，請用 Chrome 或 Edge。");
     return;
   }
   try {
     // 解析度要求開到最大：Chrome 對大視窗預設會縮小，縮過的像素模板就比不準。
-    stream = await navigator.mediaDevices.getDisplayMedia({
+    stream = await media.getDisplayMedia({
       video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 5, max: 10 } },
       audio: false,
       preferCurrentTab: false,
@@ -1075,15 +1086,15 @@ function syncMini() {
     dot.className = $("state").className;
     dot.title = $("state").lastElementChild.textContent;
   }
-  // 控制鈕：圖示、說明、停用狀態都照抄主頁的同名按鈕。停止鈕只在分享中可按，
-  // 因為沒在分享時主頁那顆是「分享遊戲視窗」，選視窗的對話框要在主頁按才叫得出來。
+  // 控制鈕：圖示、顏色、說明、停用狀態都照抄主頁的同名按鈕。
   for (const btn of doc.querySelectorAll(".m-btns [data-for]")) {
     const main = $(btn.dataset.for);
     const icon = main.querySelector("svg");
     btn.innerHTML = icon ? icon.outerHTML : "";
     btn.title = main.textContent;
     btn.setAttribute("aria-label", main.textContent);
-    btn.disabled = main.disabled || (btn.dataset.for === "share" && !stream);
+    btn.className = main.className;
+    btn.disabled = main.disabled;
   }
   // 主頁若有手動指定亮／暗色，浮窗跟著；沒指定就各自跟系統。
   const theme = document.documentElement.dataset.theme;
@@ -1100,12 +1111,14 @@ function mountMini(win) {
   }
   doc.body.className = "mini";
   doc.body.replaceChildren(document.importNode($("mini-tpl").content, true));
-  // 浮窗的按鈕只是轉按主頁的按鈕，邏輯全在主頁。停止和重置會在主頁跳出結算視窗，
+  // 浮窗的按鈕只是轉按主頁的按鈕，邏輯全在主頁。停止、重置、設定會在主頁跳出對話框，
   // 所以順便把主頁叫到前面，不然使用者只看到浮窗、不知道要去哪裡按確認。
+  // 開始分享例外：選視窗的對話框是瀏覽器的，不用叫主頁；而且要用這次點擊的使用者啟用，
+  // 所以直接呼叫 share()，不經過主頁按鈕。
   for (const btn of doc.querySelectorAll(".m-btns [data-for]")) {
     btn.addEventListener("click", () => {
+      if (btn.dataset.for === "share" && !stream) { share(mediaFor(win)); return; }
       $(btn.dataset.for).click();
-      // 設定對話框也開在主頁，一樣要叫到前面。
       if (btn.dataset.for !== "pause") window.focus();
     });
   }
