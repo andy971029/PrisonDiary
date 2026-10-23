@@ -1,0 +1,13 @@
+These alert sounds come from Kenney (www.kenney.nl) and are released under
+Creative Commons Zero (CC0 1.0): http://creativecommons.org/publicdomain/zero/1.0/
+
+  three-tone.ogg      Digital Audio  threeTone1.ogg
+  two-tone.ogg        Digital Audio  twoTone1.ogg
+  low-three-tone.ogg  Digital Audio  lowThreeTone.ogg
+  zap-up.ogg          Digital Audio  zapThreeToneUp.ogg
+  power-up.ogg        Digital Audio  powerUp1.ogg
+  pizzicato-1.ogg     Music Jingles  jingles_PIZZI01.ogg
+  pizzicato-2.ogg     Music Jingles  jingles_PIZZI12.ogg
+  steel-1.ogg         Music Jingles  jingles_STEEL00.ogg
+  steel-2.ogg         Music Jingles  jingles_STEEL05.ogg
+  8bit.ogg            Music Jingles  jingles_NES13.ogg

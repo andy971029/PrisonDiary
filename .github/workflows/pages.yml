@@ -1,6 +1,6 @@
 # push 到 main 就重新打包並發布到 GitHub Pages。
 # mapleexp.zip 是打包產物、不進 git，所以要在這裡用 build_web.py 現做。
-# 只發布網頁真正會載入的四個檔案，src/、tests/ 這些不必放上網站。
+# 只發布網頁真正會載入的檔案（四個檔案加提示音效），src/、tests/ 這些不必放上網站。
 name: Deploy to GitHub Pages
 
 on:
@@ -39,6 +39,7 @@ jobs:
           python scripts/build_web.py
           mkdir _site
           cp web/index.html web/bridge.py web/mapvocab.json web/mapleexp.zip _site/
+          cp -r web/sounds _site/
 
       - uses: actions/configure-pages@v5
 
