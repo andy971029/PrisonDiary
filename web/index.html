@@ -198,6 +198,7 @@
     .m-top { display: flex; align-items: center; gap: 10px; }
     .m-top .pill { padding: 3px 8px; font-size: 11px; gap: 6px; background: var(--ground); }
     .m-top .pill i { width: 7px; height: 7px; }
+    .m-top .m-btns { margin-left: auto; }
     /* 控制鈕只放圖示：浮窗太窄放不下字，完整說明放在 title（滑過會顯示） */
     .m-btns { display: flex; gap: 4px; }
     .m-btns button { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center;
@@ -219,12 +220,12 @@
     .m-ceta small { font-size: 10px; color: var(--muted); }
     .m-ceta b { font: 700 18px var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
     #m-cpct { color: var(--accent); }
-    .m-lv { margin-left: auto; display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 12px; }
+    .m-lv { flex: none; display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 12px; }
     .m-lv b { font: 800 26px var(--display); line-height: 1; color: var(--ink); }
     .m-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-bottom: 6px;
       border-bottom: 1px solid var(--line); white-space: nowrap; }
-    .m-who b { font: 700 14px var(--body); flex: none; }
-    .m-who span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+    .m-who > b { font: 700 14px var(--body); flex: none; }
+    .m-who > #m-map { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
     .m-rate { display: flex; align-items: last baseline; gap: 8px; }
     .m-rate .rate-num { font-size: clamp(30px, 13vw, 72px); }
     .m-rate .rate-unit { font-size: 16px; }
@@ -248,9 +249,8 @@
       <button class="secondary" id="m-shrink" data-mode="compact"></button>
       <button class="secondary" id="m-close"></button>
     </div>
-    <span class="m-lv">Lv.<b id="m-level">--</b></span>
   </div>
-  <div class="m-who"><b id="m-char">--</b><span id="m-map">--</span></div>
+  <div class="m-who"><span class="m-lv">Lv.<b id="m-level">--</b></span><b id="m-char">--</b><span id="m-map">--</span></div>
   <div class="m-rate"><span id="m-rate" class="rate-num">--</span><span class="rate-side"><span class="rate-pct" id="m-rate-pct"></span><span class="rate-unit">EXP / hr</span></span></div>
   <div class="bar"><div id="m-bar-fill"></div></div>
   <div class="m-barline"><span id="m-bar-text">-- / --</span><b id="m-bar-pct">--</b></div>
