@@ -219,6 +219,14 @@ class TestMapZoneValidation(unittest.TestCase):
         self.assertIsNotNone(rect)
         self.assertLess(rect[2], 126, "框線被當成文字")
 
+    def test_ignores_the_panel_side_frame(self):
+        """框線同色、往下貫穿整個面板；面板窄時它每列都過門檻，名稱區那條帶就永遠不結束。"""
+        screen = make_panel(text="1234", with_icon=True)
+        screen[20:190, 10:19, :3] = PANEL_BGR
+        rect = locate_map_zone(screen, (5, 15, 140, 195))
+        self.assertIsNotNone(rect)
+        self.assertLess(rect[3], 70)
+
     def test_works_without_icon(self):
         rect = locate_map_zone(make_panel(text="1234", with_icon=False))
         self.assertIsNotNone(rect)

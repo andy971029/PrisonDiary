@@ -501,7 +501,7 @@ def _candidate_bands(mask: np.ndarray) -> list[tuple[int, int]]:
     「文字很密的那幾列」重疊，不侵蝕的話會把標題列跟名稱區黏成一條。
     框線只有一兩個像素寬，侵蝕一次就不見了，名稱區的實心底色則留得下來。
     """
-    eroded = _erode(mask, 1)
+    eroded = _drop_tall_runs(_erode(mask, 1), PANEL_BAND_MAX_H)
     if not eroded.any():
         return []
     counts = eroded.sum(axis=1)
@@ -528,6 +528,25 @@ def _candidate_bands(mask: np.ndarray) -> list[tuple[int, int]]:
         start = None
         last_hot = None
     return bands
+
+
+def _drop_tall_runs(mask: np.ndarray, max_len: int) -> np.ndarray:
+    """拿掉直向連續超過 ``max_len`` 列的像素：那是面板的左右框線，不是名稱區。
+
+    框線跟名稱區同一種藍、寬到侵蝕一次還留得下來（實測 7 像素），會一路往下貫穿
+    整個面板。面板窄的時候每列門檻只有 6，框線每列就過門檻，名稱區那條帶永遠不會
+    結束，長過 ``PANEL_BAND_MAX_H`` 被整條丟掉（實測「艾納斯島 寒冰平原」一直找不到）。
+    """
+    result = mask.copy()
+    padded = np.pad(mask, ((1, 1), (0, 0)), constant_values=False).astype(np.int8)
+    edges = np.diff(padded, axis=0)
+    for x in range(mask.shape[1]):
+        starts = np.flatnonzero(edges[:, x] == 1)
+        ends = np.flatnonzero(edges[:, x] == -1)
+        for start, end in zip(starts, ends):
+            if end - start > max_len:
+                result[start:end, x] = False
+    return result
 
 
 def _erode(mask: np.ndarray, times: int = 2) -> np.ndarray:
