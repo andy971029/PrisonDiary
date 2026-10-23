@@ -28,7 +28,7 @@ import time
 import numpy as np
 
 from mapleexp.autosetup import auto_configure, builtin_templates_path
-from mapleexp.config import Config, Roi
+from mapleexp.config import Config, Roi, TrackerConfig
 from mapleexp.gamedata import MapRecord, MapVocabulary
 from mapleexp.core import jobvocab, mapvocab
 from mapleexp.core.stats import format_elapsed, format_exp, format_rate
@@ -208,8 +208,15 @@ class WebSession:
 
         tracker 每次都直接讀設定物件，改了下一格就照新門檻算；已經累計的活躍／閒置不回頭改。
         取樣間隔本身由 JS 的 setInterval 控制，這裡只記著，讓 tracker 的設定跟實際一致。
+
+        「短暫遮蔽照算」的上限要跟著間隔放大：10 秒一格時漏讀兩格，兩筆讀數就差 30 秒，
+        用預設的 30 秒會被當成長中斷整段捨棄。至少容得下 ``miss_to_pause`` 格漏讀。
         """
-        self.cfg.tracker.sample_interval = max(0.1, float(interval_sec))
+        interval = max(0.1, float(interval_sec))
+        self.cfg.tracker.sample_interval = interval
+        self.cfg.tracker.max_bridge_sec = max(
+            TrackerConfig.max_bridge_sec, interval * (self.cfg.tracker.miss_to_pause + 1)
+        )
         self.cfg.tracker.idle_pause_sec = max(0.0, float(idle_sec))
 
     def set_ocr_ready(self, ready: bool) -> None:

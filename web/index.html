@@ -379,8 +379,8 @@
 </main>
 <dialog id="settings-dlg" class="settings">
   <h2>設定</h2>
-  <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="5" step="1" required> 秒</label>
-  <p class="note">調長比較省電腦資源，但升級、換圖、換角色會晚一點反應。範圍 1–5 秒。</p>
+  <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
+  <p class="note">調長比較省電腦資源，但升級、換圖、換角色會晚一點反應。範圍 1–10 秒。</p>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
   <p class="note">停滯超過這個秒數的時間不算進活躍時間（走路、補給、掛機）。打一隻怪要很久的話要調大，不然速率會偏高；設 0 代表不判定閒置。</p>
   <div class="btns">
@@ -406,7 +406,7 @@ const PYODIDE_BASE = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
 // 截圖間隔與閒置門檻：使用者在「設定」裡調，存在這台瀏覽器（localStorage），下次開頁沿用。
 const SETTINGS_KEY = "mapleexp.settings.v1";
 const DEFAULT_SETTINGS = { intervalSec: 1, idleSec: 10 };
-const SETTING_LIMITS = { intervalSec: [1, 5], idleSec: [0, 600] };
+const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600] };
 // 中文名字與職業靠 Tesseract.js（chi_tra）；等級的數字用英文模型，見 bridge.py 的說明。
 // 語言檔第一次要下載（幾十 MB），之後 Tesseract.js 會存在瀏覽器的 IndexedDB。
 const TESSERACT_JS = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";

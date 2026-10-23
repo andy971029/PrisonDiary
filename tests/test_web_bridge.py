@@ -100,6 +100,14 @@ class TestWebSession(FeedMixin, unittest.TestCase):
         never.set_timing(1, 0)
         self.assertEqual(self.feed_over_time(never, stalled)["state_key"], "active")
 
+    def test_long_interval_still_bridges_a_couple_of_missed_frames(self):
+        """10 秒一格時漏讀兩格就差 30 秒，不能被當成長中斷整段捨棄；1 秒一格維持預設。"""
+        session = self.make_session()
+        session.set_timing(10, 10)
+        self.assertGreater(session.cfg.tracker.max_bridge_sec, 30)
+        session.set_timing(1, 10)
+        self.assertEqual(session.cfg.tracker.max_bridge_sec, 30)
+
     def test_stats_before_any_gain_are_placeholders(self):
         out = self.feed(self.make_session(), "623456[12.34%]")
         self.assertFalse(out["stats"]["recent_valid"])
