@@ -2,7 +2,7 @@
 
 整個檔案在 Pyodide 裡執行。刻意不碰 ``core/session.py``：那一層綁了地圖面板、
 SQLite 與 Windows 視窗管理。經驗值（模板比對）已經在真實畫面上驗證過，現在加上
-等級、職業、角色名；地圖與儲存還沒搬。
+等級、職業、角色名、地圖，以及背包裡的楓幣（``vision/meso.py``、``core/meso.py``）。
 
 身分辨識的 OCR 在 JS 端（Tesseract.js），而 Python 這邊的 tick 是同步的。兩邊的
 銜接是「掛號制」：Python 把要辨識的圖前處理好、以 PNG data URL 放進 payload 的
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import difflib
+import hashlib
 import json
 import time
 
@@ -31,9 +32,11 @@ from mapleexp.autosetup import auto_configure, builtin_templates_path
 from mapleexp.config import Config, Roi, TrackerConfig
 from mapleexp.gamedata import MapRecord, MapVocabulary
 from mapleexp.core import jobvocab, mapvocab
+from mapleexp.core.meso import MesoTracker
 from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
+from mapleexp.vision import meso as mesovision
 from mapleexp.vision import ocr, panels, pngio
 from mapleexp.core.reading import StatusReading
 from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
@@ -86,6 +89,12 @@ MAP_OCR_SCALES = (3, 4, 6)
 # 同一組字形辨識失敗幾次就放棄（字形變了會重新計算）。
 OCR_RETRY_LIMIT = 3
 LEVEL_SLOW_RETRY_SEC = 10.0
+# 楓幣：背包沒開時隔幾秒整張畫面找一次楓幣框（一次約 30ms，不要每格都找）；
+# 記住的位置連續幾格不是白框了，就當背包被關掉或拖走，重新找。
+MESO_SEARCH_INTERVAL_SEC = 3.0
+MESO_LOST_TICKS = 2
+# 楓幣框裡的數字是黑字白底，跟等級一樣走數字模型、多倍率互相印證。
+MESO_OCR_SCALES = (3, 4, 6, 8)
 
 
 def _png_data_url(gray: np.ndarray) -> str:
@@ -194,6 +203,16 @@ class WebSession:
         # tracker 每重算一次就 +1，頁面看到它變了就知道累計值是從零重新起算的。
         self.epoch = 0
 
+        # 楓幣：要開著背包才讀得到。跟經驗值各算各的，換地圖不重算（錢在哪裡賺都是錢）。
+        self.meso = MesoTracker(window_sec=RATE_WINDOW_SEC)
+        self.meso_reader = mesovision.MesoReader()
+        self._meso_rect: tuple[int, int, int, int] | None = None
+        self._meso_searched_at = -MESO_SEARCH_INTERVAL_SEC
+        self._meso_misses = 0
+        self._meso_ocr_misses: dict[str, int] = {}
+        self._meso_last_try = 0.0
+        self._meso_raw = ""
+
     # ------------------------------------------------------------------ #
 
     def feed_frame(self, rgba, width: int, height: int) -> None:
@@ -218,6 +237,7 @@ class WebSession:
             TrackerConfig.max_bridge_sec, interval * (self.cfg.tracker.miss_to_pause + 1)
         )
         self.cfg.tracker.idle_pause_sec = max(0.0, float(idle_sec))
+        self.meso.bridge_sec = self.cfg.tracker.max_bridge_sec
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
@@ -235,6 +255,7 @@ class WebSession:
     def resume(self) -> None:
         """暫停／重新分享後呼叫：下一筆讀數只當新基準，空窗期間的經驗與時間都不算。"""
         self.tracker.mark_discontinuity()
+        self.meso.mark_discontinuity()
 
     def reset_identity(self) -> None:
         """結算後連角色／職業／等級／地圖一起清掉，下一格重新辨識（版面位置仍沿用）。"""
@@ -255,6 +276,7 @@ class WebSession:
     def reset(self) -> None:
         """重新計算，但 ROI 留著（視窗沒動就不用重找）。"""
         self._restart_tracker()
+        self.meso.reset()
 
     def _restart_tracker(self) -> None:
         self.tracker.reset()
@@ -262,6 +284,8 @@ class WebSession:
         self.epoch += 1
 
     def tick(self) -> str:
+        # 楓幣不靠經驗值欄位，先讀；經驗值欄位找不到時也照算。
+        self._scan_meso()
         if self.reader is None:
             self._locate(force=True)
             if self.reader is None:
@@ -566,6 +590,90 @@ class WebSession:
         if map_id == self.map_id:
             self.map_name = name
 
+    # ---------------------------------------------------------------- 楓幣
+
+    def _scan_meso(self) -> None:
+        frame = self.capturer.frame
+        if frame is None:
+            return
+        now = time.monotonic()
+        rect = self._meso_rect
+        if rect is not None and not mesovision.box_still_there(frame, rect):
+            self._meso_misses += 1
+            if self._meso_misses >= MESO_LOST_TICKS:
+                self._meso_rect = rect = None
+        elif rect is not None:
+            self._meso_misses = 0
+        if rect is None and now - self._meso_searched_at >= MESO_SEARCH_INTERVAL_SEC:
+            self._meso_searched_at = now
+            rect = self._meso_rect = mesovision.find_meso_box(frame)
+            self._meso_misses = 0
+
+        value = None
+        zone = mesovision.cut_zone(frame, rect) if rect is not None and self._meso_misses == 0 else None
+        if zone is not None:
+            value = self.meso_reader.read_templates(zone)
+            self._meso_raw = f"{value:,}" if value is not None else zone.pattern.replace("D", "?")
+            if value is None and zone.well_formed and self._ocr_ready and self._meso_may_retry(zone):
+                self._request_meso(zone)
+        else:
+            self._meso_raw = ""
+        self.meso.feed(now, value)
+
+    def _meso_key(self, zone) -> str:
+        return hashlib.blake2s(zone.shape_key.encode(), digest_size=6).hexdigest()
+
+    def _meso_may_retry(self, zone) -> bool:
+        if self._meso_ocr_misses.get(self._meso_key(zone), 0) < OCR_RETRY_LIMIT:
+            return True
+        return time.monotonic() - self._meso_last_try >= LEVEL_SLOW_RETRY_SEC
+
+    def _request_meso(self, zone) -> None:
+        if any(key.startswith("meso:") for key in self._ocr_inflight):
+            return      # 錢一直在變，同時只問一件就好；問完下一格自然會問新的
+        image = mesovision.ocr_image(zone)
+        images = [_png_data_url(ocr.prepare(image, scale=s, bright_text=False, contrast=True))
+                  for s in MESO_OCR_SCALES]
+        self._request_ocr(f"meso:{self._meso_key(zone)}", "digits", images, {"zone": zone})
+
+    def _finish_meso(self, zone, texts) -> None:
+        """跟等級同一套規矩：位數對的答案至少兩個、而且全部一致才信，信了就教給模板。"""
+        self._meso_last_try = time.monotonic()
+        expected = len(zone.digits)
+        raw = ["".join((t or "").translate(ident._DIGIT_LOOKALIKES).split()) for t in texts or []]
+        exact = [t for t in raw if t.isdigit() and len(t) == expected]
+        key = self._meso_key(zone)
+        if len(exact) < 2 or len(set(exact)) != 1:
+            self._meso_ocr_misses[key] = self._meso_ocr_misses.get(key, 0) + 1
+            return
+        self._meso_ocr_misses.pop(key, None)
+        self.meso_reader.teach(zone, int(exact[0]))
+
+    def _meso_payload(self) -> dict:
+        snap = self.meso.snapshot()
+        if self._meso_rect is None:
+            status = "打開背包視窗才會計算楓幣"
+        elif not snap.visible:
+            status = "楓幣欄位讀不到（被擋住，或正在學新的數字字形）"
+        else:
+            status = ""
+        signed = lambda v: "--" if v is None else (f"+{v:,.0f}" if v > 0 else f"{v:,.0f}")  # noqa: E731
+        return {
+            "located": self._meso_rect is not None,
+            "visible": snap.visible,
+            "status": status,
+            "raw": self._meso_raw,
+            "current": format_exp(snap.current),
+            "per_hour": signed(snap.per_hour),
+            "per_half_hour": signed(snap.per_hour / 2 if snap.per_hour is not None else None),
+            "average": signed(snap.average),
+            "recent": signed(snap.recent_gain),
+            "total": signed(snap.cum_net) if snap.current is not None else "--",
+            "tracked_text": format_elapsed(snap.tracked_sec),
+            "cum_net": snap.cum_net,
+            "tracked_sec": snap.tracked_sec,
+        }
+
     def _request_level(self, zone) -> None:
         images = [_png_data_url(ocr.prepare(zone.image, scale=s, contrast=True)) for s in LEVEL_OCR_SCALES]
         self._request_ocr(f"level:{zone.shape_key}", "digits", images, {"zone": zone})
@@ -611,6 +719,7 @@ class WebSession:
         版面位置、地圖都留著（同一個視窗、可能同一張圖）；等級下一格會重讀。
         """
         self._restart_tracker()
+        self.meso.reset()
         self.level = None
         self._level_misses.clear()
         self.level_status = ""
@@ -636,6 +745,8 @@ class WebSession:
             self._finish_minimap_search(ctx, texts)
         elif rid.startswith("map:"):
             self._finish_map_name(ctx, texts)
+        elif rid.startswith("meso:"):
+            self._finish_meso(ctx["zone"], texts)
 
     def _level_may_retry(self, key: str) -> bool:
         """連續讀不出來幾次之後改成慢慢重試，而不是永遠放棄。
@@ -735,9 +846,11 @@ class WebSession:
             "epoch": self.epoch,
             "level_status": self.level_status if self.level is None else "",
             "map_status": self.map_status if self._minimap_body is None else "",
+            "meso": self._meso_payload(),
             "ocr": self._take_ocr_outbox(),
             "notices": self._take_notices(),
             "rois": {"exp": list(rect) if rect else None,
+                     "meso": list(self._meso_rect) if self._meso_rect else None,
                      **{k: list(v) if v else None for k, v in self._rois.items()}},
         }
         if snapshot is None:

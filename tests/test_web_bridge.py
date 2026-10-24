@@ -115,7 +115,7 @@ class TestWebSession(FeedMixin, unittest.TestCase):
 
     def test_payload_lists_every_read_region(self):
         out = self.feed(self.make_session(), "623456[12.34%]")
-        self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name", "map"})
+        self.assertEqual(set(out["rois"]), {"exp", "level", "job", "name", "map", "meso"})
         self.assertEqual(out["rois"]["exp"], out["rect"])
 
     def test_roi_grows_back_after_being_shrunk_by_an_occluder(self):

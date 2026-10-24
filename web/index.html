@@ -11,7 +11,7 @@
   /* 色彩從遊戲本身取：深林綠藍的夜、經驗條的琥珀。亮色版把琥珀壓深，讓字在淺底上仍有對比。 */
   :root {
     --ground: #e6ece7; --surface: #f4f8f4; --ink: #12262a; --muted: #566c6e; --line: #bccbc5;
-    --accent: #b5600a; --on-accent: #fff8ec;
+    --accent: #b5600a; --on-accent: #fff8ec; --coin: #7d6512;
     --on-ok: #fff; --on-bad: #fff; --ok: #1b7f57; --idle: #a8740f; --bad: #b83a2e;
     --scope: #0c1517; --scope-line: #1f3236;
     --display: "Big Shoulders Display", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
@@ -21,14 +21,14 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
-      --accent: #f3b13d; --on-accent: #1a1204;
+      --accent: #f3b13d; --on-accent: #1a1204; --coin: #e8d27c;
       --on-ok: #06210f; --on-bad: #2a0805; --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
       --scope: #091012; --scope-line: #1b2d31;
     }
   }
   :root[data-theme="dark"] {
     --ground: #0d1618; --surface: #142124; --ink: #e3efe9; --muted: #86a09f; --line: #26393c;
-    --accent: #f3b13d; --on-accent: #1a1204;
+    --accent: #f3b13d; --on-accent: #1a1204; --coin: #e8d27c;
     --on-ok: #06210f; --on-bad: #2a0805; --ok: #52d19a; --idle: #f0b24a; --bad: #ff7a6b;
     --scope: #091012; --scope-line: #1b2d31;
   }
@@ -150,23 +150,22 @@
   .diag-box { border: 1px dashed var(--line); padding: 12px 18px; }
   .diag-box .engine { border-top: 1px solid var(--line); padding-top: 14px; max-width: none; }
   /* ---------- 經驗條 ---------- */
-  .mapname { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
-  .mapname span { font-size: 12px; color: var(--muted); }
-  .mapname b { font: 700 18px var(--body); overflow-wrap: anywhere; }
-  .lvl { display: flex; align-items: baseline; gap: 8px; }
-  .lvl b { font: 800 48px var(--display); line-height: 1; }
-  .lvl span { color: var(--muted); font-size: 13px; }
-  .lvl .pct { margin-left: auto; font: 700 30px var(--display); color: var(--accent); }
-  .bar { position: relative; height: 22px; margin-top: 10px; background: var(--surface);
+  .expbar { margin-top: 18px; }
+  .bar-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .bar-head .pct { font: 700 30px var(--display); line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .bar-head .bar-text { margin: 0 0 0 auto; }
+  .bar { position: relative; height: 22px; margin-top: 8px; background: var(--surface);
     border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
   .bar > div { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width .6s ease; }
   /* 每 10% 一格刻度，蓋在填色上面，不用讀數字也看得出進度 */
   .bar::after { content: ""; position: absolute; inset: 0; opacity: .7;
     background: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), var(--ground) calc(10% - 1px), var(--ground) 10%); }
   .bar-text { font: 400 12px var(--mono); color: var(--muted); margin-top: 6px; }
-  dl.row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0 20px; margin: 18px 0 0; }
-  dl.row4 > div { border-top: 1px solid var(--line); padding: 8px 0 4px; }
-  dl.row4 dd { font-size: 24px; white-space: nowrap; }
+  dl.facts > .wide { grid-column: 1 / -1; }
+  /* ---------- 楓幣 ---------- */
+  .coin-num { color: var(--coin); }
+  .sec-sub { font: 500 13px var(--mono); color: var(--muted); white-space: nowrap; }
+  .sec-sub b { color: var(--ink); font-weight: 700; }
 
   /* ---------- 辨識來源 ---------- */
   .tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; align-items: start; }
@@ -216,7 +215,7 @@
 <template id="mini-tpl">
   <style>
     html, body { height: 100%; }
-    body.mini { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px 12px;
+    body.mini { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 10px;
       border-top: 3px solid var(--ink); background: var(--surface); overflow: hidden; }
     /* 視窗被拉矮時寧可裁掉底部，也不要讓 flex 把經驗條壓成 0 高 */
     body.mini > * { flex: none; min-width: 0; }
@@ -244,6 +243,8 @@
     .m-compact .rate-num { font-size: clamp(20px, 8vw, 32px); line-height: 1; }
     .m-compact .rate-unit { font-size: 12px; margin-left: -4px; }
     @media (max-width: 420px) { .m-compact .rate-unit { display: none; } }
+    /* 楓幣速率比「每小時約幾 %」重要：太窄時先藏百分比 */
+    @media (max-width: 400px) { .m-compact .m-ceta.pct { display: none; } .m-compact .m-ceta.eta { margin-left: auto; } }
     .m-ceta { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
     .m-ceta.lead { margin-left: auto; }
     .m-ceta small { font-size: 10px; color: var(--muted); }
@@ -251,22 +252,28 @@
     #m-cpct { color: var(--accent); }
     .m-lv { flex: none; display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 12px; }
     .m-lv b { font: 800 26px var(--display); line-height: 1; color: var(--ink); }
-    .m-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-bottom: 6px;
+    .m-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-bottom: 4px;
       border-bottom: 1px solid var(--line); white-space: nowrap; }
     .m-who > b { font: 700 14px var(--body); flex: none; }
     .m-who > #m-map { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+    /* 經驗速率比以前小一號，省下來的高度給楓幣那一列，整個浮窗只比原本高一點點 */
     .m-rate { display: flex; align-items: last baseline; gap: 8px; }
-    .m-rate .rate-num { font-size: clamp(30px, 13vw, 72px); }
-    .m-rate .rate-unit { font-size: 16px; }
-    .m-rate .rate-pct { font-size: 14px; }
-    .mini .bar { height: 14px; margin-top: 0; background: var(--ground); }
+    .m-rate .rate-num { font-size: clamp(26px, 9.5vw, 56px); }
+    .m-rate .rate-unit { font-size: 14px; }
+    .m-rate .rate-pct { font-size: 13px; }
+    .mini .bar { height: 12px; margin-top: 0; background: var(--ground); }
     .m-barline { display: flex; align-items: baseline; gap: 8px; margin-top: -4px; }
     .m-barline span { font: 400 11px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .m-barline b { margin-left: auto; font: 700 18px var(--display); color: var(--accent); }
-    dl.m-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 0 14px; margin: 0; }
-    dl.m-facts > div { border-top: 1px solid var(--line); padding-top: 4px; min-width: 0; }
-    dl.m-facts dt { font-size: 11px; }
-    dl.m-facts dd { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .m-barline b { margin-left: auto; font: 700 17px var(--display); color: var(--accent); }
+    /* 三欄：上排經驗（升級剩餘、活躍／閒置），下排楓幣（速率、目前、總累計） */
+    dl.m-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; margin: 0; }
+    dl.m-facts > div { border-top: 1px solid var(--line); padding-top: 3px; min-width: 0; }
+    dl.m-facts > .span2 { grid-column: span 2; }
+    dl.m-facts dt { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    dl.m-facts dd { font-size: 16px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    dl.m-facts .coin dt::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 4px;
+      border-radius: 50%; background: var(--coin); }
+    #m-meso-rate, #m-cmeso { color: var(--coin); }
   </style>
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
@@ -287,14 +294,18 @@
   <div class="m-compact m-btns">
     <span id="m-cstate" class="pill"><i></i></span>
     <span id="m-crate" class="rate-num">--</span><span class="rate-unit">EXP / hr</span>
-    <span class="m-ceta lead"><small>每小時約</small><b id="m-cpct">--</b></span>
-    <span class="m-ceta"><small>升級剩餘</small><b id="m-ceta">--</b></span>
+    <span class="m-ceta pct lead"><small>每小時約</small><b id="m-cpct">--</b></span>
+    <span class="m-ceta eta"><small>升級剩餘</small><b id="m-ceta">--</b></span>
+    <span class="m-ceta"><small>楓幣 / hr</small><b id="m-cmeso">--</b></span>
     <button class="secondary" data-for="prayer"></button>
     <button class="secondary" id="m-grow" data-mode="full"></button>
   </div>
   <dl class="m-facts">
-    <div><dt>升級剩餘時間</dt><dd id="m-eta">--</dd></div>
-    <div><dt>活躍 / 閒置</dt><dd id="m-times">-- / --</dd></div>
+    <div><dt>升級剩餘</dt><dd id="m-eta">--</dd></div>
+    <div class="span2"><dt>活躍 / 閒置</dt><dd id="m-times">-- / --</dd></div>
+    <div class="coin"><dt>楓幣 / hr</dt><dd id="m-meso-rate">--</dd></div>
+    <div class="coin"><dt>目前楓幣</dt><dd id="m-meso-cur">--</dd></div>
+    <div class="coin"><dt>總累計楓幣</dt><dd id="m-meso-total">--</dd></div>
   </dl>
 </template>
 </head>
@@ -317,16 +328,21 @@
   <div class="ident" aria-label="角色與地圖">
     <div><span>角色</span><b id="id-char">--</b></div>
     <div><span>職業</span><b id="id-job">--</b></div>
+    <div><span>等級</span><b id="level">--</b></div>
     <div class="grow"><span>地圖</span><b id="map-name">--</b></div>
   </div>
 
   <div class="layout">
     <section>
       <div class="sec-head">
-        <h2>收益速率</h2>
+        <h2>經驗收益</h2>
         <label class="boost" title="試算經驗加倍券：速率、累計經驗與升級倒數都以 1.5 倍顯示，不影響歷史紀錄"><input type="checkbox" id="boost"> 經驗值 1.5 倍</label>
       </div>
       <div class="rate"><span id="rate-main" class="rate-num">--</span><span class="rate-side"><span class="rate-pct" id="rate-pct"></span><span class="rate-unit">EXP / hr</span></span></div>
+      <div class="expbar">
+        <div class="bar-head"><span class="pct" id="bar-pct">--</span><span class="bar-text" id="bar-text">-- / --</span></div>
+        <div class="bar"><div id="bar-fill"></div></div>
+      </div>
       <dl class="facts">
         <div><dt>依最近 10 min 預估</dt><dd><span id="st-half">--</span><small class="pct-sub" id="st-half-p"></small></dd></div>
         <div><dt>整場平均</dt><dd><span id="st-average">--</span><small class="pct-sub" id="st-average-p"></small></dd></div>
@@ -334,18 +350,25 @@
         <div><dt>目前總累計經驗</dt><dd><span id="st-total">--</span><small class="pct-sub" id="st-total-p"></small></dd></div>
         <div><dt>升級剩餘時間</dt><dd id="eta">--</dd></div>
         <div><dt>還差</dt><dd id="remaining">--</dd></div>
+        <div class="wide"><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
       </dl>
       <div class="note" id="st-note"></div>
     </section>
 
     <section>
-      <h2>目前經驗</h2>
-      <div class="lvl"><span>Lv.</span><b id="level">--</b><span class="pct" id="bar-pct">--</span></div>
-      <div class="bar"><div id="bar-fill"></div></div>
-      <div class="bar-text" id="bar-text">-- / --</div>
-      <dl class="row4">
-        <div><dt>活躍 / 閒置</dt><dd id="times">-- / --</dd></div>
+      <div class="sec-head">
+        <h2>楓幣收益</h2>
+        <span class="sec-sub" title="背包視窗要開著才讀得到楓幣">目前 <b id="meso-current">--</b></span>
+      </div>
+      <div class="rate"><span id="meso-rate" class="rate-num coin-num">--</span><span class="rate-side"><span class="rate-unit">楓幣 / hr</span></span></div>
+      <dl class="facts">
+        <div><dt>依最近 10 min 預估</dt><dd id="meso-half">--</dd></div>
+        <div><dt>整場平均</dt><dd id="meso-average">--</dd></div>
+        <div><dt>最近 10 min 累計楓幣</dt><dd id="meso-recent">--</dd></div>
+        <div><dt>目前總累計楓幣</dt><dd id="meso-total">--</dd></div>
+        <div class="wide"><dt>計入時間（背包開著的時間）</dt><dd id="meso-time">--</dd></div>
       </dl>
+      <div class="note" id="meso-note"></div>
     </section>
   </div>
   <section id="history">
@@ -392,6 +415,11 @@
         <div class="sp-head"><span class="sp-name">地圖名稱</span><span class="sp-rect" id="sp-map-r">尚未找到</span></div>
         <div class="scope"><canvas id="sp-map-c"></canvas><span class="empty">等待定位…（需展開小地圖，並等文字辨識就緒）</span></div>
         <div class="sp-value" id="sp-map-v">--</div>
+      </div>
+      <div class="specimen" id="sp-meso">
+        <div class="sp-head"><span class="sp-name">楓幣</span><span class="sp-rect" id="sp-meso-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-meso-c"></canvas><span class="empty">等待定位…（需打開背包視窗）</span></div>
+        <div class="sp-value" id="sp-meso-v">--</div>
       </div>
     </div>
     <div class="note">放大是整數倍、不做平滑：你看到的像素就是辨識程式拿到的像素。</div>
@@ -734,6 +762,8 @@ function clearStats() {
   $("bar-text").textContent = "-- / --";
   $("times").textContent = "-- / --";
   for (const id of ["id-char", "id-job", "map-name", "level"]) $(id).textContent = "--";
+  for (const id of ["meso-rate", "meso-half", "meso-average", "meso-recent", "meso-total", "meso-current", "meso-time"]) $(id).textContent = "--";
+  $("meso-note").textContent = "";
   syncMini();
 }
 
@@ -1089,6 +1119,9 @@ function render(out, elapsedMs) {
     $("sp-map").querySelector(".empty").textContent = hint;
   }
   $("map-name").textContent = out.map_name || "--";
+  // 楓幣跟經驗值欄位無關，經驗值還沒找到也照樣顯示。
+  drawSpecimen("meso", rois.meso, out.meso?.raw);
+  renderMeso(out.meso);
 
   if (!out.state_key) {
     setState(out.state, "");
@@ -1119,6 +1152,21 @@ function render(out, elapsedMs) {
   $("st-note").textContent = st.recent_valid ? "" : "資料還不夠，需要至少兩筆經驗增加。";
 }
 
+function renderMeso(m) {
+  if (!m) return;
+  const per = (v, unit) => (v === "--" ? "--" : `${v} ${unit}`);
+  // 主速率跟經驗一樣不帶正號；累計類的才標 +/-，一眼看出是賺是賠。
+  $("meso-rate").textContent = m.per_hour.replace(/^\+/, "");
+  $("meso-half").textContent = per(m.per_half_hour, "/30 min");
+  $("meso-average").textContent = per(m.average, "/hr");
+  $("meso-recent").textContent = m.recent;
+  $("meso-total").textContent = m.total;
+  $("meso-current").textContent = m.current;
+  $("meso-time").textContent = padTime(m.tracked_text);
+  $("meso-note").textContent = m.status
+    || (m.per_hour === "--" && m.current !== "--" ? "資料還不夠，背包要開著累積滿 1 分鐘才算得出速率。" : "");
+}
+
 // ---------------------------------------------------------------- 小浮窗
 // 只負責顯示：每次主頁面畫完，就把主頁面上「已經格式化好的文字」原樣複製過去。
 // 不碰 session、不算任何數字，所以兩邊永遠一致，主頁改了格式浮窗自動跟著變。
@@ -1130,6 +1178,8 @@ const MINI_TEXT = [
   ["m-bar-pct", "bar-pct"], ["m-bar-text", "bar-text"],
   ["m-eta", "eta"], ["m-times", "times"],
   ["m-crate", "rate-main"], ["m-ceta", "eta"],
+  ["m-meso-rate", "meso-rate"], ["m-meso-cur", "meso-current"], ["m-meso-total", "meso-total"],
+  ["m-cmeso", "meso-rate"],
 ];
 let miniWin = null;
 let miniCompact = false;      // 記住上次的模式，重開浮窗時沿用
@@ -1198,7 +1248,7 @@ function mountMini(win) {
   }
   for (const btn of doc.querySelectorAll("[data-mode]")) {
     const compact = btn.dataset.mode === "compact";
-    const label = compact ? "縮小（只留速率、每小時%與倒數）" : "展開完整資訊";
+    const label = compact ? "縮小（只留速率、倒數與楓幣速率）" : "展開完整資訊";
     btn.innerHTML = compact ? ICONS.shrink : ICONS.grow;
     btn.title = label;
     btn.setAttribute("aria-label", label);
@@ -1242,10 +1292,10 @@ async function toggleMini() {
   if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
   try {
     if (window.documentPictureInPicture) {
-      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 240 }));
+      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 266 }));
       return;
     }
-    const win = window.open("", "mapleexp-mini", "popup,width=340,height=260");
+    const win = window.open("", "mapleexp-mini", "popup,width=340,height=286");
     if (!win) { log("瀏覽器擋下了彈出視窗，請允許這個網站開啟彈出視窗。"); return; }
     mountMini(win);
     log("這個瀏覽器不支援置頂小視窗，改用一般彈出視窗（不會一直在最上層）。");
