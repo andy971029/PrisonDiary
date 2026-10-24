@@ -19,8 +19,8 @@ from dataclasses import dataclass
 
 # 同一個新數值要連續讀到幾次才採用。數字跳動的那一格，壓縮過的畫面可能新舊字形混在一起。
 CONFIRM_READS = 2
-# 時間窗至少要有這麼長，速率才有意義（剛開始幾秒撿到一包錢，換算成每小時會大得離譜）。
-MIN_SPAN_SEC = 60.0
+# 有計入時間就算速率，不等暖身：剛開始幾秒撿到一包錢，換算成每小時會偏高，但很快就會平均掉。
+MIN_SPAN_SEC = 0.0
 
 
 @dataclass(frozen=True)
@@ -96,11 +96,11 @@ class MesoTracker:
         if self._trail:
             start_sec, start_net = self._trail[0]
             span = self.tracked_sec - start_sec
-            if span >= MIN_SPAN_SEC:
+            if span > MIN_SPAN_SEC:
                 recent_gain = self.cum_net - start_net
                 per_hour = recent_gain / span * 3600.0
         average = (
-            self.cum_net / self.tracked_sec * 3600.0 if self.tracked_sec >= MIN_SPAN_SEC else None
+            self.cum_net / self.tracked_sec * 3600.0 if self.tracked_sec > MIN_SPAN_SEC else None
         )
         return MesoSnapshot(
             current=self.current,

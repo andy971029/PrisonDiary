@@ -1180,7 +1180,7 @@ function renderMeso(m) {
   $("meso-current").textContent = m.current;
   $("meso-time").textContent = padTime(m.tracked_text);
   $("meso-note").textContent = m.status
-    || (m.per_hour === "--" && m.current !== "--" ? "資料還不夠，背包要開著累積滿 1 分鐘才算得出速率。" : "");
+    || (m.per_hour === "--" && m.current !== "--" ? "資料還不夠，再讀到一筆楓幣就算得出速率。" : "");
 }
 
 // ---------------------------------------------------------------- 小浮窗

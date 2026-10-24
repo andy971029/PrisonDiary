@@ -216,12 +216,15 @@ class TestMesoTracker(unittest.TestCase):
         self.assertAlmostEqual(snap.per_hour, 3600, delta=60)
         self.assertAlmostEqual(snap.average, 1800, delta=60)
 
-    def test_no_rate_before_a_minute(self):
+    def test_rate_starts_right_away(self):
+        """不用等背包開滿一分鐘：有計入時間就有速率。"""
         tracker = MesoTracker()
-        self.feed(tracker, 0.0, [1000, 1000, 2000, 2000])
+        tracker.feed(0.0, 1000)
+        self.assertIsNone(tracker.snapshot().per_hour)      # 只有一筆，還沒有時間差
+        self.feed(tracker, 1.0, [1000, 2000, 2000])
         snap = tracker.snapshot()
-        self.assertIsNone(snap.per_hour)
-        self.assertIsNone(snap.average)
+        self.assertAlmostEqual(snap.per_hour, 1000 / 3 * 3600)
+        self.assertAlmostEqual(snap.average, 1000 / 3 * 3600)
 
 
 def rgba_bytes(screen_bgra: np.ndarray) -> bytes:
