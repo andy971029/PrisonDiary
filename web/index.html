@@ -233,25 +233,36 @@
     .m-btns button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
     .m-btns button.prayer { width: auto; padding: 0 5px; gap: 3px; font: 700 12px var(--mono); }
     .m-btns button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-    /* 精簡模式：只留狀態燈、速率、每小時經驗%、升級倒數，一行就好，盡量少擋遊戲畫面 */
-    body.mini.compact { height: auto; padding: 6px 10px 8px; }
+    /* 精簡模式：上行經驗（速率、每小時%、升級倒數），下行楓幣（速率、總累計），盡量少擋遊戲畫面 */
+    body.mini.compact { height: auto; padding: 6px 10px 6px; }
     body.compact > :not(.m-compact), body:not(.compact) > .m-compact { display: none; }
-    .m-compact { display: flex; align-items: center; gap: 10px; }
+    .m-compact { display: flex; flex-direction: column; gap: 4px; }
+    /* 經驗那一行不換行：視窗窄時縮速率字級，按鈕永遠在同一行 */
+    .m-crow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .m-crow > * { flex: none; }
+    @media (max-width: 330px) { .m-crow { gap: 5px; } .m-compact .rate-num { font-size: 18px; } .m-compact .rate-side { margin-left: 0; } }
     .m-compact .pill { padding: 0; border: 0; background: none; }
     .m-compact .pill i { width: 10px; height: 10px; }
-    /* 一行要塞速率、經驗%、倒數：速率字級跟著視窗寬度縮，太窄就藏起單位 */
-    .m-compact .rate-num { font-size: clamp(20px, 8vw, 32px); line-height: 1; }
-    .m-compact .rate-unit { font-size: 12px; margin-left: -4px; }
-    @media (max-width: 420px) { .m-compact .rate-unit { display: none; } }
-    /* 楓幣速率比「每小時約幾 %」重要：太窄時先藏百分比 */
-    @media (max-width: 400px) { .m-compact .m-ceta.pct { display: none; } .m-compact .m-ceta.eta { margin-left: auto; } }
+    /* 速率字級跟著視窗寬度縮；每小時%疊在單位上面，跟完整模式一樣 */
+    .m-compact .rate-num { font-size: clamp(18px, 7.2vw, 32px); line-height: 1; }
+    .m-compact .rate-side { line-height: 1.1; margin-left: -4px; }
+    .m-compact .rate-pct { font-size: 12px; }
+    .m-compact .rate-unit { font-size: 11px; }
     .m-ceta { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
     .m-ceta.lead { margin-left: auto; }
     .m-ceta small { font-size: 10px; color: var(--muted); }
     .m-ceta b { font: 700 18px var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #m-cpct { color: var(--accent); }
+    /* 楓幣那一行：從速率的位置開始對齊（燈號寬 + 間距），累計靠右 */
+    .m-cline { display: flex; align-items: baseline; gap: 12px; padding: 3px 0 0 20px;
+      border-top: 1px solid var(--line); }
+    .m-cline > span { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+    .m-cline > span:last-child { margin-left: auto; }
+    .m-cline small { font-size: 10px; color: var(--muted); }
+    .m-cline small::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 4px;
+      border-radius: 50%; background: var(--coin); }
+    .m-cline b { font: 700 16px var(--display); font-variant-numeric: tabular-nums; }
     .m-lv { flex: none; display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 12px; }
-    .m-lv b { font: 800 26px var(--display); line-height: 1; color: var(--ink); }
+    .m-lv b { font: 700 14px var(--body); color: var(--ink); }
     .m-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-bottom: 4px;
       border-bottom: 1px solid var(--line); white-space: nowrap; }
     .m-who > b { font: 700 14px var(--body); flex: none; }
@@ -292,13 +303,18 @@
   <div class="bar"><div id="m-bar-fill"></div></div>
   <div class="m-barline"><span id="m-bar-text">-- / --</span><b id="m-bar-pct">--</b></div>
   <div class="m-compact m-btns">
-    <span id="m-cstate" class="pill"><i></i></span>
-    <span id="m-crate" class="rate-num">--</span><span class="rate-unit">EXP / hr</span>
-    <span class="m-ceta pct lead"><small>每小時約</small><b id="m-cpct">--</b></span>
-    <span class="m-ceta eta"><small>升級剩餘</small><b id="m-ceta">--</b></span>
-    <span class="m-ceta"><small>楓幣 / hr</small><b id="m-cmeso">--</b></span>
-    <button class="secondary" data-for="prayer"></button>
-    <button class="secondary" id="m-grow" data-mode="full"></button>
+    <div class="m-crow">
+      <span id="m-cstate" class="pill"><i></i></span>
+      <span id="m-crate" class="rate-num">--</span>
+      <span class="rate-side"><span class="rate-pct" id="m-crate-pct"></span><span class="rate-unit">EXP / hr</span></span>
+      <span class="m-ceta lead"><small>升級剩餘</small><b id="m-ceta">--</b></span>
+      <button class="secondary" data-for="prayer"></button>
+      <button class="secondary" id="m-grow" data-mode="full"></button>
+    </div>
+    <div class="m-cline">
+      <span><small>楓幣 / hr</small><b id="m-cmeso">--</b></span>
+      <span><small>累計楓幣</small><b id="m-cmeso-total">--</b></span>
+    </div>
   </div>
   <dl class="m-facts">
     <div><dt>升級剩餘</dt><dd id="m-eta">--</dd></div>
@@ -1177,9 +1193,9 @@ const MINI_TEXT = [
   ["m-rate", "rate-main"], ["m-rate-pct", "rate-pct"],
   ["m-bar-pct", "bar-pct"], ["m-bar-text", "bar-text"],
   ["m-eta", "eta"], ["m-times", "times"],
-  ["m-crate", "rate-main"], ["m-ceta", "eta"],
+  ["m-crate", "rate-main"], ["m-crate-pct", "rate-pct"], ["m-ceta", "eta"],
   ["m-meso-rate", "meso-rate"], ["m-meso-cur", "meso-current"], ["m-meso-total", "meso-total"],
-  ["m-cmeso", "meso-rate"],
+  ["m-cmeso", "meso-rate"], ["m-cmeso-total", "meso-total"],
 ];
 let miniWin = null;
 let miniCompact = false;      // 記住上次的模式，重開浮窗時沿用
@@ -1192,9 +1208,6 @@ function syncMini() {
     const el = doc.getElementById(mid);
     if (el) el.textContent = $(id).textContent;
   }
-  // 精簡列位置不夠，拿掉「≈ 」，約略的意思交給標籤「每小時約」。
-  const cpct = doc.getElementById("m-cpct");
-  if (cpct) cpct.textContent = $("rate-pct").textContent.replace(/^≈\s*/, "") || "--";
   const fill = doc.getElementById("m-bar-fill");
   if (fill) fill.style.width = $("bar-fill").style.width;
   const pill = doc.getElementById("m-state");
@@ -1248,7 +1261,7 @@ function mountMini(win) {
   }
   for (const btn of doc.querySelectorAll("[data-mode]")) {
     const compact = btn.dataset.mode === "compact";
-    const label = compact ? "縮小（只留速率、倒數與楓幣速率）" : "展開完整資訊";
+    const label = compact ? "縮小（只留經驗速率、升級倒數與楓幣）" : "展開完整資訊";
     btn.innerHTML = compact ? ICONS.shrink : ICONS.grow;
     btn.title = label;
     btn.setAttribute("aria-label", label);
@@ -1292,10 +1305,10 @@ async function toggleMini() {
   if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
   try {
     if (window.documentPictureInPicture) {
-      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 266 }));
+      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 260 }));
       return;
     }
-    const win = window.open("", "mapleexp-mini", "popup,width=340,height=286");
+    const win = window.open("", "mapleexp-mini", "popup,width=340,height=280");
     if (!win) { log("瀏覽器擋下了彈出視窗，請允許這個網站開啟彈出視窗。"); return; }
     mountMini(win);
     log("這個瀏覽器不支援置頂小視窗，改用一般彈出視窗（不會一直在最上層）。");
