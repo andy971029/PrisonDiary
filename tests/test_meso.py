@@ -1,7 +1,8 @@
 """楓幣：找背包裡的楓幣框、讀數字、算收益。
 
 畫面是合成的：雜訊背景上放一個「楓幣框 + 楓葉點數框」上下成對的背包底部，
-數字用內建的種子字形排（缺的 2/4/8 另外畫），逗號照實際畫面的樣子放在基線下面。
+數字用內建的種子字形排，逗號照實際畫面的樣子放在基線下面。十個數字都內建了，所以「沒看過的
+字形要交給 OCR」這條路，用拿掉幾個數字的模板來模擬（實際上是壓縮讓字形差了一兩個像素）。
 """
 
 from __future__ import annotations
@@ -24,18 +25,21 @@ if str(WEB) not in sys.path:
 
 import bridge  # noqa: E402
 
-GLYPHS = dict(meso.SEED_GLYPHS)
-GLYPHS.update({
-    "2": (".###.", "#..##", "....#", "...##", "..##.", ".##..", "##...", "#....", "#####"),
-    "4": ("...#.", "..##.", ".#.#.", "#..#.", "#..#.", "#####", "...#.", "...#.", "...#."),
-    "8": (".###.", "#..##", "#...#", "##.##", ".###.", "#..##", "#...#", "#..##", ".###."),
-})
+GLYPHS = meso.SEED_GLYPHS
 COMMA = ("##", ".#", "#.")
 BOX_W, BOX_H = 104, 14
 
 
 def glyph(rows) -> np.ndarray:
     return np.array([[c == "#" for c in row] for row in rows], dtype=bool)
+
+
+def reader_without(chars: str) -> meso.MesoReader:
+    """還沒學過 ``chars`` 這幾個數字的讀取器。"""
+    templates = meso.seed_templates()
+    for char in chars:
+        templates.remove_char(char)
+    return meso.MesoReader(templates)
 
 
 def draw_box(screen: np.ndarray, left: int, top: int, text: str) -> tuple[int, int, int, int]:
@@ -108,24 +112,28 @@ class TestReadDigits(unittest.TestCase):
         self.assertEqual(zone.pattern, "D,DDD,DDD")
         self.assertEqual(value, 1396576)
 
+    def test_reads_every_digit(self):
+        self.assertEqual(self.read("1,234,567,890")[1], 1234567890)
+        self.assertEqual(self.read("2,101,248")[1], 2101248)
+
     def test_small_and_zero(self):
         self.assertEqual(self.read("0")[1], 0)
         self.assertEqual(self.read("765")[1], 765)
 
     def test_unknown_digit_is_not_guessed(self):
-        """8 不在種子裡，長得又像 3／9：認不出來就交給 OCR，絕不猜成別的數字。"""
-        zone, value = self.read("1,388,576")
+        """沒學過 8，而 8 長得又像 3／9：認不出來就交給 OCR，絕不猜成別的數字。"""
+        zone, value = self.read("1,388,576", reader_without("8"))
         self.assertIsNone(value)
         self.assertTrue(zone.well_formed)
 
     def test_teach_then_read(self):
-        reader = meso.MesoReader()
+        reader = reader_without("248")
         zone, _ = self.read("2,488,105", reader)
         self.assertGreater(reader.teach(zone, 2488105), 0)
         self.assertEqual(self.read("8,420,000", reader)[1], 8420000)
 
     def test_teach_refuses_wrong_digit_count(self):
-        reader = meso.MesoReader()
+        reader = reader_without("8")
         zone, _ = self.read("1,388,576", reader)
         self.assertEqual(reader.teach(zone, 138857), 0)
 
@@ -252,6 +260,7 @@ class TestBridgeMeso(unittest.TestCase):
 
     def test_unknown_digit_goes_to_ocr_and_is_learned(self):
         session = bridge.WebSession(require_bracket=False)
+        session.meso_reader = reader_without("8")
         session.set_ocr_ready(True)
         out = self.tick(session, make_screen("1,388,576"))
         requests = [r for r in out["ocr"] if r["id"].startswith("meso:")]
@@ -264,6 +273,7 @@ class TestBridgeMeso(unittest.TestCase):
 
     def test_disagreeing_ocr_teaches_nothing(self):
         session = bridge.WebSession(require_bracket=False)
+        session.meso_reader = reader_without("8")
         session.set_ocr_ready(True)
         out = self.tick(session, make_screen("1,388,576"))
         rid = next(r["id"] for r in out["ocr"] if r["id"].startswith("meso:"))
