@@ -59,8 +59,8 @@ class MesoTracker:
     def feed(self, now: float, value: int | None) -> None:
         """每格呼叫一次。``value`` 是這格讀到的楓幣，讀不到給 None。"""
         if value is None:
+            # 待確認的新數值留著：串流偶爾一格讀不到很常見，不能因此永遠湊不滿連續兩次。
             self.visible = False
-            self._candidate = None
             return
         self.visible = True
         base = self._base

@@ -46,7 +46,7 @@ def draw_box(screen: np.ndarray, left: int, top: int, text: str) -> tuple[int, i
     """畫一個白底深框、數字靠右的欄位，回傳白色內部的範圍。"""
     screen[top - 1 : top + BOX_H + 1, left - 1 : left + BOX_W + 1, :3] = (40, 40, 40)
     screen[top : top + BOX_H, left : left + BOX_W, :3] = 241
-    x = left + BOX_W - 3
+    x = left + BOX_W - 5     # 實際畫面數字右邊留 5 格白
     for char in reversed(text):
         mask = glyph(COMMA if char == "," else GLYPHS[char])
         y = top + 2 + (7 if char == "," else 0)
@@ -99,6 +99,18 @@ class TestFindBox(unittest.TestCase):
         rect = meso.find_meso_box(screen)
         self.assertTrue(meso.box_still_there(screen, rect))
         self.assertFalse(meso.box_still_there(make_screen(None), rect))
+
+    def test_blurry_stream_still_finds_the_box(self):
+        """串流畫面糊掉：數字的墨跡滲到框頂、框底，白邊也變窄，框還是要認得出來、每格也要認得住。字認不認得出來是 OCR 補教的事。"""
+        screen = make_screen("1,396,576").astype(np.float32)
+        k = 0.2
+        neighbours = sum(np.roll(screen, shift, axis) for shift in (1, -1) for axis in (0, 1))
+        blurry = np.clip((1 - 4 * k) * screen + k * neighbours, 0, 255).astype(np.uint8)
+        rect = meso.find_meso_box(blurry)
+        self.assertIsNotNone(rect)
+        self.assertLessEqual(abs(rect[0] - 900), 1)
+        self.assertLessEqual(abs(rect[1] - 400), 1)
+        self.assertTrue(meso.box_still_there(blurry, rect))
 
 
 class TestReadDigits(unittest.TestCase):

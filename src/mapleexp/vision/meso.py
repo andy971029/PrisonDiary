@@ -32,14 +32,16 @@ BOX_MAX_H = 30
 PAIR_MAX_GAP = 16
 PAIR_ALIGN_TOLERANCE = 2
 # 框內至少這麼大比例是白的才算白框（數字只佔一小塊）。
-BOX_MIN_WHITE = 0.6
-# 白框至少要有這麼多列從左緣白到右緣（數字上下的留白），才算一個完整的框。
-BOX_MIN_FULL_ROWS = 2
+BOX_MIN_WHITE = 0.45
+# 框的左右緣：每一列的白色都從同一個位置開始、在同一個位置結束（數字左右都有留白）。
+# 角落那一兩列壓縮後可能差一格，所以只要求「高度減這麼多列」對得上。
+EDGE_SLACK_ROWS = 2
 # 比這短的白色區段不看（背景雜點）。數字很多位時，數字前面的留白只剩一小段，所以不能訂高。
-RUN_MIN_W = 4
-# 純白的判斷，跟面板標題列同一組數字（panels.WHITE_MIN／WHITE_MAX_SPREAD）。
-WHITE_MIN = 230
-WHITE_MAX_SPREAD = 12
+RUN_MIN_W = 2
+# 白色的判斷。比面板標題列（panels.WHITE_MIN／WHITE_MAX_SPREAD）寬：串流畫面壓縮過，
+# 白底會帶一點雜訊與色偏。背包底色是淡藍灰（約 156,177,199），離這個門檻還很遠。
+WHITE_MIN = 215
+WHITE_MAX_SPREAD = 30
 
 # 逗號的判斷：頂端比數字頂端低過數字高度的這個比例。
 COMMA_TOP_RATIO = 0.45
@@ -135,9 +137,10 @@ def _white_runs(white: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def find_white_boxes(frame: np.ndarray) -> list[tuple[int, int, int, int]]:
     """畫面上所有像楓幣框的白色長方框 (left, top, right, bottom)，由上而下。
 
-    框的左緣是一條直線：同一個起點連續出現好幾列，就是同一個框。右緣不能這樣認，
-    數字靠右對齊，有字的那幾列白色會在數字前面斷掉，連逗號的尾巴都會切到最底下那列。
-    所以右緣取這幾列裡最遠的結束位置（數字上方的留白列一定延伸到底）。
+    框的左緣是一條直線：同一個起點連續出現好幾列，就是同一個框。右緣也是一條直線：
+    數字靠右但右邊還留了幾格白，所以這幾列「最後一段白色」都停在同一個位置。
+    不看框頂、框底是不是整列白：畫面一糊，數字的墨跡就會滲到上下的留白列，
+    整列白的條件一下就不成立了。
     """
     white = white_mask(frame)
     if not white.any():
@@ -145,27 +148,33 @@ def find_white_boxes(frame: np.ndarray) -> list[tuple[int, int, int, int]]:
     rows, starts, ends = _white_runs(white)
     if rows.size == 0:
         return []
+    # 依列排好（_white_runs 本來就是），之後用 searchsorted 取某幾列的區段。
+    row_rows, row_starts, row_ends = rows, starts, ends
     order = np.lexsort((rows, starts))
-    rows, starts, ends = rows[order], starts[order], ends[order]
+    rows, starts = rows[order], starts[order]
     # 起點換了、或列不連續（容許壓縮雜訊吃掉一列），就是另一塊。
     cut = np.flatnonzero((np.diff(starts) != 0) | (np.diff(rows) > 2)) + 1
     heads = np.concatenate(([0], cut))
     sizes = np.diff(np.concatenate((heads, [rows.size])))
     tops = rows[heads]
     bottoms = np.maximum.reduceat(rows, heads) + 1
-    rights = np.maximum.reduceat(ends, heads)
     lefts = starts[heads]
-    heights, widths = bottoms - tops, rights - lefts
+    heights = bottoms - tops
 
     boxes = []
-    for i in np.flatnonzero(
-        (heights >= BOX_MIN_H) & (heights <= BOX_MAX_H)
-        & (widths >= BOX_MIN_W) & (widths <= BOX_MAX_W)
-        & (sizes >= BOX_MIN_H)
-    ):
-        left, top, right, bottom = int(lefts[i]), int(tops[i]), int(rights[i]), int(bottoms[i])
-        full = int(np.count_nonzero(ends[heads[i] : heads[i] + sizes[i]] >= right - 1))
-        if full < BOX_MIN_FULL_ROWS or white[top:bottom, left:right].mean() < BOX_MIN_WHITE:
+    for i in np.flatnonzero((heights >= BOX_MIN_H) & (heights <= BOX_MAX_H) & (sizes >= BOX_MIN_H)):
+        left, top, bottom = int(lefts[i]), int(tops[i]), int(bottoms[i])
+        lo, hi = np.searchsorted(row_rows, [top, bottom])
+        seg_starts, seg_ends = row_starts[lo:hi], row_ends[lo:hi]
+        inside = (seg_starts >= left) & (seg_ends - left <= BOX_MAX_W)
+        values, counts = np.unique(seg_ends[inside], return_counts=True)
+        if values.size == 0:
+            continue
+        best = int(np.argmax(counts))
+        right = int(values[best])
+        if counts[best] < bottom - top - EDGE_SLACK_ROWS or right - left < BOX_MIN_W:
+            continue
+        if white[top:bottom, left:right].mean() < BOX_MIN_WHITE:
             continue
         boxes.append((left, top, right, bottom))
     boxes.sort(key=lambda b: (b[1], b[0]))
@@ -204,8 +213,9 @@ def box_still_there(frame: np.ndarray, rect: tuple[int, int, int, int]) -> bool:
     if right > width or bottom > height:
         return False
     white = white_mask(frame[top:bottom, left:right])
-    # 最上面那列是數字上方的留白，一定整列白；整塊的白色比例也要夠。
-    return bool(white[0].mean() >= 0.95 and white.mean() >= BOX_MIN_WHITE)
+    # 左右兩側的留白一定整條白（框頂框底不看，畫面糊的時候數字會滲上去）；整塊的白色比例也要夠。
+    edges = np.concatenate((white[:, :2], white[:, -2:]), axis=1)
+    return bool(edges.mean() >= 0.9 and white.mean() >= BOX_MIN_WHITE)
 
 
 # --------------------------------------------------------------------------- #

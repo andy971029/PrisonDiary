@@ -1429,9 +1429,11 @@ $("set-save").addEventListener("click", () => {
 setBtn("settings", "gear", "設定");
 
 // ---------------------------------------------------------------- 神聖祈禱倒數
-// 寵物在技能剩 2 秒時就自動重放，所以一輪是「持續秒數 − 2」：倒數到 2 的那一刻直接回到滿秒，
-// 不等到 0，不然每輪多算 2 秒，掛久了會越差越多。所有狀態都從起點時間算出來，
+// 寵物在技能還剩幾秒時就自動重放，所以一輪是「持續秒數 − 提前秒數」：倒數到那個秒數的那一刻
+// 直接回到滿秒，不等到 0，不然每輪都多算，掛久了會越差越多。提前秒數是實測：用 2 秒時
+// 每輪還是慢了將近 1 秒，所以是 3 秒。所有狀態都從起點時間算出來，
 // 不靠計時器累加，計時器被瀏覽器延遲也不會飄。
+const PRAYER_RECAST_LEAD_SEC = 3;
 const PRAYER_FRAME_MS = 100;
 let prayerStart = null;         // performance.now()；null 代表沒在倒數
 let prayerTimer = null;
@@ -1449,7 +1451,7 @@ function prayerState(now = performance.now()) {
   const full = PRAYER_SEC[prefs.prayerLevel - 1];
   if (prayerStart === null) return { remaining: full, alert: false, flash: false, soundKey: "" };
   const t = now - prayerStart;
-  const period = (full - 2) * 1000;
+  const period = (full - PRAYER_RECAST_LEAD_SEC) * 1000;
   const remaining = full - Math.floor((t % period) / 1000);
   // 警示從「剩 warnSec 秒」開始、持續 alertSec 秒；時長等於倒數時會跨進下一輪的第一秒，
   // 所以用「最近一次警示開始」來算，而不是只看這一輪。第一輪開始前沒有警示。
