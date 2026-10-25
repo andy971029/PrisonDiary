@@ -23,6 +23,10 @@ FIRST_YELLOW_SEC = 60.0
 LOST_TICKS = 2
 # 不見的時候倒數還剩不到這麼多秒，就算 buff 結束；否則只是找不到圖示（被擋住、還沒找到）。
 EXPIRED_MARGIN_SEC = 5.0
+# 讀到的秒數跟倒數差太多（例如「21」只讀到「2」）先不信；連續這麼多次都一樣離譜才改用讀到的。
+# 倒數本身是讀出來的時候，誤差只有截圖間隔的抖動，差 2 秒以上就是讀錯。
+READ_TOLERANCE_SEC = 2.0
+CONFIRM_READS = 3
 
 OFF = "off"             # 沒在追蹤
 SEARCHING = "searching" # 正在找圖示
@@ -45,6 +49,8 @@ class PrayerWatch:
     def reset(self) -> None:
         self.status = SEARCHING if self.enabled else OFF
         self._anchor: tuple[float, float] | None = None    # (剩餘秒數, 當時的時間)
+        self._anchor_read = False   # 基準是真的讀到的秒數（不是用「白變黃 = 60 秒」推的）
+        self._odd_reads = 0         # 連續幾次讀到跟倒數對不上的秒數
         self._misses = 0
         self._last_seen: float | None = None
 
@@ -84,9 +90,13 @@ class PrayerWatch:
         if not yellow:
             self.status = LONG
             self._anchor = None
+            self._anchor_read = False
+            self._odd_reads = 0
             return
         if seconds is not None:
-            self._anchor = (seconds + 0.5, now)
+            if self._believe(now, seconds):
+                self._anchor = (seconds + 0.5, now)
+                self._anchor_read = True
         elif previous == LONG and last_seen is not None:
             # 白色剛變黃色：那一刻剩 60 秒，發生在上一格與這一格之間。
             self._anchor = (FIRST_YELLOW_SEC - (now - last_seen) / 2, now)
@@ -95,6 +105,21 @@ class PrayerWatch:
             self.status = SEARCHING
             return
         self.status = COUNTING
+
+    def _believe(self, now: float, seconds: int) -> bool:
+        """這次讀到的秒數可不可信。跟目前的倒數對得上就信；對不上要連續好幾次才信。"""
+        left = self.remaining(now)
+        if self.status != COUNTING or left is None or not self._anchor_read:
+            self._odd_reads = 0
+            return True
+        if abs(seconds + 0.5 - left) <= READ_TOLERANCE_SEC:
+            self._odd_reads = 0
+            return True
+        self._odd_reads += 1
+        if self._odd_reads >= CONFIRM_READS:
+            self._odd_reads = 0
+            return True
+        return False
 
     def snapshot(self, now: float) -> PrayerSnapshot:
         if self.status != COUNTING:

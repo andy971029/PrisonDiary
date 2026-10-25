@@ -147,6 +147,26 @@ class TestReadTimer(unittest.TestCase):
         self.assertTrue(zone.has_seconds)
         self.assertEqual(value, 56)
 
+    def test_digit_only_partly_seen_is_not_read(self):
+        """細的那個數字被洗淡、只剩一小截：只讀到一半會把 21 讀成 2，所以整格不讀。"""
+        screen = make_screen(icon_at=None)
+        draw_icon(screen, 1180, 1, seconds=5, grey_from=10)
+        x = 1180 + 1 + digit_mask("5").shape[1] + 1
+        screen[1 + 20 : 1 + 23, x + 1, :3] = YELLOW_BGR       # 「1」只剩上面三個像素
+        zone, value = self.read(screen)
+        self.assertTrue(zone.has_seconds)
+        self.assertFalse(zone.complete)
+        self.assertIsNone(value)
+
+    def test_digits_stuck_together_are_not_read(self):
+        screen = make_screen(icon_at=None)
+        draw_icon(screen, 1180, 1, seconds=55, grey_from=10)
+        screen[1 + 24, 1180 + 6, :3] = YELLOW_BGR             # 兩個 5 中間黏一點
+        zone, value = self.read(screen)
+        self.assertTrue(zone.has_seconds)
+        self.assertFalse(zone.complete)
+        self.assertIsNone(value)
+
     def test_tan_leaf_outline_is_not_a_digit(self):
         screen = make_screen(seconds=None)
         screen[1 + 20 : 1 + 28, 1181:1186, :3] = TAN_BGR
@@ -191,6 +211,34 @@ class TestPrayerWatch(unittest.TestCase):
         w.feed(0.0, seen=True, seconds=50, yellow=True)
         w.feed(5.0, seen=True, seconds=43, yellow=True)
         self.assertAlmostEqual(w.snapshot(5.0).remaining, 43.5)
+
+    def test_one_odd_reading_is_ignored(self):
+        """「21」只讀到「2」：跟倒數差太多，不信，倒數照走；下一格讀對就沒事。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=30, yellow=True)
+        w.feed(9.0, seen=True, seconds=2, yellow=True)
+        self.assertAlmostEqual(w.snapshot(9.0).remaining, 21.5)
+        w.feed(10.0, seen=True, seconds=20, yellow=True)
+        self.assertAlmostEqual(w.snapshot(10.0).remaining, 20.5)
+
+    def test_odd_readings_win_if_they_keep_coming(self):
+        """一開始的基準錯了：連續幾次都讀到同一邊，就改用讀到的。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        for i in range(1, core.CONFIRM_READS):
+            w.feed(float(i), seen=True, seconds=30 - i, yellow=True)
+            self.assertAlmostEqual(w.snapshot(float(i)).remaining, 40.5 - i)
+        n = float(core.CONFIRM_READS)
+        w.feed(n, seen=True, seconds=int(30 - n), yellow=True)
+        self.assertAlmostEqual(w.snapshot(n).remaining, 30 - n + 0.5)
+
+    def test_first_reading_after_the_sixty_guess_is_trusted(self):
+        """「白變黃 = 60 秒」是推的，截圖間隔長時誤差大，第一個讀到的秒數直接用。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, yellow=False)
+        w.feed(10.0, seen=True, yellow=True)            # 推成 55 秒
+        w.feed(11.0, seen=True, seconds=50, yellow=True)
+        self.assertAlmostEqual(w.snapshot(11.0).remaining, 50.5)
 
     def test_white_to_yellow_anchors_at_sixty(self):
         """黃色數字還讀不出來：用白色變黃色的那一刻當 60 秒。"""

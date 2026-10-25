@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .preprocess import to_luma
+from .preprocess import despeckle, to_luma
 from .segment import segment
 from .templates import TemplateSet
 
@@ -60,6 +60,11 @@ WHITE_MIN_INK = 6
 # 黃色像素少於這個數就當作沒有黃色數字（雜點）。一個數字至少十幾個像素。
 YELLOW_MIN_INK = 8
 DIGIT_MIN_HEIGHT = 6
+# 一個數字約 5 欄寬；比這更寬就是兩個數字黏在一起（串流糊掉時常見），不能當成一個數字讀。
+DIGIT_MAX_WIDTH = 7
+# 切出來的數字以外還剩這麼多黃色像素，就是有數字沒切出來（例如細細的「1」被串流洗淡、斷成幾截）。
+# 這時只讀到一部分，「21」會變成「2」，寧可這格不讀。
+LEFTOVER_MAX_INK = 3
 MATCH_DIGIT_MIN_SCORE = 0.85
 MATCH_DIGIT_MIN_MARGIN = 0.03
 
@@ -238,15 +243,21 @@ def _best(luma: np.ndarray, x0: int, y0: int) -> tuple[int, int, float] | None:
 
 @dataclass
 class TimerZone:
-    """圖示左下角的黃色數字。沒有黃色數字（一分鐘以上）時 ``digits`` 是空的。"""
+    """圖示左下角的數字。白色（一分鐘以上）時 ``yellow`` 是 False、``digits`` 是空的。"""
 
     image: np.ndarray               # 數字區的原圖（BGRA），給 OCR 用
     mask: np.ndarray                # 黃色像素
     digits: list[np.ndarray]
+    yellow: bool = False            # 有黃色數字（不到一分鐘）
+    complete: bool = True           # 每個數字都切得乾淨；False 時 ``digits`` 不可信，不能讀
 
     @property
     def has_seconds(self) -> bool:
-        return bool(self.digits)
+        return self.yellow
+
+    @property
+    def readable(self) -> bool:
+        return self.yellow and self.complete and bool(self.digits)
 
     @property
     def shape_key(self) -> str:
@@ -280,10 +291,15 @@ def cut_timer(frame: np.ndarray, icon: tuple[int, int]) -> TimerZone | None:
     if white_ink(pixels) >= WHITE_MIN_INK or int(mask.sum()) < YELLOW_MIN_INK:
         return TimerZone(image=pixels.copy(), mask=mask, digits=[])
     glyphs = segment(mask, min_width=1, min_height=3, split_wide=False, min_ink=3)
-    digits = [g.mask for g in glyphs if g.height >= DIGIT_MIN_HEIGHT]
-    if not digits:
-        return TimerZone(image=pixels.copy(), mask=mask, digits=[])
-    return TimerZone(image=pixels.copy(), mask=mask, digits=digits)
+    kept = [g for g in glyphs if g.height >= DIGIT_MIN_HEIGHT]
+    covered = np.zeros(mask.shape[1], dtype=bool)
+    for g in kept:
+        covered[g.left : g.right] = True
+    leftover = int(despeckle(mask)[:, ~covered].sum())
+    complete = (bool(kept) and leftover < LEFTOVER_MAX_INK
+                and all(g.right - g.left <= DIGIT_MAX_WIDTH for g in kept))
+    return TimerZone(image=pixels.copy(), mask=mask, digits=[g.mask for g in kept],
+                     yellow=True, complete=complete)
 
 
 def ocr_image(zone: TimerZone) -> np.ndarray:
@@ -300,7 +316,7 @@ class TimerReader:
         self.templates = templates if templates is not None else seed_templates()
 
     def read_templates(self, zone: TimerZone) -> int | None:
-        if not zone.digits:
+        if not zone.readable:
             return None
         chars = []
         for digit in zone.digits:
@@ -315,6 +331,6 @@ class TimerReader:
 
     def teach(self, zone: TimerZone, value: int) -> int:
         text = str(value)
-        if len(text) != len(zone.digits):
+        if not zone.readable or len(text) != len(zone.digits):
             return 0
         return sum(1 for char, mask in zip(text, zone.digits) if self.templates.add(char, mask))

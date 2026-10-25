@@ -360,7 +360,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.4.3</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.4.4</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1566,6 +1566,9 @@ function prayerState(now = performance.now()) {
   const shown = remaining === null ? null : Math.floor(remaining);   // 跟遊戲一樣無條件捨去
   // 警示從數字跳到 warnSec 的那一刻開始、持續 alertSec 秒；buff 沒了也警示。
   const warn = status === "expired" || (shown !== null && shown <= prefs.warnSec);
+  // 校正後又回到警示倒數以上（之前那次是誤讀），這一輪的警示就還沒用掉；留 2 秒緩衝，
+  // 免得剛好在門檻上被校正來回推，同一輪響兩次。
+  if (!warn && shown !== null && shown > prefs.warnSec + 2) prayerAlertAt = null;
   if (warn && prayerAlertAt === null) prayerAlertAt = now;
   const since = prayerAlertAt === null ? Infinity : now - prayerAlertAt;
   const alert = prefs.prayerAlertOn && warn && since < prefs.alertSec * 1000;

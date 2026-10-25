@@ -694,7 +694,8 @@ class WebSession:
             self.prayer.feed(now, seen=False)
             return
         seconds = self.prayer_reader.read_templates(zone) if zone.has_seconds else None
-        if zone.has_seconds and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
+        # 數字沒切乾淨（黏在一起、斷掉）就不問 OCR：位數對不上，教了反而把錯的字形學進去。
+        if zone.readable and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
             self._request_prayer(zone)
         self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.has_seconds)
 
