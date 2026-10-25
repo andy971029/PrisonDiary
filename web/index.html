@@ -112,6 +112,8 @@
   button.prayer.off { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
   button.prayer.off span { display: none; }
   button.prayer.off .ic { margin-right: 0; }
+  /* 祈禱鈕用遊戲裡的圖示，比線條圖示大一點才看得清楚；上下用負邊界吃掉，按鈕高度不變。 */
+  button .ic.pi { width: 22px; height: 22px; margin: -4px 8px -4px 0; vertical-align: -6px; border-radius: 3px; }
   button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   button[disabled] { opacity: .4; cursor: default; }
   .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
@@ -251,6 +253,7 @@
     .m-btns button { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center;
       justify-content: center; border-width: 1px; }
     .m-btns button .ic { margin: 0; width: 12px; height: 12px; }
+    .m-btns button .ic.pi { width: 18px; height: 18px; }
     .m-btns button.halt { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
     .m-btns button.prayer { width: auto; padding: 0 5px; gap: 3px; font: 700 12px var(--mono); }
     .m-btns button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
@@ -683,7 +686,9 @@ const ICONS = {
   // 展開用四個角往外的框：實心方塊已經是停止，空心方塊縮小後看起來太像。
   grow: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>',
   gear: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.8 1h2.4l.4 2 1.3.6 1.7-1.2 1.7 1.7-1.2 1.7.6 1.3 2 .4v2.4l-2 .4-.6 1.3 1.2 1.7-1.7 1.7-1.7-1.2-1.3.6-.4 2H6.8l-.4-2-1.3-.6-1.7 1.2-1.7-1.7 1.2-1.7-.6-1.3-2-.4V6.8l2-.4.6-1.3-1.2-1.7 1.7-1.7 1.7 1.2 1.3-.6zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z"/></svg>',
-  hourglass: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 1.5h10M3 14.5h10M4.5 1.5c0 3.5 3.5 4.5 3.5 6.5S4.5 11 4.5 14.5M11.5 1.5c0 3.5-3.5 4.5-3.5 6.5s3.5 3 3.5 6.5"/><path fill="currentColor" d="M5.4 13.6c.6-1.8 2.6-2.4 2.6-3.4 0 1 2 1.6 2.6 3.4z"/></svg>',
+  // 神聖祈禱的 buff 圖示（從遊戲畫面取下，左下角的分鐘數用右半邊鏡射蓋掉）。內嵌成 data URI，
+  // 小浮窗複製按鈕內容時才不會因為網址不同而載不到。
+  prayer: '<img class="ic pi" alt="" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAADW0lEQVR42p2XMWvbQBTHRacSXEoghAZjYWr0BTqmayj4A4TmA5RAKPXUb5AOWestdPESKKH4thAwghLIUPcoFC1BxYsHhyyhUAKiy+t7p7vTu5NkyxU8n/Dd/X/v/3R3toKnLz8Fjx5vw0jEMJGzRjGVP0AeH4L8OoFY/mo8j6IdduHJiw+BhT5kf6HJlSSJgoabLRgf9hU8yzJoep1eJLC1E0LwP9AOQY/7EG5j+x7hV+vDG4MVdIjQrRZIOYKfZ2/gbv4Fer322vDGYA4V6JSABkztus4VWAiBDqQT/mTXrUAYLqzTfRV38wm6DmvBaq6nPxRSg1FUnuwXgQLOYMftBO7vpYLze+7an+trM/BrFN6AIAhUCBLgSQwPVH8qY0jOjiCbfyu1Ua9bgBXsFcYehEzX9JfA5Cj7jSJRlyWx6/QBzCD5fGRLzb/LXe86sDSNnT55dVkGp6nEQW9R7Ma2UfRcCxR9APeV91HU02O/V+j0loONUO4mn9jBbHkfF+QJKHFVmRtHw/bVgamcpoT5pFsUeKfbAbYLFIhsGYtypraft1xrRalTdysgtEhgoJ17Y+ZzCLtd7bQA0j2/KGEHTAeIOvTNytXCyQVCz/dtdHbK0BL8Y9+Zk/1ZlKC0z+3JxcFi2NeTbgthTKIp2MDyeQOlFe60qsF0ZOan00Gp5ASlJCjrVWD1rBHG4b7byrOaw9UeHvat86Zg45Rc5oeGC7Vg+uAXDaCBdOrQJLNqq+AElLOZAzWrXgFRw4euBKsTCLM2z9uUkIRFHCsgh5r+uue6FMyhBPAXF9+7Y4QT1PnOW1xVz7cefI3g48Kt2krPlq9o7p5vKeUatUizFsyhxm32sIDxqJ+XEgEdXVZ+ehnnY11+dY9zaK517cGXgg2UhIyrji6tgfMkxt5zN/C1wGG7Bcn1QAmTiH8+C+3Sd88roKqEGqRVC+ZQ/weARGpPKuaSh7/oVEIMXgLL071SVCWzKhSkQqsa7P0hs4GD29sbEItD6HY28c+/wDcC6UQ7DCEeY3+4aZ3V6TnguosGTTWY//ZWbSPTP0Lw9Ppy6d9cBabXiTq4AU+wTBSUgNladgHpewKaccvA9hWGXqDo5uRcloJ+sE2J4tHBSvCUlZjmVmkSi17a/gGYxnQ7Y3ZNbQAAAABJRU5ErkJggg==">',
   replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
 };
 function setBtn(id, icon, text) {
@@ -1549,7 +1554,7 @@ function renderPrayer() {
 }
 
 $("prayer").addEventListener("click", () => setPrayer(!prayerOn));
-setBtn("prayer", "hourglass", "");
+setBtn("prayer", "prayer", "");
 renderPrayer();
 window.addEventListener("pagehide", () => { if (miniWin && !miniWin.closed) miniWin.close(); });
 syncMiniButton();
