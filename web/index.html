@@ -360,7 +360,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.4.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.4.2</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1369,16 +1369,41 @@ function setMiniCompact(win, compact) {
   } catch { /* 不能改大小就算了 */ }
 }
 
+// 開窗時只能先猜高度，內容實際多高要等版面排好才知道（字型、寬度都會影響）。
+// 排好後量一次、把視窗縮到剛好包住內容，量到的高度記下來，下次開窗直接用。
+const MINI_HEIGHT_KEY = "mapleexp.miniHeight";
+function savedMiniHeight() {
+  try {
+    const h = Number(localStorage.getItem(MINI_HEIGHT_KEY));
+    if (h >= 120 && h <= 600) return h;
+  } catch { /* 讀不到就用預設 */ }
+  return 240;
+}
+
+function fitMiniHeight(win) {
+  const doc = win.document;
+  if (doc.body.classList.contains("compact")) return;
+  doc.body.style.height = "auto";
+  const need = Math.ceil(doc.body.getBoundingClientRect().height);
+  doc.body.style.height = "";
+  try { localStorage.setItem(MINI_HEIGHT_KEY, String(need)); } catch { /* 存不了就下次再量 */ }
+  if (Math.abs(win.innerHeight - need) < 2) return;
+  try { win.resizeTo(win.outerWidth, need + win.outerHeight - win.innerHeight); } catch { /* 不能改大小就算了 */ }
+}
+
 async function toggleMini() {
   if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
   try {
     if (window.documentPictureInPicture) {
-      mountMini(await documentPictureInPicture.requestWindow({ width: 340, height: 260 }));
+      const win = await documentPictureInPicture.requestWindow({ width: 340, height: savedMiniHeight() });
+      mountMini(win);
+      win.requestAnimationFrame(() => fitMiniHeight(win));
       return;
     }
-    const win = window.open("", "mapleexp-mini", "popup,width=340,height=280");
+    const win = window.open("", "mapleexp-mini", `popup,width=340,height=${savedMiniHeight()}`);
     if (!win) { log("瀏覽器擋下了彈出視窗，請允許這個網站開啟彈出視窗。"); return; }
     mountMini(win);
+    win.requestAnimationFrame(() => fitMiniHeight(win));
     log("這個瀏覽器不支援置頂小視窗，改用一般彈出視窗（不會一直在最上層）。");
   } catch (err) {
     log("開啟小浮窗失敗：" + err.message);
