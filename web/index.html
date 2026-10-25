@@ -758,7 +758,7 @@ async function share(media = navigator.mediaDevices) {
   paused = false;
   session.resume();
   syncButtons();
-  setState("尋找經驗值欄位…");
+  setState("辨識中…");
   timer = setInterval(tick, prefs.intervalSec * 1000);
   loadOcr();
 }
@@ -797,7 +797,7 @@ function togglePause() {
   // 暫停時整個 tick 都不跑：經驗值、活躍、閒置都不累計；恢復時 tracker 只重設基準，
   // 暫停期間賺的經驗不算進去。
   if (!paused) session.resume();
-  setState(paused ? "已暫停" : "尋找經驗值欄位…", paused ? "paused" : "");
+  setState(paused ? "已暫停" : "辨識中…", paused ? "paused" : "");
   syncButtons();
   log(paused ? "已暫停計算。" : "繼續計算。");
 }
