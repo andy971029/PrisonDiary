@@ -27,6 +27,7 @@ import bridge  # noqa: E402
 from test_web_bridge import rgba_bytes  # noqa: E402
 
 YELLOW_BGR = (8, 170, 210)
+WASHED_YELLOW_BGR = (91, 172, 189)     # 分享視窗串流洗淡後的黃色數字
 TAN_BGR = (88, 160, 190)        # 楓葉外框的土黃色：不能被當成黃色數字
 
 
@@ -36,7 +37,7 @@ def digit_mask(char: str) -> np.ndarray:
 
 
 def draw_icon(screen: np.ndarray, left: int, top: int, seconds: int | None = None,
-              grey_from: int | None = None) -> None:
+              grey_from: int | None = None, colour=YELLOW_BGR) -> None:
     """畫一個祈禱圖示；``grey_from`` 以下的列蓋灰，``seconds`` 不是 None 就在左下角畫黃色秒數。"""
     icon = np.repeat(prayer.TEMPLATE[..., None], 3, axis=2)
     if grey_from is not None:
@@ -48,7 +49,7 @@ def draw_icon(screen: np.ndarray, left: int, top: int, seconds: int | None = Non
         for char in str(seconds):
             mask = digit_mask(char)
             region = screen[top + 20 : top + 20 + mask.shape[0], x : x + mask.shape[1], :3]
-            region[mask] = YELLOW_BGR
+            region[mask] = colour
             x += mask.shape[1] + 1
 
 
@@ -126,6 +127,13 @@ class TestReadTimer(unittest.TestCase):
                 zone, value = self.read(make_screen(seconds=seconds, grey_from=10))
                 self.assertTrue(zone.has_seconds)
                 self.assertEqual(value, seconds)
+
+    def test_washed_out_stream_colours_still_count_as_yellow(self):
+        screen = make_screen(icon_at=None)
+        draw_icon(screen, 1180, 1, seconds=56, grey_from=10, colour=WASHED_YELLOW_BGR)
+        zone, value = self.read(screen)
+        self.assertTrue(zone.has_seconds)
+        self.assertEqual(value, 56)
 
     def test_tan_leaf_outline_is_not_a_digit(self):
         screen = make_screen(seconds=None)

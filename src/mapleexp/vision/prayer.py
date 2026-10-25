@@ -39,11 +39,17 @@ DIGIT_RIGHT = 16
 # 比對時從第幾列開始、左邊幾欄不看（數字蓋住的範圍再寬鬆一點）。
 SKIP_FROM_ROW, SKIP_COLS = 19, 15
 
-# 黃色數字的判斷：夠亮、而且藍色分量低於紅色的四分之一（實測數字約 (210,170,8)，
-# 楓葉外框的土黃色約 (190,160,88)）。
-YELLOW_MIN_RED = 150
-YELLOW_MIN_GREEN = 110
-YELLOW_BLUE_RATIO = 4
+# 黃色數字的判斷：夠亮、而且紅色明顯高於藍色。原圖的數字約 (210,170,8)，但分享視窗的串流
+# 會把顏色洗淡，實測變成 (190,172,91) 左右，所以門檻要放寬。放寬後會連圖示上楓葉的土黃色
+# (204,146,88) 一起抓到；不過那只出現在圖示還是全彩、也就是一分鐘以上的時候，
+# 這時左下角一定有白色的分鐘數，先看到白色就不算秒數。
+YELLOW_MIN_RED = 130
+YELLOW_MIN_GREEN = 100
+YELLOW_MIN_RED_OVER_BLUE = 60
+# 白色分鐘數：三個分量都夠亮而且差不多。灰掉的圖示最亮只到 140 左右。
+WHITE_MIN = 190
+WHITE_MAX_SPREAD = 40
+WHITE_MIN_INK = 6
 # 黃色像素少於這個數就當作沒有黃色數字（雜點）。一個數字至少十幾個像素。
 YELLOW_MIN_INK = 8
 DIGIT_MIN_HEIGHT = 6
@@ -212,7 +218,14 @@ def yellow_mask(pixels: np.ndarray) -> np.ndarray:
     blue = pixels[..., 0].astype(np.int16)
     green = pixels[..., 1].astype(np.int16)
     red = pixels[..., 2].astype(np.int16)
-    return (red >= YELLOW_MIN_RED) & (green >= YELLOW_MIN_GREEN) & (blue * YELLOW_BLUE_RATIO < red)
+    return (red >= YELLOW_MIN_RED) & (green >= YELLOW_MIN_GREEN) & (red - blue >= YELLOW_MIN_RED_OVER_BLUE)
+
+
+def white_ink(pixels: np.ndarray) -> int:
+    """白色（分鐘數）像素的數量。"""
+    channels = pixels[..., :3].astype(np.int16)
+    low, high = channels.min(axis=-1), channels.max(axis=-1)
+    return int(((low >= WHITE_MIN) & (high - low <= WHITE_MAX_SPREAD)).sum())
 
 
 def cut_timer(frame: np.ndarray, icon: tuple[int, int]) -> TimerZone | None:
@@ -224,7 +237,7 @@ def cut_timer(frame: np.ndarray, icon: tuple[int, int]) -> TimerZone | None:
         return None
     pixels = frame[y0:y1, x0:x1]
     mask = yellow_mask(pixels)
-    if int(mask.sum()) < YELLOW_MIN_INK:
+    if white_ink(pixels) >= WHITE_MIN_INK or int(mask.sum()) < YELLOW_MIN_INK:
         return TimerZone(image=pixels.copy(), mask=mask, digits=[])
     glyphs = segment(mask, min_width=1, min_height=3, split_wide=False, min_ink=3)
     digits = [g.mask for g in glyphs if g.height >= DIGIT_MIN_HEIGHT]
