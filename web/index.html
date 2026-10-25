@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>服刑日誌</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="256x256" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -1243,8 +1246,10 @@ function mountMini(win) {
   const doc = win.document;
   doc.title = "服刑日誌 · 小浮窗";
   doc.documentElement.lang = "zh-Hant";
-  for (const node of document.head.querySelectorAll('link[rel="stylesheet"], style')) {
-    doc.head.appendChild(node.cloneNode(true));
+  for (const node of document.head.querySelectorAll('link[rel="stylesheet"], link[rel="icon"], style')) {
+    const copy = node.cloneNode(true);
+    if (copy.href) copy.href = node.href;   // 小浮窗的網址不是這頁，相對路徑要先換成完整網址
+    doc.head.appendChild(copy);
   }
   doc.body.className = "mini";
   doc.body.replaceChildren(document.importNode($("mini-tpl").content, true));
