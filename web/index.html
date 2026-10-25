@@ -118,6 +118,7 @@
   button .ic.pi { width: 22px; height: 22px; margin: -4px 8px -4px 0; border-radius: 3px; }
   button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   button[disabled] { opacity: .4; cursor: default; }
+  button[hidden] { display: none !important; }
   .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
     padding: 7px 12px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
   .pill i { width: 9px; height: 9px; background: var(--muted); border-radius: 50%; }
@@ -355,7 +356,7 @@
 <body>
 <main>
   <header>
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.3.2</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.3.3</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -491,6 +492,10 @@
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
   <h3>神聖祈禱（掛7）設定</h3>
+  <div class="field" title="每格都要到畫面右上角找祈禱圖示；電腦比較吃力或沒在用祈禱時可以關掉，按鈕也會一起藏起來">
+    <span>辨識神聖祈禱</span><label class="switch"><input type="checkbox" id="set-prayer"><i></i>開啟</label>
+  </div>
+  <div id="set-prayer-opts">
   <label class="field"><span>警示倒數</span><input type="number" id="set-warn" min="1" max="30" step="1" required> 秒</label>
   <div class="field"><span>警示方式</span></div>
   <div class="opt">
@@ -509,6 +514,7 @@
     <output id="set-volume-val"></output>
   </div>
   <label class="field"><span>警示時長</span><input type="number" id="set-alert" min="1" max="30" step="1" required> 秒</label>
+  </div>
   <div class="btns">
     <button id="set-default" class="secondary lead">恢復預設</button>
     <button id="set-cancel" class="secondary">取消</button>
@@ -535,6 +541,7 @@ const DEFAULT_SETTINGS = {
   intervalSec: 1, idleSec: 10,
   warnSec: 10, alertSec: 10,
   flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
+  prayerOn: true,           // 關掉就完全不找祈禱圖示，省效能
   prayerAlertOn: true,      // 祈禱鈕切換；不在設定對話框裡
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
@@ -1404,6 +1411,7 @@ function applySettings(next) {
   if (session) session.set_timing(prefs.intervalSec, prefs.idleSec);
   if (timer) { clearInterval(timer); timer = setInterval(tick, prefs.intervalSec * 1000); }
   log(`設定：每 ${prefs.intervalSec} 秒截圖一次，經驗停 ${prefs.idleSec} 秒算閒置${prefs.idleSec ? "" : "（不判定）"}。`);
+  if (prefs.prayerOn !== prayerOn) setPrayer(prefs.prayerOn);
   renderPrayer();
 }
 
@@ -1417,6 +1425,7 @@ function fillSettings(values) {
   $("set-sound").checked = values.soundOn;
   $("set-sound-pick").value = values.sound;
   $("set-volume").value = values.volume;
+  $("set-prayer").checked = values.prayerOn;
   syncSettingsForm();
 }
 
@@ -1426,6 +1435,7 @@ function syncSettingsForm() {
   $("set-alert").max = warn;
   if (Number($("set-alert").value) > warn) $("set-alert").value = warn;
   $("set-color-chip").style.background = $("set-color").value;
+  $("set-prayer-opts").hidden = !$("set-prayer").checked;     // 關掉辨識就把其他祈禱設定藏起來
   $("set-color").disabled = !$("set-flash").checked;
   $("set-sound-pick").disabled = $("set-preview").disabled = $("set-volume").disabled = !$("set-sound").checked;
   $("set-volume-val").textContent = `${$("set-volume").value}%`;
@@ -1437,7 +1447,7 @@ for (const [color, name] of FLASH_COLORS) {
   $("set-color").add(opt);
 }
 for (const [id, name] of SOUNDS) $("set-sound-pick").add(new Option(name, id));
-for (const id of ["set-warn", "set-color", "set-flash", "set-sound", "set-volume"]) {
+for (const id of ["set-warn", "set-color", "set-flash", "set-sound", "set-volume", "set-prayer"]) {
   $(id).addEventListener("input", syncSettingsForm);
   $(id).addEventListener("change", syncSettingsForm);
 }
@@ -1461,6 +1471,7 @@ $("set-save").addEventListener("click", () => {
     soundOn: $("set-sound").checked,
     sound: $("set-sound-pick").value,
     volume: $("set-volume").value,
+    prayerOn: $("set-prayer").checked,
     prayerAlertOn: prefs.prayerAlertOn,
   }));
   $("settings-dlg").close();
@@ -1468,8 +1479,9 @@ $("set-save").addEventListener("click", () => {
 setBtn("settings", "gear", "設定");
 
 // ---------------------------------------------------------------- 神聖祈禱倒數
-// 一直開著：Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的秒數（vision/prayer.py）。
+// 預設開著：Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的秒數（vision/prayer.py）。
 // 沒用祈禱的人只會看到「—」。按鈕只用來開關提醒（閃爍與音效），倒數本身照跑。
+// 設定裡可以整個關掉（效能吃緊時），關掉後 Python 不找圖示，按鈕也藏起來。
 // 一分鐘以上圖示上是白色的分鐘數、不知道確切秒數，只顯示「1m+」；剩不到一分鐘會變成黃色的秒數，
 // 每讀到一次就校正一次，兩張截圖之間由這裡自己往下數。寵物重放後秒數又回到白色，自然就接上下一輪，
 // 不用知道祈禱等級。圖示不見了、而且時間已經到了，就是 buff 真的沒了（寵物沒重放）。
@@ -1541,6 +1553,7 @@ function prayerLabel(st) {
 function renderPrayer() {
   const st = prayerState();
   const btn = $("prayer");
+  btn.hidden = !prayerOn;
   btn.querySelector("span").textContent = st.text;
   const found = st.status !== "off" && st.status !== "searching";
   btn.classList.toggle("running", found && !st.alert && prefs.prayerAlertOn);
@@ -1556,6 +1569,7 @@ function renderPrayer() {
   for (const m of doc.querySelectorAll('[data-for="prayer"]')) {
     if (m.innerHTML !== btn.innerHTML) m.innerHTML = btn.innerHTML;
     m.className = btn.className;
+    m.hidden = btn.hidden;
     m.title = label;
     m.setAttribute("aria-label", label);
   }
@@ -1570,7 +1584,7 @@ $("prayer").addEventListener("click", () => {
 });
 setBtn("prayer", "prayer", "");
 $("prayer").insertAdjacentHTML("beforeend", ICONS.bellOff);
-setPrayer(true);
+setPrayer(prefs.prayerOn);
 window.addEventListener("pagehide", () => { if (miniWin && !miniWin.closed) miniWin.close(); });
 syncMiniButton();
 
