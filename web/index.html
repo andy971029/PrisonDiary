@@ -316,6 +316,43 @@
     dl.m-facts .coin dt::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 4px;
       border-radius: 50%; background: var(--coin); }
     #m-meso-rate, #m-cmeso { color: var(--coin); }
+    /* 女神組隊任務：切過去時把經驗、楓幣那幾塊換成小工具，內容依地圖名稱自動切換關卡 */
+    .m-who > #m-gq-toggle { margin-left: auto; flex: none; align-self: center; padding: 1px 8px;
+      font: 700 11px var(--body); border-width: 1px; }
+    body.gq > .m-rate, body.gq > .bar, body.gq > .m-barline, body.gq > dl.m-facts,
+    body:not(.gq) > .m-gq { display: none; }
+    body.mini > .m-gq { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+    body.mini.compact > .m-gq { display: none; }
+    .gq-tabs { display: flex; gap: 3px; flex-wrap: wrap; }
+    .gq-tabs button { padding: 1px 6px; font: 500 11px var(--body); border-width: 1px; }
+    .gq-tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+    .gq-tabs button.here::after { content: "●"; font-size: 7px; margin-left: 3px; vertical-align: 2px; color: var(--ok); }
+    .gq-note { font-size: 12px; color: var(--muted); margin: 0; }
+    .gq-say { font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0; }
+    .gq-say b { color: var(--accent); }
+    .gq-records { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 10px; align-items: center; }
+    .gq-records > div { display: contents; }
+    .gq-records span { font-size: 12px; color: var(--muted); padding: 2px 0 2px 6px; }
+    .gq-records img { width: 30px; height: auto; image-rendering: pixelated; }
+    .gq-records b { font-size: 13px; }
+    .gq-records .today span, .gq-records .today b { color: var(--accent); }
+    .gq-records .today span { border-left: 3px solid var(--accent); padding-left: 3px; font-weight: 700; }
+    .gq-records .today b::after { content: "今天"; margin-left: 6px; padding: 0 5px; font-size: 10px;
+      border: 1px solid var(--accent); border-radius: 2px; }
+    .gq-seal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+    .gq-seal div { border: 1px solid var(--line); padding: 2px 0 4px; }
+    .gq-seal small { display: block; font-size: 11px; color: var(--muted); }
+    .gq-seal b { font: 700 34px/1 var(--display); color: var(--accent); }
+    .gq-seal.done b { color: var(--ok); }
+    .gq-row { display: flex; gap: 6px; }
+    .gq-row button { flex: 1; padding: 5px 0; font-size: 13px; border-width: 1px; }
+    .gq-row button.big { font: 700 18px var(--mono); }
+    .gq-map { position: relative; width: 128px; margin: 0 auto; flex: none; }
+    .gq-map img { display: block; width: 100%; image-rendering: pixelated; background: #9ad8ea; }
+    .gq-map span { position: absolute; transform: translate(-50%, -100%); padding: 0 3px; border-radius: 2px;
+      font: 700 11px/1.3 var(--mono); background: var(--ink); color: var(--surface); }
+    .gq-map span.first { background: var(--accent); color: var(--on-accent); }
+    .gq-tower { display: block; width: 100%; height: auto; }
   </style>
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
@@ -329,7 +366,8 @@
       <button class="secondary" id="m-close"></button>
     </div>
   </div>
-  <div class="m-who"><span class="m-lv">Lv.<b id="m-level">--</b></span><b id="m-char">--</b><span id="m-map">--</span></div>
+  <div class="m-who"><span class="m-lv">Lv.<b id="m-level">--</b></span><b id="m-char">--</b><span id="m-map">--</span><button class="secondary" id="m-gq-toggle" title="切換到女神組隊任務小工具">女神</button></div>
+  <div class="m-gq" id="m-gq"></div>
   <div class="m-rate"><span id="m-rate" class="rate-num">--</span><span class="rate-side"><span class="rate-pct" id="m-rate-pct"></span><span class="rate-unit">EXP / hr</span></span></div>
   <div class="bar"><div id="m-bar-fill"></div></div>
   <div class="m-barline"><span id="m-bar-text">-- / --</span><b id="m-bar-pct">--</b></div>
@@ -360,7 +398,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.4.4</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.0</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1276,6 +1314,7 @@ function syncMini() {
   }
   const fill = doc.getElementById("m-bar-fill");
   if (fill) fill.style.width = $("bar-fill").style.width;
+  renderGoddess();
   const pill = doc.getElementById("m-state");
   if (pill) {
     pill.className = $("state").className;
@@ -1336,6 +1375,9 @@ function mountMini(win) {
     btn.addEventListener("click", () => setMiniCompact(win, compact));
   }
   if (miniCompact) setMiniCompact(win, true);
+  doc.getElementById("m-gq-toggle").addEventListener("click", () => { gq.on = !gq.on; renderGoddess(true); });
+  doc.getElementById("m-gq").addEventListener("click", onGoddessClick);
+  renderGoddess(true);
   const close = doc.getElementById("m-close");
   close.innerHTML = ICONS.close;
   close.title = "關閉小浮窗";
@@ -1350,6 +1392,153 @@ function mountMini(win) {
   win.setInterval(renderPrayer, PRAYER_FRAME_MS);
   syncMini();
   syncMiniButton();
+}
+
+// ---------------------------------------------------------------- 女神組隊任務（雅典娜禁地）
+// 只在小浮窗裡：按「女神」把經驗、楓幣那幾塊換成小工具，再按「經驗」換回來。關卡依地圖名稱自動切換，
+// 也可以手動點上面的分頁（地圖名稱讀錯或還沒讀到時用）。圖片放在 goddess/。
+const GQ_STAGES = [
+  ["fork", "岔路", /岔路/],
+  ["rest", "休息室", /休息室/],
+  ["seal", "封印之室", /封印/],
+  ["warehouse", "倉庫", /(?<!監獄)倉庫(?!\d)/],     // 監獄倉庫1、2 是別張圖
+  ["tower", "中央塔", /中央塔/],
+];
+// 休息室要蒐集的唱片，每天不一樣（依台北時間）。順序跟 Date.getDay() 一樣從星期日開始。
+const GQ_RECORDS = [
+  ["日", "sun", "傑出的唱片"], ["一", "mon", "可愛的唱片"], ["二", "tue", "可怕的唱片"], ["三", "wed", "有趣的唱片"],
+  ["四", "thu", "憂鬱的唱片"], ["五", "fri", "冷淡的唱片"], ["六", "sat", "乾淨的唱片"],
+];
+// 倉庫地圖（goddess/warehouse.png，64×225）上 15 層平台的位置與紅獨角獅出現的順序：
+// [順序, 平台中間的 x, 平台頂面的 y]，單位是原圖像素。左邊 8 層、右邊 7 層，短的平台中心比較靠牆。
+const GQ_MAP_SIZE = [64, 225];
+const GQ_FLOORS = [
+  [10, 13, 19], [4, 10, 47], [5, 13, 72], [3, 13, 97], [13, 10, 121], [9, 13, 147], [14, 13, 172], [1, 13, 198],
+  [15, 39, 34], [7, 39, 59], [2, 42, 84], [11, 39, 109], [6, 39, 134], [12, 42, 159], [8, 39, 184],
+];
+const gq = { on: false, stage: null, autoStage: null, seal: [] };
+
+function gqStageOf(mapName) {
+  if (!/雅典娜禁地/.test(mapName)) return null;
+  const hit = GQ_STAGES.find(([, , re]) => re.test(mapName));
+  return hit ? hit[0] : null;
+}
+
+function gqAsset(name) {
+  return new URL(`goddess/${name}`, location.href).href;   // 浮窗是 about:blank，相對路徑抓不到
+}
+
+function taipeiDay() {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(new Date());
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+}
+
+// 封印之室：5 個人站 3 個台階（左-中-右），NPC 只說「人數對的台階有幾個」：0、1，或全對
+// （兩個對了第三個一定也對）。每次的回答都會刪掉不可能的組合；前幾步照攻略固定，
+// 之後挑「不管 NPC 說 0 還是 1，剩下的可能都最少」的組合。21 種組合最多 5 次一定站對。
+const SEAL_ALL = [];
+for (let a = 5; a >= 0; a--) for (let b = 5 - a; b >= 0; b--) SEAL_ALL.push([a, b, 5 - a - b]);
+const SEAL_FIXED = { "": [5, 0, 0], "0": [2, 2, 1], "1": [3, 1, 1], "00": [1, 1, 3], "01": [3, 1, 1], "000": [0, 3, 2], "001": [0, 1, 4] };
+const sealSame = (a, b) => a[0] === b[0] && a[1] === b[1];
+const sealHits = (g, s) => (g[0] === s[0]) + (g[1] === s[1]) + (g[2] === s[2]);
+const sealFilter = (cands, g, fb) => cands.filter((s) => !sealSame(s, g) && sealHits(g, s) === fb);
+
+function sealChoose(cands) {
+  if (cands.length === 1) return cands[0];
+  let best = null;
+  SEAL_ALL.forEach((g, i) => {
+    const worst = Math.max(sealFilter(cands, g, 0).length, sealFilter(cands, g, 1).length);
+    const key = [worst, cands.some((s) => sealSame(s, g)) ? 0 : 1, i];   // 平手時挑本身就可能是答案的
+    if (!best || key[0] < best[0][0] || (key[0] === best[0][0] && (key[1] < best[0][1] || (key[1] === best[0][1] && key[2] < best[0][2])))) best = [key, g];
+  });
+  return best[1];
+}
+
+function sealState(history) {
+  let cands = SEAL_ALL, path = "", guess = SEAL_FIXED[""];
+  const steps = [];
+  for (const fb of history) {
+    steps.push([guess, fb]);
+    cands = sealFilter(cands, guess, fb);
+    path += fb;
+    if (!cands.length) return { guess, cands, steps, dead: true, solved: false };
+    guess = SEAL_FIXED[path] || sealChoose(cands);
+  }
+  return { guess, cands, steps, dead: false, solved: cands.length === 1 && sealSame(cands[0], guess) };
+}
+
+function goddessBody(stage) {
+  switch (stage) {
+    case "fork":
+      return '<p class="gq-say">請由隊長統一蒐集好的<b>精靈雲塊 20 個</b>之後丟到下方的台階上</p>';
+    case "rest": {
+      const today = taipeiDay();
+      const rows = GQ_RECORDS.map(([day, id, name], i) =>
+        `<div class="${i === today ? "today" : ""}"><span>星期${day}</span><img src="${gqAsset(`record-${id}.png`)}" alt=""><b>${name}</b></div>`);
+      return `<p class="gq-note">每天要蒐集的唱片不同（依台北時間），今天的已標示。</p><div class="gq-records">${rows.join("")}</div>`;
+    }
+    case "seal": {
+      const st = sealState(gq.seal);
+      const cells = ["左", "中", "右"].map((side, i) => `<div><small>${side}</small><b>${st.guess[i]}</b></div>`).join("");
+      const tried = st.steps.map(([g, fb]) => `${g.join("-")} → ${fb}`).join("　");
+      const say = st.dead ? "沒有符合的組合，可能按錯了，請「回到上一步」。"
+        : st.solved ? "就是這個組合！照這樣站應該全對。"
+        : `第 ${gq.seal.length + 1} 次：照上面的人數站好，NPC 說幾個台階正確就按幾（說全對就完成了）。還有 ${st.cands.length} 種可能。`;
+      const lock = st.dead || st.solved ? " disabled" : "";
+      return `<div class="gq-seal${st.solved ? " done" : ""}">${cells}</div>
+        <p class="gq-note">${say}</p>
+        <div class="gq-row"><button class="secondary big" data-seal="0"${lock}>0</button><button class="secondary big" data-seal="1"${lock}>1</button></div>
+        <div class="gq-row"><button class="secondary" data-seal="undo"${gq.seal.length ? "" : " disabled"}>回到上一步</button><button class="secondary" data-seal="reset">清空重來</button></div>
+        ${tried ? `<p class="gq-note">已試：${tried}</p>` : ""}`;
+    }
+    case "warehouse": {
+      const [w, h] = GQ_MAP_SIZE;
+      const marks = GQ_FLOORS.map(([n, x, y]) =>
+        `<span class="${n === 1 ? "first" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%">${n}</span>`);
+      return `<p class="gq-note">紅獨角獅每層只出現一次，打倒一隻下一隻才會出現；數字是出現的順序。</p>
+        <div class="gq-map"><img src="${gqAsset("warehouse.png")}" alt="倉庫地圖">${marks.join("")}</div>`;
+    }
+    case "tower":
+      return `<img class="gq-tower" src="${gqAsset("tower.jpg")}" alt="中央塔">`;
+    default:
+      return '<p class="gq-note">目前不在雅典娜禁地的關卡（依地圖名稱判斷），也可以直接點上面的關卡。</p>';
+  }
+}
+
+// syncMini 每格都會呼叫：內容沒變就不重畫，免得按鈕在滑鼠底下一直被換掉。
+function renderGoddess(force = false) {
+  if (!miniWin || miniWin.closed) return;
+  const doc = miniWin.document;
+  const panel = doc.getElementById("m-gq");
+  if (!panel) return;
+  doc.body.classList.toggle("gq", gq.on);
+  const toggle = doc.getElementById("m-gq-toggle");
+  toggle.textContent = gq.on ? "經驗" : "女神";
+  toggle.title = gq.on ? "切回經驗與楓幣" : "切換到女神組隊任務小工具";
+  // 地圖讀不到（--）時不動，免得讀錯一格就把封印之室的進度清掉；進到別的關卡才跟著切。
+  const here = gqStageOf($("map-name").textContent);
+  if (here && here !== gq.autoStage) {
+    gq.autoStage = gq.stage = here;
+    if (here === "seal") gq.seal = [];
+  }
+  if (!gq.on) return;
+  const key = JSON.stringify([gq.stage, here, gq.seal, taipeiDay()]);
+  if (!force && panel.dataset.key === key) return;
+  panel.dataset.key = key;
+  const tabs = GQ_STAGES.map(([id, name]) =>
+    `<button class="secondary${id === gq.stage ? " on" : ""}${id === here ? " here" : ""}" data-gq-stage="${id}"${id === here ? ' title="目前所在的關卡"' : ""}>${name}</button>`);
+  panel.innerHTML = `<div class="gq-tabs">${tabs.join("")}</div>${goddessBody(gq.stage)}`;
+}
+
+function onGoddessClick(e) {
+  const btn = e.target.closest("button");
+  if (!btn || btn.disabled) return;
+  if (btn.dataset.gqStage) gq.stage = btn.dataset.gqStage;
+  const seal = btn.dataset.seal;
+  if (seal === "0" || seal === "1") gq.seal = [...gq.seal, Number(seal)];
+  else if (seal === "undo") gq.seal = gq.seal.slice(0, -1);
+  else if (seal === "reset") gq.seal = [];
+  renderGoddess(true);
 }
 
 // 切換只是換 CSS class；視窗大小跟著內容縮放。置頂小視窗的 resizeTo 需要使用者點擊才會生效，
