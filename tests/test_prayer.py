@@ -101,8 +101,20 @@ class TestFindIcon(unittest.TestCase):
         self.assertIsNone(prayer.find_icon(make_screen(None)))
 
     def test_only_searches_the_top_row(self):
-        """buff 一定在第一排：畫在畫面中間的同一個圖案不算。"""
+        """一般搜尋只看最上面一排：低一點的同一個圖案不算。"""
         self.assertIsNone(prayer.find_icon(make_screen((1000, 300))))
+
+    def test_wide_search_finds_icon_below_a_title_bar(self):
+        """視窗模式：buff 在遊戲視窗頂端，上面還有標題列（或整個螢幕的其他東西）。"""
+        for at in ((1000, 31), (900, 106), (1100, 300)):
+            with self.subTest(at=at):
+                found = prayer.find_icon(make_screen(at, seconds=33, grey_from=12), wide=True)
+                self.assertIsNotNone(found)
+                self.assertEqual(found[:2], at)
+
+    def test_wide_search_stays_in_the_upper_half(self):
+        self.assertIsNone(prayer.find_icon(make_screen((1000, 500)), wide=True))
+        self.assertIsNone(prayer.find_icon(make_screen(None), wide=True))
 
     def test_hint_follows_a_shifted_icon(self):
         """其他 buff 消失時圖示會往右移：附近找不到就整排重找。"""
@@ -241,6 +253,29 @@ class TestBridgePrayer(unittest.TestCase):
         self.assertEqual(out["prayer"]["status"], "counting")
         self.assertAlmostEqual(out["prayer"]["remaining"], 33.5)
         self.assertEqual(out["rois"]["prayer"], [1180, 1, 1180 + prayer.ICON_W, 1 + prayer.ICON_H])
+
+    def test_windowed_mode_icon_is_found_and_then_tracked(self):
+        session = bridge.WebSession(require_bracket=False)
+        session.set_prayer(True)
+        screen = make_screen((1000, 106), seconds=33, grey_from=10)
+        out = self.tick(session, screen)
+        self.assertEqual(out["prayer"]["status"], "counting")
+        self.assertEqual(out["rois"]["prayer"][:2], [1000, 106])
+        with mock.patch.object(prayer, "_wide_search", side_effect=AssertionError("不該再大範圍找")):
+            out = self.tick(session, screen)
+        self.assertEqual(out["rois"]["prayer"][:2], [1000, 106])
+
+    def test_wide_search_is_rate_limited(self):
+        session = bridge.WebSession(require_bracket=False)
+        session.set_prayer(True)
+        screen = make_screen(None)
+        calls = []
+        real = prayer._wide_search
+        with mock.patch.object(prayer, "_wide_search", lambda *a: calls.append(1) or real(*a)):
+            for now in (100.0, 101.0, 102.0, 100.0 + bridge.PRAYER_WIDE_SEARCH_SEC):
+                with mock.patch("bridge.time.monotonic", lambda now=now: now):
+                    self.tick(session, screen)
+        self.assertEqual(len(calls), 2)
 
     def test_over_a_minute(self):
         session = bridge.WebSession(require_bracket=False)

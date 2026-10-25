@@ -99,6 +99,9 @@ MESO_LOST_TICKS = 2
 MESO_OCR_SCALES = (3, 4, 6, 8)
 # 祈禱秒數只有兩位、8 像素高，放大多一點 OCR 才讀得動。
 PRAYER_OCR_SCALES = (4, 6, 8, 10)
+# 最上面那一排找不到祈禱圖示時（視窗模式，buff 在遊戲視窗頂端而不是畫面頂端），
+# 多久到畫面上半部大範圍找一次。大範圍找很慢，不能每格都做；找到之後就跟著位置走。
+PRAYER_WIDE_SEARCH_SEC = 5.0
 
 
 def _png_data_url(gray: np.ndarray) -> str:
@@ -221,6 +224,7 @@ class WebSession:
         self.prayer = PrayerWatch()
         self.prayer_reader = prayervision.TimerReader()
         self._prayer_icon: tuple[int, int] | None = None
+        self._prayer_wide_at = float("-inf")
         self._prayer_ocr_misses: dict[str, int] = {}
         self._prayer_last_try = 0.0
 
@@ -254,6 +258,7 @@ class WebSession:
         """開始／停止追蹤神聖祈禱圖示。停止再開會從頭找。"""
         self.prayer.set_enabled(on)
         self._prayer_icon = None
+        self._prayer_wide_at = float("-inf")
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
@@ -675,7 +680,10 @@ class WebSession:
         if frame is None:
             return
         now = time.monotonic()
-        found = prayervision.find_icon(frame, hint=self._prayer_icon)
+        wide = now - self._prayer_wide_at >= PRAYER_WIDE_SEARCH_SEC
+        found = prayervision.find_icon(frame, hint=self._prayer_icon, wide=wide)
+        if found is None and wide:
+            self._prayer_wide_at = now
         if found is None:
             self._prayer_icon = None
             self.prayer.feed(now, seen=False)

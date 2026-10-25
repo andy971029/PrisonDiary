@@ -32,6 +32,13 @@ SEARCH_RIGHT_FRACTION = 0.6
 MATCH_MIN_SCORE = 0.6
 # 已知位置附近先看一下，對得上就不用整條重找。
 TRACK_RADIUS = 2
+# 視窗模式：分享整個螢幕或含標題列的視窗時，buff 那一排不在畫面最上面，而是在遊戲視窗的頂端，
+# 可能在畫面上半部的任何地方。整片做完整比對太慢，先只用幾列最有特徵的模板粗篩，
+# 分數最高的幾個位置再完整比對。這比一般搜尋慢很多，由呼叫端決定多久做一次。
+WIDE_SEARCH_FRACTION = 0.5      # 畫面上半部
+WIDE_PROBE_ROWS = 4             # 粗篩用幾列模板（只從上半個圖示挑，灰掉時上半部最晚變灰）
+WIDE_CANDIDATES = 8
+WIDE_MIN_PROBE = 0.45
 
 # 左下角數字區（相對於圖示左上角）：比對圖示時跳過，讀秒數時只看這裡。
 DIGIT_TOP, DIGIT_BOTTOM = 17, 30
@@ -139,18 +146,22 @@ def _row_plan() -> list[tuple[int, int, np.ndarray, float, float]]:
 
 
 _PLAN = _row_plan()
-_WEIGHT = sum(p[4] for p in _PLAN)
 
 
-def score_map(luma: np.ndarray) -> np.ndarray:
-    """``luma`` 每個位置當圖示左上角時的分數（-1～1）。每一列各自正規化，所以灰掉的部分也對得上。"""
+def score_map(luma: np.ndarray, plan=None) -> np.ndarray:
+    """``luma`` 每個位置當圖示左上角時的分數（-1～1）。每一列各自正規化，所以灰掉的部分也對得上。
+
+    ``plan`` 給一部分的模板列就只比那幾列（粗篩用）。
+    """
+    plan = _PLAN if plan is None else plan
+    weight_sum = sum(p[4] for p in plan)
     h, w = luma.shape
     out_h, out_w = h - ICON_H + 1, w - ICON_W + 1
     if out_h <= 0 or out_w <= 0:
         return np.zeros((0, 0), dtype=np.float32)
     luma = luma.astype(np.float64)
     out = np.zeros((out_h, out_w))
-    for r, c0, t, norm, weight in _PLAN:
+    for r, c0, t, norm, weight in plan:
         n = t.size
         for dy in range(out_h):
             row = luma[dy + r, c0 : c0 + out_w + n - 1]
@@ -162,11 +173,15 @@ def score_map(luma: np.ndarray) -> np.ndarray:
             # 畫面這一段幾乎是平的（天空、單色背景）：相關係數沒有意義，當 0。
             ok = var > n * 4.0
             out[dy] += weight * np.where(ok, dot / (np.sqrt(np.where(ok, var, 1.0)) * norm), 0.0)
-    return (out / _WEIGHT).astype(np.float32)
+    return (out / weight_sum).astype(np.float32)
 
 
-def find_icon(frame: np.ndarray, hint: tuple[int, int] | None = None) -> tuple[int, int, float] | None:
-    """祈禱圖示左上角 (left, top, score)；找不到回傳 None。``hint`` 是上次的位置，先看附近。"""
+def find_icon(frame: np.ndarray, hint: tuple[int, int] | None = None,
+              wide: bool = False) -> tuple[int, int, float] | None:
+    """祈禱圖示左上角 (left, top, score)；找不到回傳 None。``hint`` 是上次的位置，先看附近。
+
+    ``wide``：最上面那一排也找不到時，再到畫面上半部找（視窗模式）。比較慢。
+    """
     height, width = frame.shape[:2]
     if hint is not None:
         left, top = hint
@@ -177,7 +192,32 @@ def find_icon(frame: np.ndarray, hint: tuple[int, int] | None = None) -> tuple[i
         if found is not None:
             return found
     x0 = int(width * (1 - SEARCH_RIGHT_FRACTION))
-    return _best(to_luma(frame[: min(height, SEARCH_ROWS), x0:]), x0, 0)
+    found = _best(to_luma(frame[: min(height, SEARCH_ROWS), x0:]), x0, 0)
+    if found is not None or not wide:
+        return found
+    return _wide_search(frame, x0)
+
+
+_PROBE_PLAN = sorted((p for p in _PLAN if p[0] < ICON_H // 2), key=lambda p: -p[4])[:WIDE_PROBE_ROWS]
+
+
+def _wide_search(frame: np.ndarray, x0: int) -> tuple[int, int, float] | None:
+    height = frame.shape[0]
+    y1 = max(SEARCH_ROWS, int(height * WIDE_SEARCH_FRACTION))
+    luma = to_luma(frame[:y1, x0:])
+    probe = score_map(luma, _PROBE_PLAN)
+    if probe.size == 0:
+        return None
+    best = None
+    for flat in np.argsort(probe.ravel())[::-1][: WIDE_CANDIDATES]:
+        y, x = np.unravel_index(int(flat), probe.shape)
+        if probe[y, x] < WIDE_MIN_PROBE:
+            break
+        ys, xs = max(0, y - 1), max(0, x - 1)
+        found = _best(luma[ys : y + ICON_H + 1, xs : x + ICON_W + 1], x0 + xs, ys)
+        if found is not None and (best is None or found[2] > best[2]):
+            best = found
+    return best
 
 
 def _best(luma: np.ndarray, x0: int, y0: int) -> tuple[int, int, float] | None:
