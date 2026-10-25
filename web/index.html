@@ -114,7 +114,8 @@
   button.prayer.muted .ic.pi { filter: grayscale(1); opacity: .55; }
   button.prayer.muted .ic.mute { display: inline-block; }
   /* 祈禱鈕用遊戲裡的圖示，比線條圖示大一點才看得清楚；上下用負邊界吃掉，按鈕高度不變。 */
-  button .ic.pi { width: 22px; height: 22px; margin: -4px 8px -4px 0; vertical-align: -6px; border-radius: 3px; }
+  button.prayer { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+  button .ic.pi { width: 22px; height: 22px; margin: -4px 8px -4px 0; border-radius: 3px; }
   button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   button[disabled] { opacity: .4; cursor: default; }
   .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
