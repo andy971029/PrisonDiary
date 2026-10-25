@@ -108,6 +108,10 @@
   /* 神聖祈禱倒數鈕：數字固定寬度，跳秒時按鈕不會抖；倒數中描邊、警示中整顆亮起來。 */
   button.prayer span { font-variant-numeric: tabular-nums; display: inline-block; min-width: 3ch; text-align: right; }
   button.prayer.running { border-color: var(--accent); color: var(--accent); }
+  /* 還沒開始找祈禱圖示：只有漏斗、紅色，提醒「按我才會開始」。 */
+  button.prayer.off { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+  button.prayer.off span { display: none; }
+  button.prayer.off .ic { margin-right: 0; }
   button.prayer.alerting { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   button[disabled] { opacity: .4; cursor: default; }
   .pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono);
@@ -449,6 +453,11 @@
         <div class="scope"><canvas id="sp-map-c"></canvas><span class="empty">等待定位…（需展開小地圖，並等文字辨識就緒）</span></div>
         <div class="sp-value" id="sp-map-v">--</div>
       </div>
+      <div class="specimen" id="sp-prayer">
+        <div class="sp-head"><span class="sp-name">神聖祈禱</span><span class="sp-rect" id="sp-prayer-r">尚未找到</span></div>
+        <div class="scope"><canvas id="sp-prayer-c"></canvas><span class="empty">等待定位…（先按祈禱倒數鈕，並讓祈禱 buff 在身上）</span></div>
+        <div class="sp-value" id="sp-prayer-v">--</div>
+      </div>
       <div class="specimen" id="sp-meso">
         <div class="sp-head"><span class="sp-name">楓幣</span><span class="sp-rect" id="sp-meso-r">尚未找到</span></div>
         <div class="scope"><canvas id="sp-meso-c"></canvas><span class="empty">等待定位…（需打開背包視窗）</span></div>
@@ -476,7 +485,6 @@
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
   <h3>神聖祈禱（掛7）設定</h3>
-  <label class="field"><span>祈禱等級</span><input type="number" id="set-level" min="1" max="30" step="1" required> 級<output id="set-level-sec"></output></label>
   <label class="field"><span>警示倒數</span><input type="number" id="set-warn" min="1" max="30" step="1" required> 秒</label>
   <div class="field"><span>警示方式</span></div>
   <div class="opt">
@@ -519,14 +527,11 @@ const PYODIDE_BASE = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
 const SETTINGS_KEY = "mapleexp.settings.v1";
 const DEFAULT_SETTINGS = {
   intervalSec: 1, idleSec: 10,
-  prayerLevel: 30, warnSec: 10, alertSec: 10,
+  warnSec: 10, alertSec: 10,
   flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
-const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], prayerLevel: [1, 30], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
-// 神聖祈禱各等級的持續秒數（技能說明表）。20 級是 90 秒，不是照每級 +3 推出來的 89，所以整張列出來。
-const PRAYER_SEC = [32, 35, 38, 41, 44, 47, 50, 53, 56, 59, 62, 65, 68, 71, 74, 77, 80, 83, 86, 90,
-  93, 96, 99, 102, 105, 108, 111, 114, 117, 120];
+const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
 const FLASH_COLORS = [
   ["#880015", "深紅"], ["#ed1c24", "紅"], ["#ff7f27", "橙"], ["#fff200", "黃"],
   ["#22b14c", "綠"], ["#00a2e8", "天藍"], ["#3f48cc", "靛藍"], ["#a349a4", "紫"],
@@ -595,6 +600,7 @@ async function boot() {
     session = pyodide.runPython("WebSession()");
     session.set_boost($("boost").checked ? 1.5 : 1);
     session.set_timing(prefs.intervalSec, prefs.idleSec);
+    session.set_prayer(prayerOn);
     // 地圖清單快照（scripts/export_mapvocab.py 匯出）；載不到就退回原始 OCR 文字。
     try {
       const vocab = await fetch("mapvocab.json", { cache: "no-store" });
@@ -1108,6 +1114,13 @@ renderHistory();
 
 // 每一塊辨識來源都裁出來放大，格式一致：能看出引擎真正拿到的像素，也能核對讀對沒有。
 const SPECIMEN_TARGET_W = 300;
+function prayerSpecimenText(p) {
+  if (!p) return "";
+  if (p.status === "long") return "一分鐘以上";
+  if (p.status === "counting" && p.remaining != null) return `剩 ${Math.floor(p.remaining)} 秒`;
+  return "";
+}
+
 function drawSpecimen(key, rect, value) {
   const box = $("sp-" + key);
   const canvas = $("sp-" + key + "-c");
@@ -1155,6 +1168,8 @@ function render(out, elapsedMs) {
   // 楓幣跟經驗值欄位無關，經驗值還沒找到也照樣顯示。
   drawSpecimen("meso", rois.meso, out.meso?.raw);
   renderMeso(out.meso);
+  drawSpecimen("prayer", rois.prayer, prayerSpecimenText(out.prayer));
+  updatePrayer(out.prayer);
 
   if (!out.state_key) {
     setState(out.state, "");
@@ -1374,8 +1389,6 @@ let prefs = loadSettings();
 
 // 套用馬上生效：閒置門檻下一格就照新的算（已累計的不回頭改），分享中就用新間隔重排計時器。
 function applySettings(next) {
-  // 換了祈禱等級，一輪的長度就不同了，舊的起點沒有意義：停下來等使用者重按。
-  if (next.prayerLevel !== prefs.prayerLevel) stopPrayer();
   prefs = next;
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(prefs)); } catch { /* 存不了就只在這次有效 */ }
   if (session) session.set_timing(prefs.intervalSec, prefs.idleSec);
@@ -1387,7 +1400,6 @@ function applySettings(next) {
 function fillSettings(values) {
   $("set-interval").value = values.intervalSec;
   $("set-idle").value = values.idleSec;
-  $("set-level").value = values.prayerLevel;
   $("set-warn").value = values.warnSec;
   $("set-alert").value = values.alertSec;
   $("set-flash").checked = values.flashOn;
@@ -1398,10 +1410,8 @@ function fillSettings(values) {
   syncSettingsForm();
 }
 
-// 對話框內的連動：等級旁顯示秒數、警示時長不超過警示倒數、關掉的警示方式把選單反灰。
+// 對話框內的連動：警示時長不超過警示倒數、關掉的警示方式把選單反灰。
 function syncSettingsForm() {
-  const level = clampSetting("prayerLevel", $("set-level").value);
-  $("set-level-sec").textContent = `= ${PRAYER_SEC[level - 1]} 秒`;
   const warn = clampSetting("warnSec", $("set-warn").value);
   $("set-alert").max = warn;
   if (Number($("set-alert").value) > warn) $("set-alert").value = warn;
@@ -1417,7 +1427,7 @@ for (const [color, name] of FLASH_COLORS) {
   $("set-color").add(opt);
 }
 for (const [id, name] of SOUNDS) $("set-sound-pick").add(new Option(name, id));
-for (const id of ["set-level", "set-warn", "set-color", "set-flash", "set-sound", "set-volume"]) {
+for (const id of ["set-warn", "set-color", "set-flash", "set-sound", "set-volume"]) {
   $(id).addEventListener("input", syncSettingsForm);
   $(id).addEventListener("change", syncSettingsForm);
 }
@@ -1434,7 +1444,6 @@ $("set-save").addEventListener("click", () => {
   applySettings(normalizeSettings({
     intervalSec: $("set-interval").value,
     idleSec: $("set-idle").value,
-    prayerLevel: $("set-level").value,
     warnSec: $("set-warn").value,
     alertSec: $("set-alert").value,
     flashOn: $("set-flash").checked,
@@ -1448,14 +1457,15 @@ $("set-save").addEventListener("click", () => {
 setBtn("settings", "gear", "設定");
 
 // ---------------------------------------------------------------- 神聖祈禱倒數
-// 寵物在技能秒數跳到 2 的那一刻就自動重放，所以倒數一跳到 2 直接回到滿秒，不等到 0，
-// 不然每輪都多算，掛久了會越差越多。遊戲的秒數是無條件捨去（還剩 2.6 秒顯示 2），
-// 這裡也照樣顯示，所以「跳到 2」其實還剩 3 秒，一輪是「持續秒數 − 3」。
-// 所有狀態都從起點時間算出來，不靠計時器累加，計時器被瀏覽器延遲也不會飄。
-const PRAYER_RECAST_AT = 2;
+// 按下倒數鈕之後，Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的秒數（vision/prayer.py）。
+// 一分鐘以上圖示上是白色的分鐘數、不知道確切秒數，只顯示「1m+」；剩不到一分鐘會變成黃色的秒數，
+// 每讀到一次就校正一次，兩張截圖之間由這裡自己往下數。寵物重放後秒數又回到白色，自然就接上下一輪，
+// 不用知道祈禱等級。圖示不見了、而且時間已經到了，就是 buff 真的沒了（寵物沒重放）。
 const PRAYER_FRAME_MS = 100;
-let prayerStart = null;         // performance.now()；null 代表沒在倒數
+let prayerOn = false;
+let prayerInfo = { status: "off", remaining: null, at: 0 };     // 最近一格的結果；at 是收到的時間
 let prayerTimer = null;
+let prayerAlertAt = null;       // 這一輪的警示從什麼時候開始；null = 這一輪還沒警示
 let prayerSoundKey = "";        // 這一秒的音效播過了沒
 const soundCache = {};
 
@@ -1466,37 +1476,65 @@ function playSound(id, volume = prefs.volume) {
   audio.play().catch((err) => log("音效播放失敗：" + err.message));
 }
 
+function setPrayer(on) {
+  prayerOn = on;
+  prayerInfo = { status: on ? "searching" : "off", remaining: null, at: performance.now() };
+  prayerAlertAt = null;
+  prayerSoundKey = "";
+  if (session) session.set_prayer(on);
+  if (on && !prayerTimer) prayerTimer = setInterval(renderPrayer, PRAYER_FRAME_MS);
+  if (!on && prayerTimer) { clearInterval(prayerTimer); prayerTimer = null; }
+  renderPrayer();
+}
+
+// 每格的結果。回到「一分鐘以上」或重新找圖示，代表換到新的一輪，下次快結束時再警示。
+function updatePrayer(p) {
+  if (!prayerOn || !p) return;
+  prayerInfo = { status: p.status, remaining: p.remaining, at: performance.now() };
+  if (p.status === "long" || p.status === "searching") prayerAlertAt = null;
+}
+
 function prayerState(now = performance.now()) {
-  const full = PRAYER_SEC[prefs.prayerLevel - 1];
-  if (prayerStart === null) return { remaining: full, alert: false, flash: false, soundKey: "" };
-  const t = now - prayerStart;
-  const period = (full - PRAYER_RECAST_AT - 1) * 1000;
-  const remaining = Math.floor((full * 1000 - (t % period)) / 1000);
-  // 警示從數字跳到 warnSec 的那一刻開始、持續 alertSec 秒；時長等於倒數時會跨進下一輪的第一秒，
-  // 所以用「最近一次警示開始」來算，而不是只看這一輪。第一輪開始前沒有警示。
-  const firstAlert = (full - prefs.warnSec - 1) * 1000;
-  if (t < firstAlert) return { remaining, alert: false, flash: false, soundKey: "" };
-  const round = Math.floor((t - firstAlert) / period);
-  const since = (t - firstAlert) % period;
-  const alert = since < prefs.alertSec * 1000;
+  const { status, remaining: base, at } = prayerInfo;
+  const remaining = status === "counting" && base != null ? Math.max(0, base - (now - at) / 1000) : null;
+  const shown = remaining === null ? null : Math.floor(remaining);   // 跟遊戲一樣無條件捨去
+  // 警示從數字跳到 warnSec 的那一刻開始、持續 alertSec 秒；buff 沒了也警示。
+  const warn = status === "expired" || (shown !== null && shown <= prefs.warnSec);
+  if (warn && prayerAlertAt === null) prayerAlertAt = now;
+  const since = prayerAlertAt === null ? Infinity : now - prayerAlertAt;
+  const alert = warn && since < prefs.alertSec * 1000;
+  const text = { off: "", searching: "…", long: "1m+", expired: "0" }[status] ?? String(shown ?? "…");
   return {
-    remaining,
+    status,
+    text,
     alert,
     flash: alert && Math.floor(since / 500) % 2 === 0,
-    soundKey: alert ? `${round}:${Math.floor(since / 1000)}` : "",
+    soundKey: alert ? `${prayerAlertAt}:${Math.floor(since / 1000)}` : "",
   };
+}
+
+function prayerLabel(st) {
+  switch (st.status) {
+    case "off": return "神聖祈禱倒數（點一下開始，會自動找畫面右上角的祈禱圖示）";
+    case "searching": return session && timer
+      ? "正在畫面右上角找神聖祈禱圖示（點一下停止）"
+      : "開始分享遊戲畫面後才找得到神聖祈禱圖示（點一下停止）";
+    case "long": return "神聖祈禱還有一分鐘以上（點一下停止）";
+    case "expired": return "神聖祈禱已經結束了（點一下停止）";
+    default: return `神聖祈禱剩 ${st.text} 秒（點一下停止）`;
+  }
 }
 
 function renderPrayer() {
   const st = prayerState();
-  const running = prayerStart !== null;
   const btn = $("prayer");
-  btn.lastElementChild.textContent = st.remaining;
-  btn.classList.toggle("running", running && !st.alert);
+  btn.lastElementChild.textContent = st.text;
+  btn.classList.toggle("off", st.status === "off");
+  btn.classList.toggle("running", st.status !== "off" && !st.alert);
   btn.classList.toggle("alerting", st.alert);
-  const label = running ? "神聖祈禱倒數中（點一下停止並重設）" : "神聖祈禱倒數（點一下開始）";
+  const label = prayerLabel(st);
   btn.title = label;
-  btn.setAttribute("aria-label", `${label}，剩 ${st.remaining} 秒`);
+  btn.setAttribute("aria-label", label);
   if (st.alert && prefs.soundOn && st.soundKey !== prayerSoundKey) playSound(prefs.sound);
   prayerSoundKey = st.soundKey;
   if (!miniWin || miniWin.closed) return;
@@ -1505,27 +1543,12 @@ function renderPrayer() {
     if (m.innerHTML !== btn.innerHTML) m.innerHTML = btn.innerHTML;
     m.className = btn.className;
     m.title = label;
-    m.setAttribute("aria-label", btn.getAttribute("aria-label"));
+    m.setAttribute("aria-label", label);
   }
   doc.body.style.background = st.flash && prefs.flashOn ? prefs.flashColor : "";
 }
 
-function stopPrayer() {
-  prayerStart = null;
-  if (prayerTimer) clearInterval(prayerTimer);
-  prayerTimer = null;
-  prayerSoundKey = "";
-}
-
-$("prayer").addEventListener("click", () => {
-  if (prayerStart === null) {
-    prayerStart = performance.now();
-    prayerTimer = setInterval(renderPrayer, PRAYER_FRAME_MS);
-  } else {
-    stopPrayer();
-  }
-  renderPrayer();
-});
+$("prayer").addEventListener("click", () => setPrayer(!prayerOn));
 setBtn("prayer", "hourglass", "");
 renderPrayer();
 window.addEventListener("pagehide", () => { if (miniWin && !miniWin.closed) miniWin.close(); });

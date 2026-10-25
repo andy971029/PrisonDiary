@@ -33,10 +33,12 @@ from mapleexp.config import Config, Roi, TrackerConfig
 from mapleexp.gamedata import MapRecord, MapVocabulary
 from mapleexp.core import jobvocab, mapvocab
 from mapleexp.core.meso import MesoTracker
+from mapleexp.core.prayer import PrayerWatch
 from mapleexp.core.stats import format_elapsed, format_exp, format_rate
 from mapleexp.core.tracker import ACTIVE, IDLE, PAUSED, WARMUP, Tracker
 from mapleexp.vision import identity as ident
 from mapleexp.vision import meso as mesovision
+from mapleexp.vision import prayer as prayervision
 from mapleexp.vision import ocr, panels, pngio
 from mapleexp.core.reading import StatusReading
 from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
@@ -95,6 +97,8 @@ MESO_SEARCH_INTERVAL_SEC = 3.0
 MESO_LOST_TICKS = 2
 # 楓幣框裡的數字是黑字白底，跟等級一樣走數字模型、多倍率互相印證。
 MESO_OCR_SCALES = (3, 4, 6, 8)
+# 祈禱秒數只有兩位、8 像素高，放大多一點 OCR 才讀得動。
+PRAYER_OCR_SCALES = (4, 6, 8, 10)
 
 
 def _png_data_url(gray: np.ndarray) -> str:
@@ -213,6 +217,13 @@ class WebSession:
         self._meso_last_try = 0.0
         self._meso_raw = ""
 
+        # 神聖祈禱：使用者按了倒數鈕才開始找畫面右上角的 buff 圖示。
+        self.prayer = PrayerWatch()
+        self.prayer_reader = prayervision.TimerReader()
+        self._prayer_icon: tuple[int, int] | None = None
+        self._prayer_ocr_misses: dict[str, int] = {}
+        self._prayer_last_try = 0.0
+
     # ------------------------------------------------------------------ #
 
     def feed_frame(self, rgba, width: int, height: int) -> None:
@@ -238,6 +249,11 @@ class WebSession:
         )
         self.cfg.tracker.idle_pause_sec = max(0.0, float(idle_sec))
         self.meso.bridge_sec = self.cfg.tracker.max_bridge_sec
+
+    def set_prayer(self, on: bool) -> None:
+        """開始／停止追蹤神聖祈禱圖示。停止再開會從頭找。"""
+        self.prayer.set_enabled(on)
+        self._prayer_icon = None
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
@@ -284,8 +300,9 @@ class WebSession:
         self.epoch += 1
 
     def tick(self) -> str:
-        # 楓幣不靠經驗值欄位，先讀；經驗值欄位找不到時也照算。
+        # 楓幣與祈禱都不靠經驗值欄位，先讀；經驗值欄位找不到時也照算。
         self._scan_meso()
+        self._scan_prayer()
         if self.reader is None:
             self._locate(force=True)
             if self.reader is None:
@@ -649,6 +666,69 @@ class WebSession:
         self._meso_ocr_misses.pop(key, None)
         self.meso_reader.teach(zone, int(exact[0]))
 
+    # ---------------------------------------------------------------- 神聖祈禱
+
+    def _scan_prayer(self) -> None:
+        if not self.prayer.enabled:
+            return
+        frame = self.capturer.frame
+        if frame is None:
+            return
+        now = time.monotonic()
+        found = prayervision.find_icon(frame, hint=self._prayer_icon)
+        if found is None:
+            self._prayer_icon = None
+            self.prayer.feed(now, seen=False)
+            return
+        self._prayer_icon = found[:2]
+        zone = prayervision.cut_timer(frame, self._prayer_icon)
+        if zone is None:
+            self.prayer.feed(now, seen=False)
+            return
+        seconds = self.prayer_reader.read_templates(zone) if zone.has_seconds else None
+        if zone.has_seconds and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
+            self._request_prayer(zone)
+        self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.has_seconds)
+
+    def _prayer_key(self, zone) -> str:
+        return hashlib.blake2s(zone.shape_key.encode(), digest_size=6).hexdigest()
+
+    def _prayer_may_retry(self, zone) -> bool:
+        if self._prayer_ocr_misses.get(self._prayer_key(zone), 0) < OCR_RETRY_LIMIT:
+            return True
+        return time.monotonic() - self._prayer_last_try >= LEVEL_SLOW_RETRY_SEC
+
+    def _request_prayer(self, zone) -> None:
+        if any(key.startswith("prayer:") for key in self._ocr_inflight):
+            return      # 秒數一直在變，同時只問一件
+        image = prayervision.ocr_image(zone)
+        images = [_png_data_url(ocr.prepare(image, scale=s, bright_text=False))
+                  for s in PRAYER_OCR_SCALES]
+        self._request_ocr(f"prayer:{self._prayer_key(zone)}", "digits", images, {"zone": zone})
+
+    def _finish_prayer(self, zone, texts) -> None:
+        """跟楓幣同一套規矩：位數對的答案至少兩個、而且全部一致、不到 60 才信，信了就教給模板。"""
+        self._prayer_last_try = time.monotonic()
+        expected = len(zone.digits)
+        raw = ["".join((t or "").translate(ident._DIGIT_LOOKALIKES).split()) for t in texts or []]
+        exact = [t for t in raw if t.isdigit() and len(t) == expected]
+        key = self._prayer_key(zone)
+        if len(exact) < 2 or len(set(exact)) != 1 or int(exact[0]) >= 60:
+            self._prayer_ocr_misses[key] = self._prayer_ocr_misses.get(key, 0) + 1
+            return
+        self._prayer_ocr_misses.pop(key, None)
+        self.prayer_reader.teach(zone, int(exact[0]))
+
+    def _prayer_payload(self) -> dict:
+        snap = self.prayer.snapshot(time.monotonic())
+        return {"status": snap.status, "remaining": snap.remaining}
+
+    def _prayer_rect(self) -> list[int] | None:
+        if self._prayer_icon is None:
+            return None
+        left, top = self._prayer_icon
+        return [left, top, left + prayervision.ICON_W, top + prayervision.ICON_H]
+
     def _meso_payload(self) -> dict:
         snap = self.meso.snapshot()
         if self._meso_rect is None:
@@ -747,6 +827,8 @@ class WebSession:
             self._finish_map_name(ctx, texts)
         elif rid.startswith("meso:"):
             self._finish_meso(ctx["zone"], texts)
+        elif rid.startswith("prayer:"):
+            self._finish_prayer(ctx["zone"], texts)
 
     def _level_may_retry(self, key: str) -> bool:
         """連續讀不出來幾次之後改成慢慢重試，而不是永遠放棄。
@@ -847,10 +929,12 @@ class WebSession:
             "level_status": self.level_status if self.level is None else "",
             "map_status": self.map_status if self._minimap_body is None else "",
             "meso": self._meso_payload(),
+            "prayer": self._prayer_payload(),
             "ocr": self._take_ocr_outbox(),
             "notices": self._take_notices(),
             "rois": {"exp": list(rect) if rect else None,
                      "meso": list(self._meso_rect) if self._meso_rect else None,
+                     "prayer": self._prayer_rect(),
                      **{k: list(v) if v else None for k, v in self._rois.items()}},
         }
         if snapshot is None:
