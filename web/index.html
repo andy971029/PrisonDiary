@@ -60,6 +60,7 @@
     border-bottom: 2px solid var(--ink); }
   .mark { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .04em;
     line-height: 1; margin-right: auto; }
+  .mark .ver { font: 500 12px var(--mono); letter-spacing: 0; color: var(--muted); margin-left: 8px; vertical-align: 3px; }
   .mark small { display: block; font-family: var(--body); font-weight: 400; font-size: 12px;
     letter-spacing: 0; color: var(--muted); margin-top: 6px; max-width: 46ch; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -344,7 +345,7 @@
 <body>
 <main>
   <header>
-    <div class="mark">服刑日誌<small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.3.0</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>

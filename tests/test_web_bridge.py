@@ -564,3 +564,12 @@ class TestCharacterSwitch(FeedMixin, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestVersion(unittest.TestCase):
+    def test_page_shows_the_package_version(self):
+        """標題旁的版本號寫死在 HTML（不用等 Python 載入就看得到），所以要跟套件的版本對得上。"""
+        import mapleexp
+
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f'id="app-version">v{mapleexp.__version__}<', html)
