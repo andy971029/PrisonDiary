@@ -163,6 +163,7 @@
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
   .sec-head h2 { margin: 0; padding: 0; border: 0; }
+  .h2-note { font-weight: 500; letter-spacing: 0; margin-left: 4px; }
   .rate-side { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
   .rate-pct { font-size: 20px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
   .pct-sub { margin-left: 8px; font-size: 12px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
@@ -354,7 +355,7 @@
 <body>
 <main>
   <header>
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.3.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.3.2</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -399,7 +400,7 @@
 
     <section>
       <div class="sec-head">
-        <h2>楓幣收益</h2>
+        <h2>楓幣收益<span class="h2-note">（背包要開啟）</span></h2>
         <span class="sec-sub" title="背包視窗要開著才讀得到楓幣">目前 <b id="meso-current">--</b></span>
       </div>
       <div class="rate"><span id="meso-rate" class="rate-num coin-num">--</span><span class="rate-side"><span class="rate-unit">楓幣 / hr</span></span></div>
