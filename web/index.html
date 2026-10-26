@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.2</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.3</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1379,7 +1379,8 @@ function mountMini(win) {
   if (miniCompact) setMiniCompact(win, true);
   doc.getElementById("m-gq-toggle").addEventListener("click", () => { gq.on = !gq.on; renderGoddess(true); });
   doc.getElementById("m-gq").addEventListener("click", onGoddessClick);
-  doc.addEventListener("pointerdown", () => { if (win.fitPending) fitMiniHeight(win); }, true);
+  // 等這次點擊把內容換好（例如切關卡）才補調，不然會用掉改大小的機會、量到的還是舊內容。
+  doc.addEventListener("click", () => { if (win.fitPending) fitMiniSoon(win); });
   renderGoddess(true);
   const close = doc.getElementById("m-close");
   close.innerHTML = ICONS.close;
@@ -1536,10 +1537,13 @@ function renderGoddess(force = false) {
   const tabs = GQ_STAGES.map(([id, name]) =>
     `<button class="secondary${id === gq.stage ? " on" : ""}${id === here ? " here" : ""}" data-gq-stage="${id}"${id === here ? ' title="目前所在的關卡"' : ""}>${name}</button>`);
   panel.innerHTML = `<div class="gq-tabs">${tabs.join("")}</div>${goddessBody(gq.stage)}`;
-  // 換關卡內容高度就不同：排好版量一次，圖片載入後再量一次。
+  // 換關卡內容高度就不同。瀏覽器點一下只准改一次大小，所以等圖片都載入好才量（fitMiniHeight 會等）。
   fitMiniSoon(miniWin);
   for (const img of panel.querySelectorAll("img")) {
-    if (!img.complete) img.addEventListener("load", () => fitMiniSoon(miniWin), { once: true });
+    if (!img.complete) {
+      img.addEventListener("load", () => fitMiniSoon(miniWin), { once: true });
+      img.addEventListener("error", () => fitMiniSoon(miniWin), { once: true });
+    }
   }
 }
 
@@ -1588,6 +1592,8 @@ function fitMiniHeight(win) {
   if (!win || win.closed) return;
   const doc = win.document;
   if (doc.body.classList.contains("compact")) return;
+  // 圖片還沒載入時量到的高度不準，改大小的機會一用掉就要等下次點擊；等最後一張載入時再量。
+  if ([...doc.images].some(img => !img.complete)) return;
   doc.body.style.height = "auto";
   const chrome = win.outerHeight - win.innerHeight;
   const need = Math.min(Math.ceil(doc.body.getBoundingClientRect().height), win.screen.availHeight - chrome);
