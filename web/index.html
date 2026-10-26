@@ -320,8 +320,8 @@
     .m-who > #m-gq-toggle { margin-left: auto; flex: none; align-self: center; padding: 1px 8px;
       font: 700 11px var(--body); border-width: 1px; }
     body.gq > .m-rate, body.gq > .bar, body.gq > .m-barline, body.gq > dl.m-facts,
-    body:not(.gq) > .m-gq { display: none; }
-    body.mini > .m-gq { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+    body.mini:not(.gq) > .m-gq { display: none; }
+    body.mini.gq > .m-gq { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
     body.mini.compact > .m-gq { display: none; }
     .gq-tabs { display: flex; gap: 3px; flex-wrap: wrap; }
     .gq-tabs button { padding: 1px 6px; font: 500 11px var(--body); border-width: 1px; }
@@ -398,7 +398,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.0</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.1</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
