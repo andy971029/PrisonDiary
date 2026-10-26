@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.3</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.4</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -640,6 +640,14 @@ function setState(text, key) {
 
 // ---------------------------------------------------------------- 載入 Python
 async function boot() {
+  // 各階段花多久記在紀錄裡，載入很慢時才知道卡在哪一段（下載、編譯還是解壓）。
+  const spent = [];
+  let lap = performance.now();
+  const mark = (name) => {
+    const now = performance.now();
+    spent.push(`${name} ${((now - lap) / 1000).toFixed(1)} 秒${miniWin && !miniWin.closed ? "（小浮窗開著）" : ""}`);
+    lap = now;
+  };
   try {
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -648,9 +656,12 @@ async function boot() {
       s.onerror = () => reject(new Error("載入 pyodide.js 失敗（網路？）"));
       document.head.appendChild(s);
     });
+    mark("pyodide.js");
     pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
+    mark("Python");
     $("share").textContent = "載入 numpy…";
     await pyodide.loadPackage("numpy");
+    mark("numpy");
 
     $("share").textContent = "載入辨識程式…";
     const zip = await fetch("mapleexp.zip", { cache: "no-store" });
@@ -660,6 +671,7 @@ async function boot() {
     const bridge = await (await fetch("bridge.py", { cache: "no-store" })).text();
     pyodide.runPython(bridge);
     session = pyodide.runPython("WebSession()");
+    mark("辨識程式");
     session.set_boost(boost);
     session.set_timing(prefs.intervalSec, prefs.idleSec);
     session.set_prayer(prayerOn);
@@ -673,6 +685,7 @@ async function boot() {
 
     $("share").disabled = false;
     syncButtons();
+    log("載入花費：" + spent.join("、"));
     log("Python 環境就緒。按「分享遊戲視窗」，在對話框裡選「視窗」分頁、挑遊戲視窗。");
   } catch (err) {
     $("share").textContent = "載入失敗";
