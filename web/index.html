@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.2</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.3</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1553,7 +1553,8 @@ function renderGoddess(force = false) {
 function onGoddessClick(e) {
   const btn = e.target.closest("button");
   if (!btn || btn.disabled) return;
-  if (btn.dataset.gqStage) gq.stage = btn.dataset.gqStage;
+  // 換到別的關卡也重來，封印之室的進度清掉。
+  if (btn.dataset.gqStage && btn.dataset.gqStage !== gq.stage) { gq.stage = btn.dataset.gqStage; gq.seal = []; }
   const seal = btn.dataset.seal;
   if (seal === "0" || seal === "1") gq.seal = [...gq.seal, Number(seal)];
   else if (seal === "undo") gq.seal = gq.seal.slice(0, -1);
@@ -1611,6 +1612,9 @@ let miniExpSize = null;
 function setGoddess(win, on) {
   if (on === gq.on) return;
   gq.on = on;
+  // 每次切換都重來：關卡回到目前所在的那一關（不在關卡裡就不選），封印之室的進度清掉。
+  gq.stage = gqStageOf($("map-name").textContent);
+  gq.seal = [];
   if (!win.document.body.classList.contains("compact")) {
     try {
       if (on) {
