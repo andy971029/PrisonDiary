@@ -352,7 +352,13 @@
     .gq-map img { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: #9ad8ea; }
     .gq-map span { position: absolute; transform: translate(-50%, -100%); padding: 0 3px; border-radius: 2px;
       font: 700 11px/1.3 var(--mono); background: var(--ink); color: var(--surface); }
-    .gq-map span.first { background: var(--accent); color: var(--on-accent); }
+    /* 第 1 層白底；寬度只有一半的台階橘底，右邊的圖例說明 */
+    .gq-map span.first { background: #fff; color: #000; }
+    .gq-map span.half, .gq-legend i { background: var(--accent); color: var(--on-accent); }
+    .gq-wh { display: flex; gap: 10px; align-items: flex-start; justify-content: center; flex: 0 1 360px; min-height: 90px; }
+    .gq-wh .gq-map { flex: none; height: 100%; margin: 0; }
+    .gq-legend { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+    .gq-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
     /* 中央塔的圖照視窗寬度放，視窗被拉矮時跟著縮小 */
     .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   </style>
@@ -400,7 +406,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.5</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.6</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1428,6 +1434,8 @@ const GQ_RECORDS = [
 // 倉庫地圖（goddess/warehouse.png，64×225）上 15 層平台的位置與紅獨角獅出現的順序：
 // [順序, 平台中間的 x, 平台頂面的 y]，單位是原圖像素。左邊 8 層、右邊 7 層，短的平台中心比較靠牆。
 const GQ_MAP_SIZE = [64, 225];
+// 寬度只有一半的台階，地圖上用橘底標出來
+const GQ_HALF_FLOORS = [2, 4, 12, 13];
 const GQ_FLOORS = [
   [10, 13, 19], [4, 10, 47], [5, 13, 72], [3, 13, 97], [13, 10, 121], [9, 13, 147], [14, 13, 172], [1, 13, 198],
   [15, 39, 34], [7, 39, 59], [2, 42, 84], [11, 39, 109], [6, 39, 134], [12, 42, 159], [8, 39, 184],
@@ -1510,8 +1518,9 @@ function goddessBody(stage) {
     case "warehouse": {
       const [w, h] = GQ_MAP_SIZE;
       const marks = GQ_FLOORS.map(([n, x, y]) =>
-        `<span class="${n === 1 ? "first" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%">${n}</span>`);
-      return `<div class="gq-map"><img src="${gqAsset("warehouse.png")}" alt="倉庫地圖">${marks.join("")}</div>`;
+        `<span class="${n === 1 ? "first" : GQ_HALF_FLOORS.includes(n) ? "half" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%">${n}</span>`);
+      return `<div class="gq-wh"><div class="gq-map"><img src="${gqAsset("warehouse.png")}" alt="倉庫地圖">${marks.join("")}</div>
+        <p class="gq-legend"><i></i>寬度只有一半的台階</p></div>`;
     }
     case "tower":
       return `<img class="gq-tower" src="${gqAsset("tower.jpg")}" alt="中央塔">`;
