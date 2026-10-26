@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.2</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1594,12 +1594,7 @@ function fitMiniHeight(win) {
   if (!win || win.closed) return;
   const doc = win.document;
   if (doc.body.classList.contains("compact")) return;
-  if (doc.body.classList.contains("gq")) {
-    if (win.outerWidth !== GQ_SIZE.width || win.outerHeight !== GQ_SIZE.height) {
-      try { win.resizeTo(GQ_SIZE.width, GQ_SIZE.height); } catch { /* 不能改大小就算了 */ }
-    }
-    return;
-  }
+  if (doc.body.classList.contains("gq")) return;
   doc.body.style.height = "auto";
   const chrome = win.outerHeight - win.innerHeight;
   const need = Math.min(Math.ceil(doc.body.getBoundingClientRect().height), win.screen.availHeight - chrome);
@@ -1627,14 +1622,13 @@ function setGoddess(win, on) {
     } catch { /* 不能改大小就算了 */ }
   }
   renderGoddess(true);
-  // 開窗時就在女神小工具（沒有切過去前的大小可還原），就照經驗介面的內容量高度。
-  if (!on && !miniExpSize) win.requestAnimationFrame(() => fitMiniHeight(win));
 }
 
 async function toggleMini() {
   if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
-  // 開窗只能指定內容區的大小；女神小工具要的是整個視窗的大小，先扣掉大約的標題列高度，開好再校正。
-  const size = gq.on ? { width: GQ_SIZE.width, height: GQ_SIZE.height - 40 } : { width: MINI_WIDTH, height: savedMiniHeight() };
+  // 每次開浮窗都從經驗介面開始，要用女神小工具再按「女神」。
+  gq.on = false;
+  const size = { width: MINI_WIDTH, height: savedMiniHeight() };
   try {
     if (window.documentPictureInPicture) {
       const win = await documentPictureInPicture.requestWindow(size);
