@@ -399,7 +399,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.2</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.0</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1512,6 +1512,14 @@ function renderGoddess(force = false) {
   const doc = miniWin.document;
   const panel = doc.getElementById("m-gq");
   if (!panel) return;
+  // 地圖讀不到（--）時不動，免得讀錯一格就把封印之室的進度清掉；進到別的關卡才跟著切。
+  // 一進到雅典娜禁地的關卡就自動打開小工具；按「經驗」切回去後，要換到下一關才會再打開。
+  const here = gqStageOf($("map-name").textContent);
+  if (here && here !== gq.autoStage) {
+    gq.autoStage = gq.stage = here;
+    gq.on = true;
+    if (here === "seal") gq.seal = [];
+  }
   if (doc.body.classList.contains("gq") !== gq.on) {
     doc.body.classList.toggle("gq", gq.on);
     fitMiniSoon(miniWin);
@@ -1519,12 +1527,6 @@ function renderGoddess(force = false) {
   const toggle = doc.getElementById("m-gq-toggle");
   toggle.textContent = gq.on ? "經驗" : "女神";
   toggle.title = gq.on ? "切回經驗與楓幣" : "切換到女神組隊任務小工具";
-  // 地圖讀不到（--）時不動，免得讀錯一格就把封印之室的進度清掉；進到別的關卡才跟著切。
-  const here = gqStageOf($("map-name").textContent);
-  if (here && here !== gq.autoStage) {
-    gq.autoStage = gq.stage = here;
-    if (here === "seal") gq.seal = [];
-  }
   if (!gq.on) return;
   const key = JSON.stringify([gq.stage, here, gq.seal, taipeiDay()]);
   if (!force && panel.dataset.key === key) return;
