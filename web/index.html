@@ -353,8 +353,8 @@
     .gq-map span { position: absolute; transform: translate(-50%, -100%); padding: 0 3px; border-radius: 2px;
       font: 700 11px/1.3 var(--mono); background: var(--ink); color: var(--surface); }
     .gq-map span.first { background: var(--accent); color: var(--on-accent); }
-    /* 中央塔的圖要看得清楚，不跟著視窗縮小；視窗不夠高就捲動 */
-    .gq-tower { display: block; flex: none; width: 100%; height: auto; aspect-ratio: 1; }
+    /* 中央塔的圖照視窗寬度放，視窗被拉矮時跟著縮小 */
+    .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   </style>
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.4</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.7.0</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1392,8 +1392,6 @@ function mountMini(win) {
   if (miniCompact) setMiniCompact(win, true);
   doc.getElementById("m-gq-toggle").addEventListener("click", () => { gq.on = !gq.on; renderGoddess(true); });
   doc.getElementById("m-gq").addEventListener("click", onGoddessClick);
-  // 等這次點擊把內容換好（例如切關卡）才補調，不然會用掉改大小的機會、量到的還是舊內容。
-  doc.addEventListener("click", () => { if (win.fitPending) fitMiniSoon(win); });
   renderGoddess(true);
   const close = doc.getElementById("m-close");
   close.innerHTML = ICONS.close;
@@ -1538,7 +1536,6 @@ function renderGoddess(force = false) {
   }
   if (doc.body.classList.contains("gq") !== gq.on) {
     doc.body.classList.toggle("gq", gq.on);
-    fitMiniSoon(miniWin);
   }
   const toggle = doc.getElementById("m-gq-toggle");
   toggle.textContent = gq.on ? "經驗" : "女神";
@@ -1550,14 +1547,6 @@ function renderGoddess(force = false) {
   const tabs = GQ_STAGES.map(([id, name]) =>
     `<button class="secondary${id === gq.stage ? " on" : ""}${id === here ? " here" : ""}" data-gq-stage="${id}"${id === here ? ' title="目前所在的關卡"' : ""}>${name}</button>`);
   panel.innerHTML = `<div class="gq-tabs">${tabs.join("")}</div>${goddessBody(gq.stage)}`;
-  // 換關卡內容高度就不同。瀏覽器點一下只准改一次大小，所以等圖片都載入好才量（fitMiniHeight 會等）。
-  fitMiniSoon(miniWin);
-  for (const img of panel.querySelectorAll("img")) {
-    if (!img.complete) {
-      img.addEventListener("load", () => fitMiniSoon(miniWin), { once: true });
-      img.addEventListener("error", () => fitMiniSoon(miniWin), { once: true });
-    }
-  }
 }
 
 function onGoddessClick(e) {
@@ -1588,55 +1577,21 @@ function setMiniCompact(win, compact) {
   } catch { /* 不能改大小就算了 */ }
 }
 
-// 開窗時只能先猜高度，內容實際多高要等版面排好才知道（字型、寬度都會影響）。
-// 排好後量一次、把視窗縮到剛好包住內容，量到的高度記下來，下次開窗直接用。
-const MINI_HEIGHT_KEY = "mapleexp.miniHeight";
-function savedMiniHeight() {
-  try {
-    const h = Number(localStorage.getItem(MINI_HEIGHT_KEY));
-    if (h >= 120 && h <= 600) return h;
-  } catch { /* 讀不到就用預設 */ }
-  return 240;
-}
-
-// 女神小工具換關卡時也會呼叫。置頂小視窗沒有使用者點擊時瀏覽器可能不准改大小（例如地圖自動切換），
-// 這時圖片會自己縮小塞進目前的視窗，不會出現捲軸。記下來的開窗高度只算經驗介面的。
-function fitMiniHeight(win) {
-  if (!win || win.closed) return;
-  const doc = win.document;
-  if (doc.body.classList.contains("compact")) return;
-  // 圖片還沒載入時量到的高度不準，改大小的機會一用掉就要等下次點擊；等最後一張載入時再量。
-  if ([...doc.images].some(img => !img.complete)) return;
-  doc.body.style.height = "auto";
-  const chrome = win.outerHeight - win.innerHeight;
-  const need = Math.min(Math.ceil(doc.body.getBoundingClientRect().height), win.screen.availHeight - chrome);
-  doc.body.style.height = "";
-  if (!doc.body.classList.contains("gq")) {
-    try { localStorage.setItem(MINI_HEIGHT_KEY, String(need)); } catch { /* 存不了就下次再量 */ }
-  }
-  if (Math.abs(win.innerHeight - need) < 2) { win.fitPending = false; return; }
-  try { win.resizeTo(win.outerWidth, need + chrome); } catch { /* 不能改大小就算了 */ }
-  // 沒有使用者點擊時改大小可能被擋掉（地圖自動切到女神小工具），等下次在小視窗裡點一下再補調。
-  win.requestAnimationFrame(() => { win.fitPending = Math.abs(win.innerHeight - need) >= 2; });
-}
-
-function fitMiniSoon(win) {
-  if (win && !win.closed) win.requestAnimationFrame(() => fitMiniHeight(win));
-}
+// 小浮窗固定開成這個大小（內容區的寬高）。置頂小視窗沒有使用者點擊時瀏覽器不准改大小，
+// 地圖自動切到女神小工具時調不了，所以乾脆每個功能都用同一個高度，內容放不下就自己縮或捲動。
+const MINI_SIZE = { width: 460, height: 575 };
 
 async function toggleMini() {
   if (miniWin && !miniWin.closed) { miniWin.close(); miniWin = null; syncMiniButton(); return; }
   try {
     if (window.documentPictureInPicture) {
-      const win = await documentPictureInPicture.requestWindow({ width: 340, height: savedMiniHeight() });
+      const win = await documentPictureInPicture.requestWindow(MINI_SIZE);
       mountMini(win);
-      win.requestAnimationFrame(() => fitMiniHeight(win));
       return;
     }
-    const win = window.open("", "mapleexp-mini", `popup,width=340,height=${savedMiniHeight()}`);
+    const win = window.open("", "mapleexp-mini", `popup,width=${MINI_SIZE.width},height=${MINI_SIZE.height}`);
     if (!win) { log("瀏覽器擋下了彈出視窗，請允許這個網站開啟彈出視窗。"); return; }
     mountMini(win);
-    win.requestAnimationFrame(() => fitMiniHeight(win));
     log("這個瀏覽器不支援置頂小視窗，改用一般彈出視窗（不會一直在最上層）。");
   } catch (err) {
     log("開啟小浮窗失敗：" + err.message);
