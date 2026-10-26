@@ -347,12 +347,13 @@
     .gq-row { display: flex; gap: 6px; }
     .gq-row button { flex: 1; padding: 5px 0; font-size: 13px; border-width: 1px; }
     .gq-row button.big { font: 700 18px var(--mono); }
-    .gq-map { position: relative; width: 128px; margin: 0 auto; flex: none; }
-    .gq-map img { display: block; width: 100%; image-rendering: pixelated; background: #9ad8ea; }
+    /* 視窗沒辦法自動長高時（地圖自動切換、沒有使用者點擊），地圖和中央塔的圖跟著縮小，不出現捲軸 */
+    .gq-map { position: relative; flex: 0 1 450px; min-height: 90px; aspect-ratio: 64 / 225; margin: 0 auto; }
+    .gq-map img { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: #9ad8ea; }
     .gq-map span { position: absolute; transform: translate(-50%, -100%); padding: 0 3px; border-radius: 2px;
       font: 700 11px/1.3 var(--mono); background: var(--ink); color: var(--surface); }
     .gq-map span.first { background: var(--accent); color: var(--on-accent); }
-    .gq-tower { display: block; width: 100%; height: auto; }
+    .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   </style>
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
@@ -398,7 +399,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.5.2</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1511,7 +1512,10 @@ function renderGoddess(force = false) {
   const doc = miniWin.document;
   const panel = doc.getElementById("m-gq");
   if (!panel) return;
-  doc.body.classList.toggle("gq", gq.on);
+  if (doc.body.classList.contains("gq") !== gq.on) {
+    doc.body.classList.toggle("gq", gq.on);
+    fitMiniSoon(miniWin);
+  }
   const toggle = doc.getElementById("m-gq-toggle");
   toggle.textContent = gq.on ? "經驗" : "女神";
   toggle.title = gq.on ? "切回經驗與楓幣" : "切換到女神組隊任務小工具";
@@ -1528,6 +1532,11 @@ function renderGoddess(force = false) {
   const tabs = GQ_STAGES.map(([id, name]) =>
     `<button class="secondary${id === gq.stage ? " on" : ""}${id === here ? " here" : ""}" data-gq-stage="${id}"${id === here ? ' title="目前所在的關卡"' : ""}>${name}</button>`);
   panel.innerHTML = `<div class="gq-tabs">${tabs.join("")}</div>${goddessBody(gq.stage)}`;
+  // 換關卡內容高度就不同：排好版量一次，圖片載入後再量一次。
+  fitMiniSoon(miniWin);
+  for (const img of panel.querySelectorAll("img")) {
+    if (!img.complete) img.addEventListener("load", () => fitMiniSoon(miniWin), { once: true });
+  }
 }
 
 function onGoddessClick(e) {
@@ -1569,15 +1578,25 @@ function savedMiniHeight() {
   return 240;
 }
 
+// 女神小工具換關卡時也會呼叫。置頂小視窗沒有使用者點擊時瀏覽器可能不准改大小（例如地圖自動切換），
+// 這時圖片會自己縮小塞進目前的視窗，不會出現捲軸。記下來的開窗高度只算經驗介面的。
 function fitMiniHeight(win) {
+  if (!win || win.closed) return;
   const doc = win.document;
   if (doc.body.classList.contains("compact")) return;
   doc.body.style.height = "auto";
-  const need = Math.ceil(doc.body.getBoundingClientRect().height);
+  const chrome = win.outerHeight - win.innerHeight;
+  const need = Math.min(Math.ceil(doc.body.getBoundingClientRect().height), win.screen.availHeight - chrome);
   doc.body.style.height = "";
-  try { localStorage.setItem(MINI_HEIGHT_KEY, String(need)); } catch { /* 存不了就下次再量 */ }
+  if (!doc.body.classList.contains("gq")) {
+    try { localStorage.setItem(MINI_HEIGHT_KEY, String(need)); } catch { /* 存不了就下次再量 */ }
+  }
   if (Math.abs(win.innerHeight - need) < 2) return;
-  try { win.resizeTo(win.outerWidth, need + win.outerHeight - win.innerHeight); } catch { /* 不能改大小就算了 */ }
+  try { win.resizeTo(win.outerWidth, need + chrome); } catch { /* 不能改大小就算了 */ }
+}
+
+function fitMiniSoon(win) {
+  if (win && !win.closed) win.requestAnimationFrame(() => fitMiniHeight(win));
 }
 
 async function toggleMini() {
