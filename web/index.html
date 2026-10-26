@@ -353,7 +353,8 @@
     .gq-map span { position: absolute; transform: translate(-50%, -100%); padding: 0 3px; border-radius: 2px;
       font: 700 11px/1.3 var(--mono); background: var(--ink); color: var(--surface); }
     .gq-map span.first { background: var(--accent); color: var(--on-accent); }
-    .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
+    /* 中央塔的圖要看得清楚，不跟著視窗縮小；視窗不夠高就捲動 */
+    .gq-tower { display: block; flex: none; width: 100%; height: auto; aspect-ratio: 1; }
   </style>
   <div class="m-top">
     <span id="m-state" class="pill"><i></i><span>尚未開始</span></span>
@@ -399,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.0</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.6.1</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1378,6 +1379,7 @@ function mountMini(win) {
   if (miniCompact) setMiniCompact(win, true);
   doc.getElementById("m-gq-toggle").addEventListener("click", () => { gq.on = !gq.on; renderGoddess(true); });
   doc.getElementById("m-gq").addEventListener("click", onGoddessClick);
+  doc.addEventListener("pointerdown", () => { if (win.fitPending) fitMiniHeight(win); }, true);
   renderGoddess(true);
   const close = doc.getElementById("m-close");
   close.innerHTML = ICONS.close;
@@ -1593,8 +1595,10 @@ function fitMiniHeight(win) {
   if (!doc.body.classList.contains("gq")) {
     try { localStorage.setItem(MINI_HEIGHT_KEY, String(need)); } catch { /* 存不了就下次再量 */ }
   }
-  if (Math.abs(win.innerHeight - need) < 2) return;
+  if (Math.abs(win.innerHeight - need) < 2) { win.fitPending = false; return; }
   try { win.resizeTo(win.outerWidth, need + chrome); } catch { /* 不能改大小就算了 */ }
+  // 沒有使用者點擊時改大小可能被擋掉（地圖自動切到女神小工具），等下次在小視窗裡點一下再補調。
+  win.requestAnimationFrame(() => { win.fitPending = Math.abs(win.innerHeight - need) >= 2; });
 }
 
 function fitMiniSoon(win) {
