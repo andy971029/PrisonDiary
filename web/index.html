@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.3</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.4</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1511,8 +1511,7 @@ function goddessBody(stage) {
       const [w, h] = GQ_MAP_SIZE;
       const marks = GQ_FLOORS.map(([n, x, y]) =>
         `<span class="${n === 1 ? "first" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%">${n}</span>`);
-      return `<p class="gq-note">紅獨角獅每層只出現一次，打倒一隻下一隻才會出現；數字是出現的順序。</p>
-        <div class="gq-map"><img src="${gqAsset("warehouse.png")}" alt="倉庫地圖">${marks.join("")}</div>`;
+      return `<div class="gq-map"><img src="${gqAsset("warehouse.png")}" alt="倉庫地圖">${marks.join("")}</div>`;
     }
     case "tower":
       return `<img class="gq-tower" src="${gqAsset("tower.jpg")}" alt="中央塔">`;
