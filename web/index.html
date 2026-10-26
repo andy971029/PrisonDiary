@@ -400,7 +400,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.4</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.5</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1634,7 +1634,9 @@ async function toggleMini() {
   const size = { width: MINI_WIDTH, height: savedMiniHeight() };
   try {
     if (window.documentPictureInPicture) {
-      const win = await documentPictureInPicture.requestWindow(size);
+      // Chrome 預設沿用上次浮窗的大小（例如切到女神小工具時的大小），開窗又會用掉改大小的機會，
+      // 之後調不回來；要它照這裡指定的大小開。
+      const win = await documentPictureInPicture.requestWindow({ ...size, preferInitialWindowPlacement: true });
       mountMini(win);
       win.requestAnimationFrame(() => fitMiniHeight(win));
       return;
