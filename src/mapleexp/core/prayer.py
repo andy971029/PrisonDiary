@@ -27,6 +27,8 @@ EXPIRED_MARGIN_SEC = 5.0
 # 倒數本身是讀出來的時候，誤差只有截圖間隔的抖動，差 2 秒以上就是讀錯。
 READ_TOLERANCE_SEC = 2.0
 CONFIRM_READS = 3
+# 「白變黃 = 60 秒」推出來的倒數，誤差最多半個截圖間隔（截圖最長 10 秒一張）。
+GUESS_TOLERANCE_SEC = 6.0
 
 OFF = "off"             # 沒在追蹤
 SEARCHING = "searching" # 正在找圖示
@@ -109,6 +111,8 @@ class PrayerWatch:
     def _believe(self, now: float, seconds: int) -> bool:
         """這次讀到的秒數可不可信。跟目前的倒數對得上就信；對不上要連續好幾次才信。"""
         left = self.remaining(now)
+        if self.status == COUNTING and left is not None and self._lost_last_digit(left, seconds):
+            return False
         if self.status != COUNTING or left is None or not self._anchor_read:
             self._odd_reads = 0
             return True
@@ -120,6 +124,20 @@ class PrayerWatch:
             self._odd_reads = 0
             return True
         return False
+
+    def _lost_last_digit(self, left: float, seconds: int) -> bool:
+        """倒數明明還有兩位數，卻只讀到一個數字、而且剛好是十位數：個位數沒切出來（「29」讀成「2」）。
+
+        串流糊掉時同一個位置常常好幾秒都切不出個位數，連續讀錯也不會變對，所以這種一律不信，
+        也不算進「連續對不上」的次數；倒數真的走到個位數時自然就讀得到了。
+        """
+        if seconds >= 10:
+            return False
+        slack = READ_TOLERANCE_SEC if self._anchor_read else GUESS_TOLERANCE_SEC
+        low, high = left - 0.5 - slack, left - 0.5 + slack
+        if low < 10:
+            return False
+        return any(n // 10 == seconds for n in range(int(low), int(high) + 1))
 
     def snapshot(self, now: float) -> PrayerSnapshot:
         if self.status != COUNTING:

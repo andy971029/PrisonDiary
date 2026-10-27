@@ -221,6 +221,30 @@ class TestPrayerWatch(unittest.TestCase):
         w.feed(10.0, seen=True, seconds=20, yellow=True)
         self.assertAlmostEqual(w.snapshot(10.0).remaining, 20.5)
 
+    def test_lost_last_digit_never_wins(self):
+        """「29、28、27」連續都只讀到「2」：不管幾次都不信，倒數照走、照樣讀得到之後的秒數。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=30, yellow=True)
+        for i in range(1, 2 * core.CONFIRM_READS + 1):
+            w.feed(float(i), seen=True, seconds=2, yellow=True)
+            self.assertAlmostEqual(w.snapshot(float(i)).remaining, 30.5 - i)
+        w.feed(8.0, seen=True, seconds=22, yellow=True)
+        self.assertAlmostEqual(w.snapshot(8.0).remaining, 22.5)
+
+    def test_lost_last_digit_after_the_sixty_guess_is_ignored(self):
+        """基準是推的也一樣：剛變黃（約 55 秒）只讀到「5」不能直接信，不然一下就跳到 5 秒。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, yellow=False)
+        w.feed(10.0, seen=True, yellow=True)            # 推成 55 秒
+        w.feed(11.0, seen=True, seconds=5, yellow=True)
+        self.assertAlmostEqual(w.snapshot(11.0).remaining, 54.0)
+
+    def test_single_digits_are_read_once_the_countdown_gets_there(self):
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=12, yellow=True)
+        w.feed(3.0, seen=True, seconds=9, yellow=True)
+        self.assertAlmostEqual(w.snapshot(3.0).remaining, 9.5)
+
     def test_odd_readings_win_if_they_keep_coming(self):
         """一開始的基準錯了：連續幾次都讀到同一邊，就改用讀到的。"""
         w = self.watch()
