@@ -271,9 +271,20 @@
   /* 中央塔的圖照視窗寬度放，視窗被拉矮時跟著縮小 */
   .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   #goddess { margin-top: 20px; }
-  .gq-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-  @media (max-width: 1000px) { .gq-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 560px) { .gq-grid { grid-template-columns: minmax(0, 1fr); } }
+  /* 休息室的唱片橫排在最上面一整列，下面封印之室、倉庫、中央塔三欄 */
+  .gq-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 760px) { .gq-grid { grid-template-columns: minmax(0, 1fr); } }
+  .gq-card.rest { grid-column: 1 / -1; }
+  .gq-card.rest .gq-records { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .gq-card.rest .gq-records > div { display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 4px 8px; border: 1px solid var(--line); background: var(--surface); text-align: center; }
+  .gq-card.rest .gq-records span { padding: 0; }
+  .gq-card.rest .gq-records img { width: 36px; }
+  .gq-card.rest .gq-records .today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .gq-card.rest .gq-records .today span { border: 0; padding: 0; }
+  /* 「今天」改接在星期後面，格子高度才會跟其他天一樣 */
+  .gq-card.rest .gq-records .today b::after { content: none; }
+  .gq-card.rest .gq-records .today span::after { content: "・今天"; }
   .gq-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px 12px;
     border: 1px solid var(--line); border-top: 3px solid var(--line); background: var(--ground); }
   .gq-card h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; font: 700 14px var(--body); }
@@ -281,7 +292,7 @@
   .gq-card.here h3::after { content: "目前所在"; padding: 0 5px; font-size: 10px; font-weight: 700;
     color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
   .gq-card .gq-wh { flex: none; height: 380px; }
-  .gq-card .gq-tower { flex: none; min-height: 0; }
+  .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
   video, canvas#frame { display: none; }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
@@ -417,7 +428,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.9</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.10</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1567,7 +1578,7 @@ function renderGoddessMain(here, force) {
   const name = GQ_STAGES.find(([id]) => id === here);
   $("gq-where").textContent = name ? `目前在 ${name[1]}` : "不在關卡裡";
   grid.innerHTML = GQ_STAGES.map(([id, title]) =>
-    `<div class="gq-card${id === here ? " here" : ""}"><h3>${title}</h3>${goddessBody(id)}</div>`).join("");
+    `<div class="gq-card ${id}${id === here ? " here" : ""}"><h3>${title}</h3>${goddessBody(id)}</div>`).join("");
 }
 
 function renderGoddessMini(here, force) {
