@@ -271,9 +271,9 @@
   /* 中央塔的圖照視窗寬度放，視窗被拉矮時跟著縮小 */
   .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   #goddess { margin-top: 20px; }
-  /* 倉庫在左邊佔滿兩列、地圖拉高；右邊上面休息室的唱片橫排，下面封印之室、中央塔 */
-  .gq-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 14px;
-    grid-template-rows: auto 1fr; grid-template-areas: "warehouse rest rest" "warehouse seal tower"; }
+  /* 左邊休息室的唱片直排、中間倉庫地圖拉高，右邊上面封印之室、下面中央塔 */
+  .gq-grid { display: grid; grid-template-columns: minmax(220px, 260px) auto minmax(0, 1fr); gap: 14px;
+    grid-template-rows: auto 1fr; grid-template-areas: "rest warehouse seal" "rest warehouse tower"; }
   .gq-card.rest { grid-area: rest; }
   .gq-card.seal { grid-area: seal; }
   .gq-card.warehouse { grid-area: warehouse; }
@@ -281,17 +281,15 @@
   @media (max-width: 760px) {
     .gq-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "rest" "seal" "warehouse" "tower"; }
   }
-  .gq-card.rest .gq-records { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-  @media (max-width: 1000px) { .gq-card.rest .gq-records { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); } }
-  .gq-card.rest .gq-records > div { display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 6px 4px 8px; border: 1px solid var(--line); background: var(--surface); text-align: center; }
-  .gq-card.rest .gq-records span { padding: 0; }
+  /* 唱片一天一列，列高平分整張卡片，跟倉庫一樣高 */
+  .gq-card.rest .gq-records { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .gq-card.rest .gq-records > div { flex: 1; display: flex; align-items: center; gap: 10px; padding: 4px 10px;
+    border: 1px solid var(--line); background: var(--surface); }
+  .gq-card.rest .gq-records span { padding: 0; width: 3.2em; flex: none; }
   .gq-card.rest .gq-records img { width: 36px; }
+  .gq-card.rest .gq-records b { font-size: 14px; white-space: nowrap; }
   .gq-card.rest .gq-records .today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .gq-card.rest .gq-records .today span { border: 0; padding: 0; }
-  /* 「今天」改接在星期後面，格子高度才會跟其他天一樣 */
-  .gq-card.rest .gq-records .today b::after { content: none; }
-  .gq-card.rest .gq-records .today span::after { content: "・今天"; white-space: nowrap; }
   .gq-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px 12px;
     border: 1px solid var(--line); border-top: 3px solid var(--line); background: var(--ground); }
   .gq-card h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; font: 700 14px var(--body); }
@@ -436,7 +434,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.11</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.12</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
