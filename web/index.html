@@ -229,6 +229,9 @@
   .hist-head .note { margin: 0; flex: 1; }
   .hist-head button { padding: 4px 12px; font-size: 12px; }
   .hist-wrap { overflow-x: auto; }
+  /* 主頁的歷史紀錄最多 15 筆的高度（由 fitHistoryHeight 設定），再多就在表格裡上下捲，表頭固定 */
+  #history .hist-wrap { overflow: auto; }
+  #history table.hist thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
   table.hist { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
   table.hist th { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); padding: 6px 14px 6px 0; }
   table.hist td { border-top: 1px solid var(--line); padding: 8px 14px 8px 0; font-variant-numeric: tabular-nums; }
@@ -441,7 +444,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.13</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.14</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -1163,8 +1166,19 @@ function renderHistory() {
     tr.appendChild(act);
     body.appendChild(tr);
   }
+  fitHistoryHeight();
 }
 buildHistoryHead();
+
+// 超過 15 筆時把表格框的高度定在第 15 筆的底部，剩下的用捲軸看。列高會受字型、按鈕影響，所以用量的。
+const HIST_VISIBLE = 15;
+function fitHistoryHeight() {
+  const body = $("hist-body");
+  const wrap = body.closest(".hist-wrap");
+  if (body.rows.length <= HIST_VISIBLE) { wrap.style.maxHeight = ""; return; }
+  const last = body.rows[HIST_VISIBLE - 1];   // tr 的 offsetTop 是相對於表格算的
+  wrap.style.maxHeight = `${last.offsetTop + last.offsetHeight + 1}px`;
+}
 
 function fillSettleTable(segs) {
   const head = $("dlg-head");
