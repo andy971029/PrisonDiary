@@ -274,13 +274,13 @@
   /* 中央塔的圖照視窗寬度放，視窗被拉矮時跟著縮小 */
   .gq-tower { display: block; flex: 0 1 auto; min-height: 80px; width: 100%; height: auto; object-fit: contain; }
   #goddess { margin-top: 20px; }
-  /* 標題列可以收合，三角形跟診斷那塊一樣；收起來時標題下面的線和間距拿掉 */
-  #goddess > summary { cursor: pointer; list-style: none; }
-  #goddess > summary::-webkit-details-marker { display: none; }
-  #goddess > summary h2::before { content: "▶"; display: inline-block; margin-right: 6px; font-size: 9px;
-    vertical-align: 1px; transition: transform .15s; }
-  #goddess[open] > summary h2::before { transform: rotate(90deg); }
-  #goddess:not([open]) > summary { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+  /* 女神組隊任務、歷史紀錄的標題列可以收合，三角形跟診斷那塊一樣；收起來時標題下面的線和間距拿掉 */
+  #goddess > summary, #history > summary { cursor: pointer; list-style: none; }
+  #goddess > summary::-webkit-details-marker, #history > summary::-webkit-details-marker { display: none; }
+  #goddess > summary h2::before, #history > summary h2::before { content: "▶"; display: inline-block;
+    margin-right: 6px; font-size: 9px; vertical-align: 1px; transition: transform .15s; }
+  #goddess[open] > summary h2::before, #history[open] > summary h2::before { transform: rotate(90deg); }
+  #goddess:not([open]) > summary, #history:not([open]) > summary { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
   /* 左邊休息室的唱片直排、中間倉庫地圖拉高，右邊上面封印之室、下面中央塔 */
   .gq-grid { display: grid; grid-template-columns: minmax(220px, 260px) auto minmax(0, 1fr); gap: 14px;
     grid-template-rows: auto 1fr; grid-template-areas: "rest warehouse seal" "rest warehouse tower"; }
@@ -444,7 +444,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.14</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.15</span><small>陪你練等坐牢的好幫手</small></div>
     <div class="controls">
       <button id="share" class="go" disabled>載入 Python 環境…</button>
       <button id="pause" class="secondary" disabled></button>
@@ -514,20 +514,20 @@
     </summary>
     <div class="gq-grid" id="gq-grid"></div>
   </details>
-  <section id="history">
-    <div class="hist-head">
+  <details id="history" open>
+    <summary class="hist-head">
       <h2>歷史紀錄</h2>
       <span class="note" id="hist-note"></span>
       <button class="secondary" id="hist-export">匯出 JSON</button>
       <button class="secondary" id="hist-clear">全部清除</button>
-    </div>
+    </summary>
     <div class="hist-wrap">
       <table class="hist">
         <thead><tr id="hist-head-row"></tr></thead>
         <tbody id="hist-body"></tbody>
       </table>
     </div>
-  </section>
+  </details>
 
 
   <details id="diag" class="diag-box">
@@ -1170,9 +1170,21 @@ function renderHistory() {
 }
 buildHistoryHead();
 
+// 可以收合的區塊預設打開，使用者收起來或打開後記在瀏覽器裡，下次照上次的樣子。
+function rememberFold(id, key, onOpen) {
+  const box = $(id);
+  try { if (localStorage.getItem(key) === "0") box.open = false; } catch { /* 讀不到就維持打開 */ }
+  box.addEventListener("toggle", () => {
+    try { localStorage.setItem(key, box.open ? "1" : "0"); } catch { /* 存不了就算了 */ }
+    if (box.open && onOpen) onOpen();
+  });
+}
+rememberFold("history", "mapleexp.historyOpen", fitHistoryHeight);
+
 // 超過 15 筆時把表格框的高度定在第 15 筆的底部，剩下的用捲軸看。列高會受字型、按鈕影響，所以用量的。
 const HIST_VISIBLE = 15;
 function fitHistoryHeight() {
+  if (!$("history").open) return;     // 收起來時量不到列高，打開時再量
   const body = $("hist-body");
   const wrap = body.closest(".hist-wrap");
   if (body.rows.length <= HIST_VISIBLE) { wrap.style.maxHeight = ""; return; }
@@ -1737,12 +1749,7 @@ function syncMiniButton() {
 
 $("mini").addEventListener("click", toggleMini);
 $("gq-grid").addEventListener("click", onGoddessClick);
-// 女神組隊任務那塊預設打開，使用者收起來或打開後記在瀏覽器裡，下次照上次的樣子。
-const GQ_OPEN_KEY = "mapleexp.goddessOpen";
-try { if (localStorage.getItem(GQ_OPEN_KEY) === "0") $("goddess").open = false; } catch { /* 讀不到就維持打開 */ }
-$("goddess").addEventListener("toggle", () => {
-  try { localStorage.setItem(GQ_OPEN_KEY, $("goddess").open ? "1" : "0"); } catch { /* 存不了就算了 */ }
-});
+rememberFold("goddess", "mapleexp.goddessOpen");
 renderGoddess(true);
 
 // ---------------------------------------------------------------- 設定
