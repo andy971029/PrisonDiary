@@ -180,7 +180,7 @@
   .diag-box[open] summary { margin-bottom: 14px; }
   .engine { margin-top: 24px; max-width: 560px; }
   /* ---------- 區塊：主面板用實底＋頂部粗線，次要的（診斷）只留細框 ---------- */
-  .layout > section, #history, #goddess, #bestiary { background: var(--surface); border: 1px solid var(--line);
+  .layout > section, #history, #goddess, .sub-panel { background: var(--surface); border: 1px solid var(--line);
     border-top: 3px solid var(--ink); padding: 18px 22px 20px; }
   .layout { align-items: stretch; }
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
@@ -330,8 +330,8 @@
   .gq-card .gq-wh { flex: none; height: auto; flex-direction: column; align-items: center; padding: 0 8px; }
   .gq-card .gq-wh .gq-map { height: 640px; }
   .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
-  /* ---------- 怪物圖鑑：客戶端資料的快照（scripts/export_monsterbook.py），點一列展開掉落物與地圖 ---------- */
-  #bestiary { margin-top: 20px; }
+  /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一套卡片、捲動區與表格 ---------- */
+  .sub-panel { margin-top: 20px; }
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"] { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
@@ -341,8 +341,8 @@
   .book-tools button { padding: 6px 12px; font-size: 13px; }
   .book-tools button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
   .book-tools .switch { min-width: 0; font-size: 13px; }
-  #bestiary .hist-wrap { max-height: 70vh; overflow: auto; }
-  #bestiary table.hist thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+  .sub-panel .hist-wrap { max-height: 70vh; overflow: auto; }
+  .sub-panel table.hist thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
   table.book tr.row { cursor: pointer; }
   table.book tr.row:hover td, table.book tr.row.open td { background: var(--ground); }
   table.book td:first-child { padding-left: 6px; }
@@ -514,7 +514,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2200,7 +2200,7 @@ const EQUIP_COLS = [
 ];
 
 // 道具與裝備共用一套表格：排序、篩選、點一列展開，跟怪物圖鑑一樣的操作
-function makeTable(key, cols, detail, filter, defaultNote, defaultSort) {
+function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit) {
   const st = { open: new Set(), sort: { ...defaultSort } };
   const head = $(`${key}-head`), body = $(`${key}-body`);
   cols.forEach((c, i) => {
@@ -2230,8 +2230,8 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort) {
       const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
       return (c || x.id - y.id) * st.sort.dir;
     });
-    $(`${key}-count`).textContent = `${rows.length} / ${total}`;
-    $(`${key}-note`).textContent = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 個，只列前 ${BOOK_ROW_CAP} 個，請縮小範圍。` : defaultNote;
+    $(`${key}-count`).textContent = `${rows.length} / ${total} ${unit}`;
+    $(`${key}-note`).textContent = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} ${unit}，只列前 ${BOOK_ROW_CAP} ${unit}，請縮小範圍。` : defaultNote;
     body.textContent = "";
     for (const e of rows.slice(0, BOOK_ROW_CAP)) {
       const tr = document.createElement("tr");
@@ -2273,7 +2273,7 @@ const renderItems = makeTable("items", ITEM_COLS, itemDetail, () => {
   const q = $("items-q").value.trim().toLowerCase(), kind = $("items-kind").value, drop = $("items-drop").checked;
   const pool = ibook.data.items;
   return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開說明與會掉的怪。", { col: 1, dir: 1 });
+}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開說明與會掉的怪。", { col: 1, dir: 1 }, "個");
 const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
   const q = $("equips-q").value.trim().toLowerCase(), kind = $("equips-kind").value, job = Number($("equips-job").value);
   const lo = Number($("equips-lo").value) || 0, hi = $("equips-hi").value === "" ? Infinity : Number($("equips-hi").value);
@@ -2281,7 +2281,7 @@ const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
   const pool = ibook.data.equips;
   return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!job || e.job <= 0 || (e.job & job)) && e.lv >= lo && e.lv <= hi
     && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開能力與會掉的怪。", { col: 2, dir: 1 });
+}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開能力與會掉的怪。", { col: 2, dir: 1 }, "件");
 for (const id of ["items-q", "equips-q", "equips-lo", "equips-hi"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["items-kind", "items-drop", "equips-kind", "equips-job", "equips-drop"]) $(id).addEventListener("change", () => renderSub());
 function renderSub() { if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips(); }
