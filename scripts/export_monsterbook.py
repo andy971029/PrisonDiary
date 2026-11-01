@@ -44,8 +44,17 @@ def find_mob_sheets(directory: Path):
     return None
 
 
+def resolve_link(mob: dict, by_id: dict[int, dict]) -> int:
+    """外觀借用別隻怪（``link``）的，順著找到真的有圖的那隻；最多跟三層，繞圈就停。"""
+    seen = {mob["id"]}
+    while mob.get("link") in by_id and mob["link"] not in seen and len(seen) <= 3:
+        mob = by_id[mob["link"]]
+        seen.add(mob["id"])
+    return mob["id"]
+
+
 def export_pictures(container, mobs: list[dict]) -> dict[int, tuple[int, int]]:
-    """每隻怪裁一張站姿圖到 ``web/mobs/``，回傳 ``{id: (寬, 高)}``。舊的、現在沒有的圖一併刪掉。"""
+    """每隻有自己圖集的怪裁一張站姿圖到 ``web/mobs/``，回傳 ``{id: (寬, 高)}``。舊的、現在沒有的圖一併刪掉。"""
     from PIL import Image
 
     PIC_DIR.mkdir(exist_ok=True)
@@ -100,16 +109,25 @@ def main() -> int:
         print("找不到裝怪物圖集的 spritesheet bundle", file=sys.stderr)
         return 1
     sizes = export_pictures(container, data["mobs"])
+    by_id = {mob["id"]: mob for mob in data["mobs"]}
+    borrowed = 0
     for mob in data["mobs"]:
-        if mob["id"] in sizes:
-            mob["pic"] = list(sizes[mob["id"]])
+        # 自己有圖集就用自己的；沒有才順著 link 借（有些怪兩者都有，自己的才是現在在用的）。
+        source = mob["id"] if mob["id"] in sizes else resolve_link(mob, by_id)
+        mob.pop("link", None)
+        if source == mob["id"] and source in sizes:
+            mob["pic"] = list(sizes[source])
+        elif source in sizes:
+            mob["pic"] = [*sizes[source], source]
+            borrowed += 1
     monsterbook.dump(data, OUT)
     with_card = sum(1 for m in data["mobs"] if m["drops"] or m["maps"])
     pic_bytes = sum(p.stat().st_size for p in PIC_DIR.glob("*.png"))
     print(
         f"{OUT.relative_to(ROOT)}: {len(data['mobs'])} 隻怪物（{with_card} 隻有圖鑑卡）、"
         f"{len(data['items'])} 種掉落物、{len(data['maps'])} 張地圖，{OUT.stat().st_size / 1024:.0f} KB\n"
-        f"{PIC_DIR.relative_to(ROOT)}/: {len(sizes)} 張怪物圖，{pic_bytes / 1024:.0f} KB"
+        f"{PIC_DIR.relative_to(ROOT)}/: {len(sizes)} 張怪物圖，{pic_bytes / 1024:.0f} KB；"
+        f"另有 {borrowed} 隻借用別隻怪的圖，{len(data['mobs']) - len(sizes) - borrowed} 隻沒圖"
     )
     return 0
 

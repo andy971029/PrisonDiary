@@ -18,7 +18,9 @@
      "items": {"4000019": "嫩寶殼", …},
      "maps": {"40000": ["楓之島", "嫩寶狩獵場Ⅰ"], …}}
 
-``pic`` 是 ``web/mobs/<id>.png`` 的寬高（匯出腳本裁好的站姿圖），沒圖的怪沒有這個欄位。
+``pic`` 是站姿圖的寬高（匯出腳本裁好的 ``web/mobs/<id>.png``）；沒有自己的圖、外觀借用別隻怪
+（客戶端的 ``info/link``）的，第三個元素是借用對象的 ID，圖在 ``web/mobs/<那個 ID>.png``。
+完全沒圖的怪沒有這個欄位。
 掉落物與地圖只放 ID，名稱另外查表，一個名字只存一次。``Item`` 表裡沒有名字的物品 ID
 （舊資料有、經典版沒放進來的卷軸、技能書）直接拿掉，網頁上才不會出現一堆空白。
 """
@@ -117,6 +119,9 @@ def build(
             value = info.get(src)
             entry[dst] = value if isinstance(value, int) else None
         entry["boss"] = bool(info.get("boss"))
+        link = info.get("link")
+        if isinstance(link, str) and link.isdigit():
+            entry["link"] = int(link)            # 外觀借用哪隻怪的圖；匯出圖時解掉，不進 JSON
         entry["undead"] = bool(info.get("undead"))
         kind, desc = parse_book_text(str(book_text.get(key) or ""))
         entry["type"] = kind

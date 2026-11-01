@@ -16,9 +16,11 @@ STATS = {
                          "acc": 250, "eva": 16}},
     "9999999": {"info": {"maxHP": 1}},                 # 沒等級：測試怪
     "0100101": {"info": {"level": 2, "maxHP": 15}},     # 沒名字
+    "9300217": {"info": {"level": 2, "maxHP": 15, "link": "0100101"}},   # 活動用的藍寶分身，借藍寶的圖
     "abc": {"info": {"level": 1}},
 }
-NAMES = {"100100": {"name": "嫩寶"}, "8800002": {"name": "殘暴炎魔"}, "9999999": {"name": "測試"}}
+NAMES = {"100100": {"name": "嫩寶"}, "8800002": {"name": "殘暴炎魔"}, "9999999": {"name": "測試"},
+         "9300217": {"name": "藍寶"}}
 BOOK = {
     "100100": {"episode": "1", "map": {"0": 40000, "1": 999999999}, "reward": {"0": 4000019, "1": 2040024, "2": 2000000}},
 }
@@ -36,7 +38,7 @@ class Build(unittest.TestCase):
         self.mobs = {m["id"]: m for m in self.out["mobs"]}
 
     def test_keeps_only_named_leveled_mobs(self):
-        self.assertEqual([m["id"] for m in self.out["mobs"]], [100100, 8800002])   # 依等級排
+        self.assertEqual([m["id"] for m in self.out["mobs"]], [100100, 9300217, 8800002])   # 依等級排
 
     def test_stats(self):
         snail = self.mobs[100100]
@@ -61,6 +63,10 @@ class Build(unittest.TestCase):
         self.assertEqual(self.mobs[100100]["desc"], "在楓之島隨處可見。\n走一步就一隻。")
         self.assertEqual(self.mobs[8800002]["type"], "惡魔")
         self.assertEqual(self.mobs[8800002]["desc"], "特點 : 很兇。\n\n黑暗與火焰。")
+
+    def test_link_is_kept_as_int(self):
+        self.assertEqual(self.mobs[9300217]["link"], 100101)
+        self.assertNotIn("link", self.mobs[100100])
 
     def test_missing_stat_is_null(self):
         out = monsterbook.build({"0000001": {"info": {"level": 5}}}, {"1": {"name": "x"}}, {}, {}, {}, {})
