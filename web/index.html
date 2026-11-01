@@ -491,7 +491,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.11.0</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.11.1</span><small>陪你練等坐牢的好幫手</small></div>
     <nav class="tabs" role="tablist" aria-label="功能">
       <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">練功助手</button>
       <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">怪物圖鑑</button>
@@ -645,7 +645,6 @@
       <div class="book-tools">
         <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
         <label class="lv">等級 <input type="number" id="book-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="book-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
-        <button class="secondary" id="book-near" disabled title="讀到角色等級後，填入等級上下 5 級">我的等級 ±5</button>
         <button class="secondary" id="book-here" disabled title="讀到地圖名稱後，只列會在這張地圖生成的怪">目前地圖的怪</button>
         <label class="switch" title="客戶端只放已開放區域的地圖資料，沒出現在任何一張地圖的怪就是還沒開放的（武陵、童話王國…）"><input type="checkbox" id="book-unreleased"><i></i>含未開放的怪</label>
         <label class="switch" title="沒有圖鑑卡的怪多半是任務、活動或召喚出來的，只有數值沒有掉落物"><input type="checkbox" id="book-all"><i></i>含沒有圖鑑卡的怪</label>
@@ -2009,24 +2008,15 @@ $("book-body").addEventListener("keydown", (e) => {
 for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", renderBook);
 $("book-all").addEventListener("change", renderBook);
 $("book-unreleased").addEventListener("change", renderBook);
-$("book-near").addEventListener("click", () => {
-  const level = Number($("level").textContent);
-  if (!level) return;
-  $("book-lo").value = Math.max(1, level - 5);
-  $("book-hi").value = level + 5;
-  renderBook();
-});
 $("book-here").addEventListener("click", () => {
   book.here = !book.here;
   $("book-here").classList.toggle("on", book.here);
   renderBook();
 });
 
-// 每格叫一次：讀到等級、地圖才能按「我的等級」「目前地圖」；地圖換了而且開著地圖篩選就重列。
+// 每格叫一次：讀到地圖才能按「目前地圖的怪」；地圖換了而且開著地圖篩選就重列。
 function syncBookTools() {
-  const level = Number($("level").textContent);
   const map = $("map-name").textContent;
-  $("book-near").disabled = !level;
   $("book-here").disabled = !map || map === "--";
   if ($("book-here").disabled && book.here) { book.here = false; $("book-here").classList.remove("on"); }
   if (map !== book.lastMap) {
