@@ -74,13 +74,17 @@
   .tabs button:hover { color: var(--ink); background: var(--ground); }
   .tabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
   .tab-panel[hidden] { display: none; }
-  /* 圖鑑裡的分類（怪物／道具／裝備）：跟功能頁籤同一套分段按鈕，小一號 */
-  .subtabs { display: inline-flex; gap: 3px; padding: 3px; margin-bottom: 14px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+  /* 圖鑑裡的分類（怪物／道具／裝備）：跟功能頁籤同一套分段按鈕，小一號，放在圖鑑卡片的標題列裡 */
+  .subtabs { display: inline-flex; gap: 3px; padding: 3px; margin: 0;
+    background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
   .subtabs button { font: 700 13px var(--body); letter-spacing: .06em; padding: 5px 14px; margin: 0;
     background: none; border: 0; border-radius: 3px; color: var(--muted); }
-  .subtabs button:hover { color: var(--ink); background: var(--ground); }
+  .subtabs button:hover { color: var(--ink); background: var(--surface); }
   .subtabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
+  .book-card .sec-head { align-items: center; }
+  .book-card .sec-sub[data-for] { display: none; }
+  .book-card[data-sub="mobs"] .sec-sub[data-for="mobs"], .book-card[data-sub="items"] .sec-sub[data-for="items"],
+  .book-card[data-sub="equips"] .sec-sub[data-for="equips"] { display: inline; }
   .sub-panel[hidden] { display: none; }
   /* 控制鈕列：頂列右上，靠右排 */
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
@@ -180,7 +184,7 @@
   .diag-box[open] summary { margin-bottom: 14px; }
   .engine { margin-top: 24px; max-width: 560px; }
   /* ---------- 區塊：主面板用實底＋頂部粗線，次要的（診斷）只留細框 ---------- */
-  .layout > section, #history, #goddess, .sub-panel { background: var(--surface); border: 1px solid var(--line);
+  .layout > section, #history, #goddess, .book-card { background: var(--surface); border: 1px solid var(--line);
     border-top: 3px solid var(--ink); padding: 18px 22px 20px; }
   .layout { align-items: stretch; }
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
@@ -330,8 +334,7 @@
   .gq-card .gq-wh { flex: none; height: auto; flex-direction: column; align-items: center; padding: 0 8px; }
   .gq-card .gq-wh .gq-map { height: 640px; }
   .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
-  /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一套卡片、捲動區與表格 ---------- */
-  .sub-panel { margin-top: 20px; }
+  /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"] { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
@@ -514,7 +517,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -662,17 +665,18 @@
   </details>
   </div>
 
-  <div id="tab-book" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-book" hidden>
-    <nav class="subtabs" role="tablist" aria-label="圖鑑分類">
-      <button role="tab" data-sub="mobs" aria-selected="true" aria-controls="bestiary">怪物</button>
-      <button role="tab" data-sub="items" aria-selected="false" aria-controls="itembook">道具</button>
-      <button role="tab" data-sub="equips" aria-selected="false" aria-controls="equipbook">裝備</button>
-    </nav>
-    <section id="bestiary" class="sub-panel" role="tabpanel">
-      <div class="sec-head">
-        <h2>怪物圖鑑<span class="h2-note">（客戶端資料）</span></h2>
-        <span class="sec-sub" id="book-count">載入中…</span>
-      </div>
+  <div id="tab-book" class="tab-panel book-card" role="tabpanel" aria-labelledby="tab-btn-book" data-sub="mobs" hidden>
+    <div class="sec-head">
+      <nav class="subtabs" role="tablist" aria-label="圖鑑分類">
+        <button role="tab" data-sub="mobs" aria-selected="true" aria-controls="bestiary">怪物</button>
+        <button role="tab" data-sub="items" aria-selected="false" aria-controls="itembook">道具</button>
+        <button role="tab" data-sub="equips" aria-selected="false" aria-controls="equipbook">裝備</button>
+      </nav>
+      <span class="sec-sub" id="book-count" data-for="mobs">載入中…</span>
+      <span class="sec-sub" id="items-count" data-for="items">載入中…</span>
+      <span class="sec-sub" id="equips-count" data-for="equips">載入中…</span>
+    </div>
+    <section id="bestiary" class="sub-panel" role="tabpanel" aria-label="怪物圖鑑">
       <div class="book-tools">
         <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
         <label class="lv">等級 <input type="number" id="book-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="book-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
@@ -688,11 +692,7 @@
       </div>
       <p class="note" id="book-note">數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。</p>
     </section>
-    <section id="itembook" class="sub-panel" role="tabpanel" hidden>
-      <div class="sec-head">
-        <h2>道具圖鑑<span class="h2-note">（客戶端資料）</span></h2>
-        <span class="sec-sub" id="items-count">載入中…</span>
-      </div>
+    <section id="itembook" class="sub-panel" role="tabpanel" aria-label="道具圖鑑" hidden>
       <div class="book-tools">
         <input type="search" id="items-q" placeholder="搜尋道具名稱、說明或會掉的怪" aria-label="搜尋道具名稱、說明或會掉的怪">
         <select id="items-kind" aria-label="類別"><option value="">全部類別</option></select>
@@ -706,11 +706,7 @@
       </div>
       <p class="note" id="items-note"></p>
     </section>
-    <section id="equipbook" class="sub-panel" role="tabpanel" hidden>
-      <div class="sec-head">
-        <h2>裝備圖鑑<span class="h2-note">（客戶端資料）</span></h2>
-        <span class="sec-sub" id="equips-count">載入中…</span>
-      </div>
+    <section id="equipbook" class="sub-panel" role="tabpanel" aria-label="裝備圖鑑" hidden>
       <div class="book-tools">
         <input type="search" id="equips-q" placeholder="搜尋裝備名稱或會掉的怪" aria-label="搜尋裝備名稱或會掉的怪">
         <select id="equips-kind" aria-label="類別"><option value="">全部類別</option></select>
@@ -2332,6 +2328,7 @@ function setSub(id) {
   if (!document.querySelector(`.subtabs [data-sub="${id}"]`)) id = "mobs";
   ibook.sub = id;
   for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.setAttribute("aria-selected", String(btn.dataset.sub === id));
+  $("tab-book").dataset.sub = id;                       // 標題列右邊只顯示這個分類的計數
   $("bestiary").hidden = id !== "mobs";
   $("itembook").hidden = id !== "items";
   $("equipbook").hidden = id !== "equips";
