@@ -339,6 +339,8 @@
     border: 1px solid var(--bad); border-radius: 2px; vertical-align: 1px; }
   table.book .mob-pic { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 36px;
     margin-right: 8px; vertical-align: middle; }
+  table.book .soon { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 2px; vertical-align: 1px; }
   table.book tr.detail td { padding: 6px 6px 18px; white-space: normal; border-top: 0; background: var(--ground); }
   .mob-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; }
   @media (max-width: 760px) { .mob-detail { grid-template-columns: minmax(0, 1fr); } }
@@ -489,7 +491,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.10.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.11.0</span><small>陪你練等坐牢的好幫手</small></div>
     <nav class="tabs" role="tablist" aria-label="功能">
       <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">練功助手</button>
       <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">怪物圖鑑</button>
@@ -644,7 +646,8 @@
         <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
         <label class="lv">等級 <input type="number" id="book-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="book-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
         <button class="secondary" id="book-near" disabled title="讀到角色等級後，填入等級上下 5 級">我的等級 ±5</button>
-        <button class="secondary" id="book-here" disabled title="讀到地圖名稱後，只列圖鑑上會出現在這張地圖的怪">目前地圖的怪</button>
+        <button class="secondary" id="book-here" disabled title="讀到地圖名稱後，只列會在這張地圖生成的怪">目前地圖的怪</button>
+        <label class="switch" title="客戶端只放已開放區域的地圖資料，沒出現在任何一張地圖的怪就是還沒開放的（武陵、童話王國…）"><input type="checkbox" id="book-unreleased"><i></i>含未開放的怪</label>
         <label class="switch" title="沒有圖鑑卡的怪多半是任務、活動或召喚出來的，只有數值沒有掉落物"><input type="checkbox" id="book-all"><i></i>含沒有圖鑑卡的怪</label>
       </div>
       <div class="hist-wrap">
@@ -653,7 +656,7 @@
           <tbody id="book-body"></tbody>
         </table>
       </div>
-      <p class="note" id="book-note">數值、怪物圖與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開大圖、掉落物與出現地圖。</p>
+      <p class="note" id="book-note">數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。</p>
     </section>
   </div>
 
@@ -1850,7 +1853,7 @@ function picTag(m, maxW, maxH, extra = "") {
 }
 const BOOK_COLS = [
   { label: "怪物", sort: (m) => m.name, html: (m) =>
-    `<span class="mob-pic">${picTag(m, 44, 36, ' loading="lazy" decoding="async"')}</span><span class="mob-name">${esc(m.name)}</span>${m.type ? `<span class="mob-kind">${esc(m.type)}</span>` : ""}${m.boss ? '<span class="boss">BOSS</span>' : ""}` },
+    `<span class="mob-pic">${picTag(m, 44, 36, ' loading="lazy" decoding="async"')}</span><span class="mob-name">${esc(m.name)}</span>${m.type ? `<span class="mob-kind">${esc(m.type)}</span>` : ""}${m.boss ? '<span class="boss">BOSS</span>' : ""}${m.live ? "" : '<span class="soon" title="客戶端沒有任何一張會生成牠的地圖，還沒開放">未開放</span>'}` },
   { label: "等級", num: true, sort: (m) => m.level, text: (m) => m.level },
   { label: "HP", num: true, sort: (m) => m.hp, text: (m) => fmtInt(m.hp) },
   { label: "MP", num: true, sort: (m) => m.mp, text: (m) => fmtInt(m.mp) },
@@ -1862,7 +1865,7 @@ const BOOK_COLS = [
   { label: "命中", num: true, sort: (m) => m.acc, text: (m) => fmtInt(m.acc) },
   { label: "迴避", num: true, sort: (m) => m.eva, text: (m) => fmtInt(m.eva) },
   { label: "掉落物", num: true, sort: (m) => m.drops.length, text: (m) => m.drops.length || "" },
-  { label: "出現地圖", num: true, sort: (m) => m.maps.length, text: (m) => m.maps.length || "" },
+  { label: "出現地圖", num: true, sort: (m) => m.spawn.length, text: (m) => m.spawn.length || "" },
 ];
 
 function buildBookHead() {
@@ -1892,8 +1895,13 @@ async function loadBook() {
     for (const m of data.mobs) {
       // 有圖鑑卡的才是玩家打得到的野怪；其他多半是任務、活動、召喚物，預設不列。
       m.card = !!(m.drops.length || m.maps.length || m.desc);
-      m.mapNames = m.maps.map((id) => (data.maps[id] || ["", ""]).join(" ").trim());
-      m.hay = [m.name, m.type, ...m.drops.map((id) => data.items[id] || ""), ...m.mapNames].join("\n").toLowerCase();
+      // spawn 是現在真的會出現的地圖（客戶端只放已開放區域的地圖資料）；空的就是還沒開放。
+      // maps 是圖鑑卡上的舊清單，只在沒開放的怪身上拿來顯示「以後會在哪」。
+      m.live = m.spawn.length > 0;
+      m.mapNames = m.spawn.map((id) => (data.maps[id] || ["", ""]).join(" ").trim());
+      m.cardMapNames = m.maps.map((id) => (data.maps[id] || ["", ""]).join(" ").trim());
+      m.hay = [m.name, m.type, ...m.drops.map((id) => data.items[id] || ""), ...m.mapNames, ...(m.live ? [] : m.cardMapNames)]
+        .join("\n").toLowerCase();
     }
     book.data = data;
     renderBook();
@@ -1910,8 +1918,9 @@ function bookFilter() {
   const lo = Number($("book-lo").value) || 0;
   const hi = Number($("book-hi").value) || Infinity;
   const all = $("book-all").checked;
+  const unreleased = $("book-unreleased").checked;
   const here = book.here ? $("map-name").textContent : "";
-  const pool = book.data.mobs.filter((m) => all || m.card);
+  const pool = book.data.mobs.filter((m) => (all || m.card) && (unreleased || m.live));
   const rows = pool.filter((m) => m.level >= lo && m.level <= hi
     && (!here || m.mapNames.includes(here))
     && (!q || m.hay.includes(q)));
@@ -1923,7 +1932,7 @@ function bookDetail(m, q, here) {
     const name = book.data.items[id] || String(id);
     return `<span class="${q && name.toLowerCase().includes(q) ? "hit" : ""}">${esc(name)}</span>`;
   });
-  const maps = m.maps.map((id) => {
+  const maps = (m.live ? m.spawn : m.maps).map((id) => {
     const [street, name] = book.data.maps[id] || ["", String(id)];
     const label = `${street} ${name}`.trim();
     return `<li class="${label === here ? "here" : ""}"><small>${esc(street)}</small>${esc(name)}</li>`;
@@ -1933,7 +1942,7 @@ function bookDetail(m, q, here) {
   return `<div class="mob-detail">
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="chips">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
-    <div><h4>出現地圖 ${m.maps.length}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}</div>
+    <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
     <p class="note">怪物 ID ${m.id}${m.undead ? " · 不死系" : ""}${m.pad != null ? ` · 物攻 ${fmtInt(m.pad)}` : ""}${m.mad != null ? ` · 魔攻 ${fmtInt(m.mad)}` : ""}</p>
   </div>`;
 }
@@ -1958,8 +1967,8 @@ function renderBook() {
   const shown = rows.slice(0, BOOK_ROW_CAP);
   $("book-count").textContent = `${rows.length} / ${total} 隻`;
   const note = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 隻，只列前 ${BOOK_ROW_CAP} 隻，請縮小範圍。`
-    : here && !rows.length ? `圖鑑上沒有「${here}」這張地圖的怪。` : "";
-  $("book-note").textContent = note || "數值、怪物圖與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開大圖、掉落物與出現地圖。";
+    : here && !rows.length ? `客戶端的地圖資料裡，「${here}」沒有會生成的怪。` : "";
+  $("book-note").textContent = note || "數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。";
   const body = $("book-body");
   body.textContent = "";
   for (const m of shown) {
@@ -1999,6 +2008,7 @@ $("book-body").addEventListener("keydown", (e) => {
 });
 for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", renderBook);
 $("book-all").addEventListener("change", renderBook);
+$("book-unreleased").addEventListener("change", renderBook);
 $("book-near").addEventListener("click", () => {
   const level = Number($("level").textContent);
   if (!level) return;

@@ -23,19 +23,46 @@ NAMES = {"100100": {"name": "嫩寶"}, "8800002": {"name": "殘暴炎魔"}, "999
          "9300217": {"name": "藍寶"}}
 BOOK = {
     "100100": {"episode": "1", "map": {"0": 40000, "1": 999999999}, "reward": {"0": 4000019, "1": 2040024, "2": 2000000}},
+    "9300217": {"episode": "1", "map": {"0": 104000400, "1": 40000}, "reward": {}},
 }
 BOOK_TEXT = {
     "100100": "等級：Lv.1\\n型態：動物.\\n\\n在楓之島隨處可見。\\n走一步就一隻。",
     "8800002": "型態 : 惡魔\n特點 : 很兇。\n\n黑暗與火焰。",
 }
 ITEMS = {"4000019": {"name": "嫩寶殼"}, "2000000": {"name": "紅色藥水"}}
-MAPS = {"40000": {"streetName": "楓之島", "mapName": "嫩寶狩獵場Ⅰ"}}
+MAPS = {"40000": {"streetName": "楓之島", "mapName": "嫩寶狩獵場Ⅰ"}, "104000400": {"streetName": "維多利亞", "mapName": "樹木園"},
+        "100000000": {"streetName": "維多利亞", "mapName": "弓箭手村"}}
+# 地圖 WZJS：弓箭手村生成嫩寶與一個 NPC；樹木園沒有生成清單（王是召喚的）；40000 沒資料（還沒開）；
+# 9999 是物件包，名字也是數字但不是地圖。
+FIELDS = {
+    "100000000": {"info": {"town": 1}, "portal": {}, "life": {"0": {"type": "m", "id": "0100100"}, "1": {"type": "n", "id": "1012000"},
+                                                             "2": {"type": "m", "id": "8800002"}}},
+    "104000400": {"info": {}, "foothold": {}},
+    "9999": {"info": {}, "0": {}},
+}
 
 
 class Build(unittest.TestCase):
     def setUp(self):
-        self.out = monsterbook.build(STATS, NAMES, BOOK, BOOK_TEXT, ITEMS, MAPS)
+        shipped, spawn = monsterbook.spawns(FIELDS)
+        self.out = monsterbook.build(STATS, NAMES, BOOK, BOOK_TEXT, ITEMS, MAPS, shipped, spawn)
         self.mobs = {m["id"]: m for m in self.out["mobs"]}
+
+    def test_spawns(self):
+        shipped, spawn = monsterbook.spawns(FIELDS)
+        self.assertEqual(shipped, {100000000, 104000400})
+        self.assertEqual(spawn, {100100: {100000000}, 8800002: {100000000}})
+
+    def test_spawn_lists_real_maps_only(self):
+        self.assertEqual(self.mobs[100100]["spawn"], [100000000])       # 生成清單有；卡上的 40000 沒開
+        self.assertEqual(self.mobs[100100]["maps"], [40000])
+        self.assertEqual(self.mobs[9300217]["spawn"], [104000400])     # 沒生成清單，但卡上的地圖有資料
+        self.assertEqual(self.mobs[8800002]["spawn"], [100000000])
+        self.assertEqual(self.out["maps"]["100000000"], ["維多利亞", "弓箭手村"])
+
+    def test_without_map_data_nothing_is_live(self):
+        out = monsterbook.build(STATS, NAMES, BOOK, BOOK_TEXT, ITEMS, MAPS)
+        self.assertTrue(all(m["spawn"] == [] for m in out["mobs"]))
 
     def test_keeps_only_named_leveled_mobs(self):
         self.assertEqual([m["id"] for m in self.out["mobs"]], [100100, 9300217, 8800002])   # 依等級排
@@ -56,7 +83,8 @@ class Build(unittest.TestCase):
 
     def test_maps_skip_unknown(self):
         self.assertEqual(self.mobs[100100]["maps"], [40000])
-        self.assertEqual(self.out["maps"], {"40000": ["楓之島", "嫩寶狩獵場Ⅰ"]})
+        self.assertEqual(self.out["maps"], {"40000": ["楓之島", "嫩寶狩獵場Ⅰ"], "100000000": ["維多利亞", "弓箭手村"],
+                                            "104000400": ["維多利亞", "樹木園"]})
 
     def test_book_text(self):
         self.assertEqual(self.mobs[100100]["type"], "動物")
