@@ -55,24 +55,31 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   main { max-width: 1160px; margin: 0 auto; padding: 20px 20px 56px; }
 
-  /* ---------- 頂列 ---------- */
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px; padding-bottom: 16px;
-    border-bottom: 2px solid var(--ink); }
+  /* ---------- 頂列：左邊是標題與功能頁籤，右邊是跟讀畫面有關的東西（控制鈕、讀到的角色與地圖） ---------- */
+  header { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
+    align-items: center; gap: 14px 32px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+  .brand { display: flex; align-items: center; gap: 16px; }
   .logo { width: 53px; height: 53px; margin: -6px -10px -6px 0; flex: none; }
   .mark { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .04em;
-    line-height: 1; margin-right: auto; }
+    line-height: 1; }
   .mark .ver { font: 500 12px var(--mono); letter-spacing: 0; color: var(--muted); margin-left: 8px; vertical-align: 3px; }
   .mark small { display: block; font-family: var(--body); font-weight: 400; font-size: 12px;
     letter-spacing: 0; color: var(--muted); margin-top: 6px; max-width: 46ch; }
-  /* 功能頁籤：貼在頂列的底線上，選中的那頁用琥珀色底線蓋過去 */
-  .tabs { display: flex; gap: 4px; align-self: flex-end; margin-bottom: -18px; }
-  .tabs button { font: 700 16px var(--body); letter-spacing: .06em; padding: 8px 18px 12px; margin-bottom: 0;
-    background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; color: var(--muted); }
-  .tabs button:hover { color: var(--ink); }
-  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  /* 功能頁籤：一組分段按鈕，圖示＋文字，選中的那格填琥珀色 */
+  .tabs { display: inline-flex; gap: 3px; padding: 3px; justify-self: start; align-self: end;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+  .tabs button { display: inline-flex; align-items: center; gap: 8px; font: 700 14px var(--body); letter-spacing: .06em;
+    padding: 7px 16px 7px 13px; margin: 0; background: none; border: 0; border-radius: 3px; color: var(--muted); }
+  .tabs button svg { width: 16px; height: 16px; flex: none; }
+  .tabs button:hover { color: var(--ink); background: var(--ground); }
+  .tabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
   .tab-panel[hidden] { display: none; }
-  /* 控制鈕列：從頂列搬到底線下面，自成一列 */
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+  /* 控制鈕列：頂列右上，靠右排 */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+  @media (max-width: 900px) {
+    header { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+    .controls, .ident { justify-content: flex-start; }
+  }
   button { font: 700 14px var(--body); border: 2px solid var(--accent); background: var(--accent);
     color: var(--on-accent); padding: 9px 18px; border-radius: 2px; cursor: pointer; }
   button.secondary { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
@@ -153,23 +160,21 @@
   .note:empty { display: none; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
 
-  /* ---------- 角色 / 地圖 ---------- */
-  .ident { display: flex; flex-wrap: wrap; gap: 6px 36px; margin-top: 22px; padding-bottom: 14px;
-    border-bottom: 1px solid var(--line); align-items: baseline; }
-  .ident > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .ident .grow { flex: 1 1 260px; }
-  .ident span { font-size: 12px; color: var(--muted); letter-spacing: .1em; }
-  .ident b { font: 700 20px var(--body); overflow-wrap: anywhere; }
+  /* ---------- 角色 / 地圖：頂列右下，控制鈕底下，從畫面讀到什麼就顯示什麼 ---------- */
+  .ident { display: flex; flex-wrap: wrap; gap: 4px 28px; align-items: baseline; justify-content: flex-end;
+    min-width: 0; }
+  .ident > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .ident span { font-size: 12px; color: var(--muted); letter-spacing: .1em; white-space: nowrap; }
+  .ident b { font: 700 18px var(--body); overflow-wrap: anywhere; }
   /* ---------- 診斷（次要，預設收起） ---------- */
   .diag-box { margin-top: 20px; }
   .diag-box summary { cursor: pointer; font: 700 12px var(--body); letter-spacing: .14em; color: var(--muted); }
   .diag-box[open] summary { margin-bottom: 14px; }
   .engine { margin-top: 24px; max-width: 560px; }
   /* ---------- 區塊：主面板用實底＋頂部粗線，次要的（診斷）只留細框 ---------- */
-  .layout > section, #history, #goddess, #bestiary, .ident { background: var(--surface); border: 1px solid var(--line);
+  .layout > section, #history, #goddess, #bestiary { background: var(--surface); border: 1px solid var(--line);
     border-top: 3px solid var(--ink); padding: 18px 22px 20px; }
   .layout { align-items: stretch; }
-  .ident { margin-top: 20px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
   .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
   .sec-head h2 { margin: 0; padding: 0; border: 0; }
@@ -490,32 +495,36 @@
 <body>
 <main>
   <header>
-    <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.11.1</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="brand">
+      <img class="logo" src="favicon.png" alt="">
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.12.0</span><small>陪你練等坐牢的好幫手</small></div>
+    </div>
+    <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
+    <div class="controls">
+      <button id="share" class="go" disabled>載入 Python 環境…</button>
+      <button id="pause" class="secondary" disabled></button>
+      <button id="reset" class="secondary" disabled></button>
+      <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
+      <button id="prayer" class="secondary prayer"></button>
+      <button id="settings" class="secondary" title="一般設定與神聖祈禱設定"></button>
+      <span id="state" class="pill"><i></i><span>尚未開始</span></span>
+    </div>
     <nav class="tabs" role="tablist" aria-label="功能">
-      <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">練功助手</button>
-      <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">怪物圖鑑</button>
+      <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>練功助手</button>
+      <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>圖鑑</button>
     </nav>
+    <div class="ident" aria-label="角色與地圖">
+      <div><span>角色</span><b id="id-char">--</b></div>
+      <div><span>職業</span><b id="id-job">--</b></div>
+      <div><span>等級</span><b id="level">--</b></div>
+      <div><span>地圖</span><b id="map-name">--</b></div>
+    </div>
   </header>
-  <!-- 控制鈕在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
-  <div class="controls">
-    <button id="share" class="go" disabled>載入 Python 環境…</button>
-    <button id="pause" class="secondary" disabled></button>
-    <button id="reset" class="secondary" disabled></button>
-    <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
-    <button id="prayer" class="secondary prayer"></button>
-    <button id="settings" class="secondary" title="一般設定與神聖祈禱設定"></button>
-    <span id="state" class="pill"><i></i><span>尚未開始</span></span>
-  </div>
   <p id="hint" class="warn" hidden></p>
 
   <div id="tab-train" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-train">
-  <div class="ident" aria-label="角色與地圖">
-    <div><span>角色</span><b id="id-char">--</b></div>
-    <div><span>職業</span><b id="id-job">--</b></div>
-    <div><span>等級</span><b id="level">--</b></div>
-    <div class="grow"><span>地圖</span><b id="map-name">--</b></div>
-  </div>
 
   <div class="layout">
     <section>
