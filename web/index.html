@@ -64,7 +64,15 @@
   .mark .ver { font: 500 12px var(--mono); letter-spacing: 0; color: var(--muted); margin-left: 8px; vertical-align: 3px; }
   .mark small { display: block; font-family: var(--body); font-weight: 400; font-size: 12px;
     letter-spacing: 0; color: var(--muted); margin-top: 6px; max-width: 46ch; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  /* 功能頁籤：貼在頂列的底線上，選中的那頁用琥珀色底線蓋過去 */
+  .tabs { display: flex; gap: 4px; align-self: flex-end; margin-bottom: -18px; }
+  .tabs button { font: 700 16px var(--body); letter-spacing: .06em; padding: 8px 18px 12px; margin-bottom: 0;
+    background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; color: var(--muted); }
+  .tabs button:hover { color: var(--ink); }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel[hidden] { display: none; }
+  /* 控制鈕列：從頂列搬到底線下面，自成一列 */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
   button { font: 700 14px var(--body); border: 2px solid var(--accent); background: var(--accent);
     color: var(--on-accent); padding: 9px 18px; border-radius: 2px; cursor: pointer; }
   button.secondary { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
@@ -158,7 +166,7 @@
   .diag-box[open] summary { margin-bottom: 14px; }
   .engine { margin-top: 24px; max-width: 560px; }
   /* ---------- 區塊：主面板用實底＋頂部粗線，次要的（診斷）只留細框 ---------- */
-  .layout > section, #history, #goddess, .ident { background: var(--surface); border: 1px solid var(--line);
+  .layout > section, #history, #goddess, #bestiary, .ident { background: var(--surface); border: 1px solid var(--line);
     border-top: 3px solid var(--ink); padding: 18px 22px 20px; }
   .layout { align-items: stretch; }
   .ident { margin-top: 20px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
@@ -309,6 +317,39 @@
   .gq-card .gq-wh { flex: none; height: auto; flex-direction: column; align-items: center; padding: 0 8px; }
   .gq-card .gq-wh .gq-map { height: 640px; }
   .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
+  /* ---------- 怪物圖鑑：客戶端資料的快照（scripts/export_monsterbook.py），點一列展開掉落物與地圖 ---------- */
+  #bestiary { margin-top: 20px; }
+  .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
+  .book-tools input[type="search"] { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
+    color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
+  .book-tools .lv { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .book-tools .lv input { width: 58px; font: 700 14px var(--mono); text-align: right; padding: 5px 6px;
+    color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
+  .book-tools button { padding: 6px 12px; font-size: 13px; }
+  .book-tools button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .book-tools .switch { min-width: 0; font-size: 13px; }
+  #bestiary .hist-wrap { max-height: 70vh; overflow: auto; }
+  #bestiary table.hist thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+  table.book tr.row { cursor: pointer; }
+  table.book tr.row:hover td, table.book tr.row.open td { background: var(--ground); }
+  table.book td:first-child { padding-left: 6px; }
+  table.book .mob-name { font-weight: 700; font-size: 14px; }
+  table.book .mob-kind { margin-left: 6px; font-size: 11px; color: var(--muted); }
+  table.book .boss { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; color: var(--bad);
+    border: 1px solid var(--bad); border-radius: 2px; vertical-align: 1px; }
+  table.book tr.detail td { padding: 6px 6px 18px; white-space: normal; border-top: 0; background: var(--ground); }
+  .mob-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; }
+  @media (max-width: 760px) { .mob-detail { grid-template-columns: minmax(0, 1fr); } }
+  .mob-detail h4 { margin: 0 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
+  .mob-detail p { margin: 0; font-size: 13px; line-height: 1.6; white-space: pre-line; }
+  .mob-detail .desc { grid-column: 1 / -1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips span { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+  .chips span.hit { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .mob-maps { margin: 0; padding: 0; list-style: none; font-size: 13px; columns: 2; column-gap: 20px; }
+  .mob-maps li { break-inside: avoid; }
+  .mob-maps li small { color: var(--muted); margin-right: 4px; }
+  .mob-maps li.here { color: var(--accent); font-weight: 700; }
   video, canvas#frame { display: none; }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
@@ -444,19 +485,25 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.8.15</span><small>陪你練等坐牢的好幫手</small></div>
-    <div class="controls">
-      <button id="share" class="go" disabled>載入 Python 環境…</button>
-      <button id="pause" class="secondary" disabled></button>
-      <button id="reset" class="secondary" disabled></button>
-      <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
-      <button id="prayer" class="secondary prayer"></button>
-      <button id="settings" class="secondary" title="一般設定與神聖祈禱設定"></button>
-      <span id="state" class="pill"><i></i><span>尚未開始</span></span>
-    </div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.9.0</span><small>陪你練等坐牢的好幫手</small></div>
+    <nav class="tabs" role="tablist" aria-label="功能">
+      <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">練功助手</button>
+      <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">怪物圖鑑</button>
+    </nav>
   </header>
+  <!-- 控制鈕在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
+  <div class="controls">
+    <button id="share" class="go" disabled>載入 Python 環境…</button>
+    <button id="pause" class="secondary" disabled></button>
+    <button id="reset" class="secondary" disabled></button>
+    <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
+    <button id="prayer" class="secondary prayer"></button>
+    <button id="settings" class="secondary" title="一般設定與神聖祈禱設定"></button>
+    <span id="state" class="pill"><i></i><span>尚未開始</span></span>
+  </div>
   <p id="hint" class="warn" hidden></p>
 
+  <div id="tab-train" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-train">
   <div class="ident" aria-label="角色與地圖">
     <div><span>角色</span><b id="id-char">--</b></div>
     <div><span>職業</span><b id="id-job">--</b></div>
@@ -579,8 +626,32 @@
         <tr><td>文字辨識引擎</td><td id="ocr-state">尚未載入</td></tr>
       </table>
       <div id="log"></div>
-    </section>
+    </div>
   </details>
+  </div>
+
+  <div id="tab-book" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-book" hidden>
+    <section id="bestiary">
+      <div class="sec-head">
+        <h2>怪物圖鑑<span class="h2-note">（客戶端資料）</span></h2>
+        <span class="sec-sub" id="book-count">載入中…</span>
+      </div>
+      <div class="book-tools">
+        <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
+        <label class="lv">等級 <input type="number" id="book-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="book-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
+        <button class="secondary" id="book-near" disabled title="讀到角色等級後，填入等級上下 5 級">我的等級 ±5</button>
+        <button class="secondary" id="book-here" disabled title="讀到地圖名稱後，只列圖鑑上會出現在這張地圖的怪">目前地圖的怪</button>
+        <label class="switch" title="沒有圖鑑卡的怪多半是任務、活動或召喚出來的，只有數值沒有掉落物"><input type="checkbox" id="book-all"><i></i>含沒有圖鑑卡的怪</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="book-head"></tr></thead>
+          <tbody id="book-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="book-note">數值與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開掉落物與出現地圖。</p>
+    </section>
+  </div>
 
   <video id="video" autoplay muted playsinline></video>
   <canvas id="frame"></canvas>
@@ -932,6 +1003,7 @@ function clearStats() {
   for (const id of ["id-char", "id-job", "map-name", "level"]) $(id).textContent = "--";
   for (const id of ["meso-rate", "meso-half", "meso-average", "meso-recent", "meso-total", "meso-current", "meso-time"]) $(id).textContent = "--";
   $("meso-note").textContent = "";
+  syncBookTools();
   syncMini();
 }
 
@@ -1326,6 +1398,7 @@ function render(out, elapsedMs) {
     $("sp-map").querySelector(".empty").textContent = hint;
   }
   $("map-name").textContent = out.map_name || "--";
+  syncBookTools();
   // 楓幣跟經驗值欄位無關，經驗值還沒找到也照樣顯示。
   drawSpecimen("meso", rois.meso, out.meso?.raw);
   renderMeso(out.meso);
@@ -1751,6 +1824,212 @@ $("mini").addEventListener("click", toggleMini);
 $("gq-grid").addEventListener("click", onGoddessClick);
 rememberFold("goddess", "mapleexp.goddessOpen");
 renderGoddess(true);
+
+// ---------------------------------------------------------------- 怪物圖鑑
+// monsterbook.json 是客戶端資料的快照（scripts/export_monsterbook.py）：每隻怪的數值、圖鑑卡上的
+// 掉落物與出現地圖、各種名稱。第一次切到這一頁才載入（約 500 KB），載完就留在記憶體裡。
+// 搜尋同時比對怪物名、型態、掉落物名與地圖名，所以打「嫩寶殼」會找到嫩寶、打「奇幻村」會找到那張圖的怪。
+const book = { data: null, loading: false, open: new Set(), sort: { col: 1, dir: 1 }, here: false, lastMap: "" };
+const BOOK_ROW_CAP = 400;
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
+const expPerHp = (m) => (m.hp > 0 && m.exp != null ? m.exp / m.hp : null);
+const mapLabel = (id) => (book.data.maps[id] || ["", ""]).join(" ").trim();
+const BOOK_COLS = [
+  { label: "怪物", sort: (m) => m.name, html: (m) =>
+    `<span class="mob-name">${esc(m.name)}</span>${m.type ? `<span class="mob-kind">${esc(m.type)}</span>` : ""}${m.boss ? '<span class="boss">BOSS</span>' : ""}` },
+  { label: "等級", num: true, sort: (m) => m.level, text: (m) => m.level },
+  { label: "HP", num: true, sort: (m) => m.hp, text: (m) => fmtInt(m.hp) },
+  { label: "MP", num: true, sort: (m) => m.mp, text: (m) => fmtInt(m.mp) },
+  { label: "EXP", num: true, sort: (m) => m.exp, text: (m) => fmtInt(m.exp) },
+  { label: "EXP / HP", num: true, title: "每打掉 1 點 HP 拿到的經驗，越高越划算", sort: expPerHp,
+    text: (m) => { const r = expPerHp(m); return r == null ? "--" : r.toFixed(2); } },
+  { label: "物防", num: true, sort: (m) => m.pdd, text: (m) => fmtInt(m.pdd) },
+  { label: "魔防", num: true, sort: (m) => m.mdd, text: (m) => fmtInt(m.mdd) },
+  { label: "命中", num: true, sort: (m) => m.acc, text: (m) => fmtInt(m.acc) },
+  { label: "迴避", num: true, sort: (m) => m.eva, text: (m) => fmtInt(m.eva) },
+  { label: "掉落物", num: true, sort: (m) => m.drops.length, text: (m) => m.drops.length || "" },
+  { label: "出現地圖", num: true, sort: (m) => m.maps.length, text: (m) => m.maps.length || "" },
+];
+
+function buildBookHead() {
+  const tr = $("book-head");
+  BOOK_COLS.forEach((c, i) => {
+    const th = document.createElement("th");
+    th.className = (c.num ? "num " : "") + "sortable";
+    if (c.title) th.title = c.title;
+    th.tabIndex = 0;
+    th.addEventListener("click", () => {
+      book.sort = { col: i, dir: book.sort.col === i ? -book.sort.dir : (i === 0 || i === 1 ? 1 : -1) };
+      renderBook();
+    });
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); th.click(); } });
+    tr.appendChild(th);
+  });
+}
+buildBookHead();
+
+async function loadBook() {
+  if (book.data || book.loading) return;
+  book.loading = true;
+  try {
+    const res = await fetch("monsterbook.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    for (const m of data.mobs) {
+      // 有圖鑑卡的才是玩家打得到的野怪；其他多半是任務、活動、召喚物，預設不列。
+      m.card = !!(m.drops.length || m.maps.length || m.desc);
+      m.mapNames = m.maps.map((id) => (data.maps[id] || ["", ""]).join(" ").trim());
+      m.hay = [m.name, m.type, ...m.drops.map((id) => data.items[id] || ""), ...m.mapNames].join("\n").toLowerCase();
+    }
+    book.data = data;
+    renderBook();
+  } catch (err) {
+    $("book-count").textContent = "載入失敗";
+    $("book-note").textContent = "讀不到 monsterbook.json：" + err.message;
+  } finally {
+    book.loading = false;
+  }
+}
+
+function bookFilter() {
+  const q = $("book-q").value.trim().toLowerCase();
+  const lo = Number($("book-lo").value) || 0;
+  const hi = Number($("book-hi").value) || Infinity;
+  const all = $("book-all").checked;
+  const here = book.here ? $("map-name").textContent : "";
+  const pool = book.data.mobs.filter((m) => all || m.card);
+  const rows = pool.filter((m) => m.level >= lo && m.level <= hi
+    && (!here || m.mapNames.includes(here))
+    && (!q || m.hay.includes(q)));
+  return { rows, total: pool.length, q, here };
+}
+
+function bookDetail(m, q, here) {
+  const drops = m.drops.map((id) => {
+    const name = book.data.items[id] || String(id);
+    return `<span class="${q && name.toLowerCase().includes(q) ? "hit" : ""}">${esc(name)}</span>`;
+  });
+  const maps = m.maps.map((id) => {
+    const [street, name] = book.data.maps[id] || ["", String(id)];
+    const label = `${street} ${name}`.trim();
+    return `<li class="${label === here ? "here" : ""}"><small>${esc(street)}</small>${esc(name)}</li>`;
+  });
+  return `<div class="mob-detail">
+    ${m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : ""}
+    <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="chips">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
+    <div><h4>出現地圖 ${m.maps.length}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}</div>
+    <p class="note">怪物 ID ${m.id}${m.undead ? " · 不死系" : ""}${m.pad != null ? ` · 物攻 ${fmtInt(m.pad)}` : ""}${m.mad != null ? ` · 魔攻 ${fmtInt(m.mad)}` : ""}</p>
+  </div>`;
+}
+
+function renderBook() {
+  if (!book.data) return;
+  const col = BOOK_COLS[book.sort.col];
+  [...$("book-head").children].forEach((th, i) => {
+    const on = i === book.sort.col;
+    th.textContent = BOOK_COLS[i].label + (on ? (book.sort.dir > 0 ? " ▲" : " ▼") : "");
+    th.setAttribute("aria-sort", on ? (book.sort.dir > 0 ? "ascending" : "descending") : "none");
+  });
+  const { rows, total, q, here } = bookFilter();
+  rows.sort((x, y) => {
+    const a = col.sort(x), b = col.sort(y);
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
+    return (c || x.level - y.level || x.id - y.id) * book.sort.dir;
+  });
+  const shown = rows.slice(0, BOOK_ROW_CAP);
+  $("book-count").textContent = `${rows.length} / ${total} 隻`;
+  const note = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 隻，只列前 ${BOOK_ROW_CAP} 隻，請縮小範圍。`
+    : here && !rows.length ? `圖鑑上沒有「${here}」這張地圖的怪。` : "";
+  $("book-note").textContent = note || "數值與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開掉落物與出現地圖。";
+  const body = $("book-body");
+  body.textContent = "";
+  for (const m of shown) {
+    const tr = document.createElement("tr");
+    tr.className = "row" + (book.open.has(m.id) ? " open" : "");
+    tr.dataset.id = m.id;
+    tr.tabIndex = 0;
+    BOOK_COLS.forEach((c) => {
+      const td = document.createElement("td");
+      if (c.html) td.innerHTML = c.html(m);
+      else td.textContent = c.text(m) ?? "--";
+      if (c.num) td.className = "num";
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+    if (book.open.has(m.id)) {
+      const detail = document.createElement("tr");
+      detail.className = "detail";
+      const td = document.createElement("td");
+      td.colSpan = BOOK_COLS.length;
+      td.innerHTML = bookDetail(m, q, here);
+      detail.appendChild(td);
+      body.appendChild(detail);
+    }
+  }
+}
+
+$("book-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.row");
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (book.open.has(id)) book.open.delete(id); else book.open.add(id);
+  renderBook();
+});
+$("book-body").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr.row")) { e.preventDefault(); e.target.click(); }
+});
+for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", renderBook);
+$("book-all").addEventListener("change", renderBook);
+$("book-near").addEventListener("click", () => {
+  const level = Number($("level").textContent);
+  if (!level) return;
+  $("book-lo").value = Math.max(1, level - 5);
+  $("book-hi").value = level + 5;
+  renderBook();
+});
+$("book-here").addEventListener("click", () => {
+  book.here = !book.here;
+  $("book-here").classList.toggle("on", book.here);
+  renderBook();
+});
+
+// 每格叫一次：讀到等級、地圖才能按「我的等級」「目前地圖」；地圖換了而且開著地圖篩選就重列。
+function syncBookTools() {
+  const level = Number($("level").textContent);
+  const map = $("map-name").textContent;
+  $("book-near").disabled = !level;
+  $("book-here").disabled = !map || map === "--";
+  if ($("book-here").disabled && book.here) { book.here = false; $("book-here").classList.remove("on"); }
+  if (map !== book.lastMap) {
+    book.lastMap = map;
+    if (book.here) renderBook();
+  }
+}
+
+// ---------------------------------------------------------------- 功能頁籤
+// 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
+// 網址加 #book 可以直接開圖鑑（分享連結用），網址上的優先於記住的。
+const TAB_KEY = "mapleexp.tab";
+const hasTab = (id) => !!document.querySelector(`.tabs [data-tab="${id}"]`);
+function setTab(id) {
+  for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.setAttribute("aria-selected", String(btn.dataset.tab === id));
+  for (const panel of document.querySelectorAll(".tab-panel")) panel.hidden = panel.id !== `tab-${id}`;
+  try { localStorage.setItem(TAB_KEY, id); } catch { /* 存不了就算了 */ }
+  history.replaceState(null, "", id === "train" ? location.pathname + location.search : `#${id}`);
+  if (id === "train") fitHistoryHeight();     // 藏著的時候量不到列高，切回來再量
+  if (id === "book") loadBook();
+}
+for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
+{
+  let saved = "";
+  try { saved = localStorage.getItem(TAB_KEY) || ""; } catch { /* 讀不到就用預設 */ }
+  const fromUrl = location.hash.slice(1);
+  setTab(hasTab(fromUrl) ? fromUrl : hasTab(saved) ? saved : "train");
+}
 
 // ---------------------------------------------------------------- 設定
 function clampSetting(key, value) {

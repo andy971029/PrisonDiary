@@ -344,31 +344,69 @@ def parse_map_table(blob: bytes) -> tuple[MapRecord, ...]:
     return tuple(records)
 
 
+def list_bundles(directory: str | os.PathLike[str], prefer: str | None = None) -> list[Path]:
+    """目錄裡的 json bundle，由小到大排；*prefer*（上次命中的檔名）排最前面。
+
+    檔名是內容雜湊（``json_<hash>.bundle``），改版就會變，所以不能寫死，只能掃。
+    由小往大掃是因為要的表多半在小包裡，而最大那包有 192 MB —— 通常解開十幾 MB
+    就命中，碰不到大的那幾包。
+    """
+    try:
+        bundles = sorted(Path(directory).glob(BUNDLE_GLOB), key=lambda p: p.stat().st_size)
+    except OSError:
+        return []
+    if prefer:
+        bundles.sort(key=lambda p: p.name != prefer)
+    return bundles
+
+
+def read_table(
+    directory: str | os.PathLike[str], name: str, prefer: str | None = None
+) -> tuple[Path, bytes] | None:
+    """在 bundle 目錄裡找出含 *name* 這張表的那包，回傳 ``(bundle, 內容)``。
+
+    只認 JSON：同名的東西可能不只一個（``MonsterBook`` 既是字串表，也是另一包裡
+    二進位的圖鑑資料，名稱欄位長得一樣），內容不是 ``{`` 或 ``[`` 開頭的就當沒看到。
+    """
+    for bundle in list_bundles(directory, prefer):
+        try:
+            blob = extract_table(bundle, name)
+        except (BundleError, OSError, struct.error):
+            continue
+        if blob and blob.removeprefix(b"\xef\xbb\xbf")[:1] in (b"{", b"["):
+            return bundle, blob
+    return None
+
+
 def read_map_table(
     directory: str | os.PathLike[str], prefer: str | None = None
 ) -> tuple[Path, bytes] | None:
-    """在 bundle 目錄裡找出含 ``Map`` 表的那包。
+    """在 bundle 目錄裡找出含 ``Map`` 表的那包。"""
+    return read_table(directory, MAP_TABLE, prefer)
 
-    檔名是內容雜湊（``json_<hash>.bundle``），改版就會變，所以不能寫死，只能掃。
-    *prefer* 是上次命中的檔名，先試它；改版後檔名會變，就自動回到掃描。
 
-    掃描從小的掃起：地圖表在一包兩 MB 多的 bundle 裡，而最大那包有 192 MB ——
-    由小往大掃通常解開十幾 MB 就命中，碰不到大的那幾包。
+def read_bundle(path: str | os.PathLike[str]) -> bytes:
+    """整包解開。只給小包用（怪物數值那包 16 MB）；大包請用 :func:`iter_chunks`。"""
+    return b"".join(iter_chunks(path))
+
+
+def find_bundle_containing(
+    directory: str | os.PathLike[str], marker: bytes, limit: int = 32 << 20
+) -> tuple[Path, bytes] | None:
+    """由小到大找第一包解開後含 *marker* 的 bundle，回傳 ``(bundle, 解開的內容)``。
+
+    壓縮後超過 *limit* 的包不解：要找的資料都在小包裡（怪物數值那包壓縮後 5 MB），
+    最大那兩包解開要好幾百 MB，找不到就是找不到，不值得為了確認再花那個記憶體。
     """
-    folder = Path(directory)
-    try:
-        bundles = sorted(folder.glob(BUNDLE_GLOB), key=lambda p: p.stat().st_size)
-    except OSError:
-        return None
-    if prefer:
-        bundles.sort(key=lambda p: p.name != prefer)
-    for bundle in bundles:
+    for bundle in list_bundles(directory):
         try:
-            blob = extract_table(bundle, MAP_TABLE)
+            if bundle.stat().st_size > limit:
+                break
+            data = read_bundle(bundle)
         except (BundleError, OSError, struct.error):
             continue
-        if blob:
-            return bundle, blob
+        if marker in data:
+            return bundle, data
     return None
 
 
