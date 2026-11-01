@@ -374,9 +374,38 @@
   .mob-detail .portrait { grid-column: 1 / -1; display: flex; gap: 16px; align-items: flex-start; }
   .mob-detail .portrait img { flex: none; }
   .mob-detail .desc { flex: 1 1 auto; min-width: 0; }
+  /* 掉落物、會掉的怪：縮圖 chip，點了彈出小卡。裝備依職業、道具依類別分組 */
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .chips span { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
-  .chips span.hit { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .chips > * { display: inline-flex; align-items: center; gap: 5px; margin: 0; font: 500 12px var(--body); line-height: 1.5;
+    color: var(--ink); padding: 2px 8px 2px 4px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+  .chips > span { padding-left: 8px; }
+  .chips button { cursor: pointer; }
+  .chips button:hover, .chips button.on { border-color: var(--accent); }
+  .chips .hit { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .chips .ic { margin: 0; }
+  .chips .mob-pic { width: 32px; height: 24px; margin: 0; }
+  .chips small { color: var(--muted); }
+  .drop-groups { display: flex; flex-direction: column; gap: 10px; }
+  .drop-groups h5 { margin: 0 0 4px; font: 700 12px var(--body); color: var(--muted); }
+  .drop-groups h5 small { font-weight: 400; margin-left: 4px; }
+  /* 點 chip 彈出的小卡：固定定位，貼在 chip 下面（放不下就翻到上面） */
+  .tip { position: fixed; z-index: 60; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 520px); overflow: auto;
+    padding: 12px 14px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    border-top: 3px solid var(--accent); border-radius: 3px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+    font-size: 13px; line-height: 1.6; }
+  .tip[hidden] { display: none; }
+  .tip-head { display: flex; gap: 12px; align-items: center; margin: 0 24px 10px 0; }
+  .tip-pic { flex: none; display: flex; align-items: center; justify-content: center; min-width: 36px; }
+  .tip-pic .ic { margin: 0; }
+  .tip-head b { font-size: 15px; }
+  .tip-head small { display: block; color: var(--muted); font-size: 12px; }
+  .tip dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 14px; margin: 0; }
+  .tip dt { color: var(--muted); white-space: nowrap; }
+  .tip dd { margin: 0; font: 500 13px var(--body); letter-spacing: 0; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .tip p { margin: 8px 0 0; white-space: pre-line; color: var(--muted); font-size: 12px; }
+  .tip .tip-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; line-height: 1;
+    font: 700 14px var(--body); background: none; border: 0; color: var(--muted); }
+  .tip .tip-x:hover { color: var(--ink); }
   .mob-maps { margin: 0; padding: 0; list-style: none; font-size: 13px; columns: 2; column-gap: 20px; }
   .mob-maps li { break-inside: avoid; }
   .mob-maps li small { color: var(--muted); margin-right: 4px; }
@@ -517,7 +546,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -726,6 +755,8 @@
       <p class="note" id="equips-note"></p>
     </section>
   </div>
+
+  <div id="tip" class="tip" role="dialog" aria-label="圖鑑小卡" hidden></div>
 
   <video id="video" autoplay muted playsinline></video>
   <canvas id="frame"></canvas>
@@ -1995,11 +2026,28 @@ function bookFilter() {
   return { rows, total: pool.length, q, here };
 }
 
-function bookDetail(m, q, here) {
-  const drops = m.drops.map((id) => {
+// 職業分組的順序：全職業、初心者、五個職業、再來是多職業的組合
+const JOB_ORDER = (job) => job < 0 ? 1 : !job ? 0 : [1, 2, 4, 8, 16].includes(job) ? 2 + Math.log2(job) : 9;
+// 掉落物：裝備依職業、道具依類別分組，chip 帶縮圖，點了彈小卡。道具資料還沒載到就先列名字。
+function dropGroups(m, q) {
+  const groups = new Map();
+  const add = (key, order, html) => {
+    if (!groups.has(key)) groups.set(key, { order, chips: [] });
+    groups.get(key).chips.push(html);
+  };
+  for (const id of m.drops) {
     const name = book.data.items[id] || String(id);
-    return `<span class="${q && name.toLowerCase().includes(q) ? "hit" : ""}">${esc(name)}</span>`;
-  });
+    const hit = q && name.toLowerCase().includes(q) ? " hit" : "";
+    const eq = ibook.equipById.get(id), it = ibook.itemById.get(id);
+    if (eq) add(`裝備 · ${jobText(eq.job)}`, JOB_ORDER(eq.job), `<button type="button" class="${hit.trim()}" data-tip="equip" data-id="${id}">${iconTag(eq, "equips", 24)}${esc(name)}</button>`);
+    else if (it) add(itemKind(it), 100 + Number(it.kind), `<button type="button" class="${hit.trim()}" data-tip="item" data-id="${id}">${iconTag(it, "items", 24)}${esc(name)}</button>`);
+    else add(ibook.data ? "其他" : "", 999, `<span class="${hit.trim()}">${esc(name)}</span>`);
+  }
+  return [...groups].sort((a, b) => a[1].order - b[1].order).map(([label, g]) =>
+    `<div class="drop-group">${label ? `<h5>${esc(label)}<small>${g.chips.length}</small></h5>` : ""}<div class="chips">${g.chips.join("")}</div></div>`);
+}
+function bookDetail(m, q, here) {
+  const drops = dropGroups(m, q);
   const maps = (m.live ? m.spawn : m.maps).map((id) => {
     const [street, name] = book.data.maps[id] || ["", String(id)];
     const label = `${street} ${name}`.trim();
@@ -2009,7 +2057,7 @@ function bookDetail(m, q, here) {
   const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
   return `<div class="mob-detail">
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
-    <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="chips">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
+    <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
     <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
     <p class="note">怪物 ID ${m.id}${m.undead ? " · 不死系" : ""}${m.pad != null ? ` · 物攻 ${fmtInt(m.pad)}` : ""}${m.mad != null ? ` · 魔攻 ${fmtInt(m.mad)}` : ""}</p>
   </div>`;
@@ -2142,14 +2190,18 @@ function specText(e) {
   return out.join("、");
 }
 
-const ibook = { data: null, loading: false, sub: "mobs", mobById: new Map() };
-function iconTag(e, sheet) {
-  if (e.ic == null) return '<span class="ic"></span>';
+const ibook = { data: null, loading: false, sub: "mobs", mobById: new Map(), itemById: new Map(), equipById: new Map() };
+// 圖集挖一格：size 給了就整張圖集等比縮小再挖（chip 裡用 24px）
+function iconTag(e, sheet, size) {
+  if (e.ic == null) return `<span class="ic"${size ? ` style="width:${size}px;height:${size}px"` : ""}></span>`;
   const { cell, cols } = ibook.data;
-  return `<span class="ic" style="background-image:url(icons/${sheet}.png);background-position:-${(e.ic % cols) * cell}px -${Math.floor(e.ic / cols) * cell}px"></span>`;
+  const k = size ? size / cell : 1;
+  const sized = size ? `width:${size}px;height:${size}px;background-size:${cols * cell * k}px auto;` : "";
+  return `<span class="ic" style="${sized}background-image:url(icons/${sheet}.png);background-position:-${(e.ic % cols) * cell * k}px -${Math.floor(e.ic / cols) * cell * k}px"></span>`;
 }
+const mobChip = (m) => `<button type="button" data-tip="mob" data-id="${m.id}"><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small></button>`;
 function sourcesHtml(e) {
-  const live = e.fromLive.map((id) => { const m = ibook.mobById.get(id); return `<span title="Lv.${m.level}">${esc(m.name)}<small> Lv.${m.level}</small></span>`; });
+  const live = e.fromLive.map((id) => mobChip(ibook.mobById.get(id)));
   const hidden = e.from.length - e.fromLive.length;
   return `<div><h4>會掉的怪 ${e.fromLive.length}</h4>${live.length ? `<div class="chips">${live.join("")}</div>` : '<p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>'}${hidden ? `<p class="note">另有 ${hidden} 隻還沒開放的怪會掉。</p>` : ""}</div>`;
 }
@@ -2299,6 +2351,8 @@ async function loadItemBook() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     ibook.mobById = new Map(book.data.mobs.map((m) => [m.id, m]));
+    ibook.itemById = new Map(data.items.map((e) => [e.id, e]));
+    ibook.equipById = new Map(data.equips.map((e) => [e.id, e]));
     const prep = (e, kindName) => {
       e.fromLive = e.from.filter((id) => ibook.mobById.get(id)?.live);
       e.hay = [e.name, e.desc, kindName, ...e.fromLive.map((id) => ibook.mobById.get(id).name)].join("\n").toLowerCase();
@@ -2313,6 +2367,7 @@ async function loadItemBook() {
     ibook.data = data;
     renderItems();
     renderEquips();
+    renderBook();                                         // 展開中的怪物列補上掉落物的縮圖與分組
   } catch (err) {
     for (const key of ["items", "equips"]) {
       $(`${key}-count`).textContent = "載入失敗";
@@ -2322,6 +2377,75 @@ async function loadItemBook() {
     ibook.loading = false;
   }
 }
+// ---------------------------------------------------------------- 點 chip 彈出的小卡：怪物、道具、裝備各一種內容
+const tip = $("tip");
+const tipHead = (pic, name, sub) => `<div class="tip-head"><div class="tip-pic">${pic}</div><div><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
+const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+const someMobs = (ids) => {
+  const names = ids.slice(0, 6).map((id) => ibook.mobById.get(id).name);
+  return names.join("、") + (ids.length > 6 ? `…另 ${ids.length - 6} 隻` : "");
+};
+function mobTip(m) {
+  return tipHead(picTag(m, 96, 72, ' decoding="async"'), m.name, [m.type, m.boss ? "BOSS" : "", m.live ? "" : "還沒開放"].filter(Boolean).join(" · "))
+    + tipRows([["等級", m.level], ["HP / MP", `${fmtInt(m.hp)} / ${fmtInt(m.mp)}`], ["EXP", fmtInt(m.exp)],
+      ["物攻 / 魔攻", m.pad != null || m.mad != null ? `${fmtInt(m.pad)} / ${fmtInt(m.mad)}` : ""],
+      ["物防 / 魔防", `${fmtInt(m.pdd)} / ${fmtInt(m.mdd)}`], ["命中 / 迴避", `${fmtInt(m.acc)} / ${fmtInt(m.eva)}`],
+      ["掉落物", m.drops.length], ["出現地圖", m.live ? m.spawn.length : "還沒開放"]])
+    + (m.desc ? `<p>${esc(m.desc)}</p>` : "");
+}
+function itemTip(e) {
+  const hidden = e.from.length - e.fromLive.length;
+  return tipHead(iconTag(e, "items"), e.name, itemKind(e))
+    + tipRows([["效果", specText(e)], ["等級", e.lv || ""], ["商店價", e.price != null ? fmtInt(e.price) : ""],
+      ["一格最多", e.max ? fmtInt(e.max) : ""], ["會掉的怪", e.fromLive.length ? someMobs(e.fromLive) : hidden ? `只有還沒開放的 ${hidden} 隻` : "圖鑑卡上沒有"]])
+    + (e.desc ? `<p>${esc(e.desc)}</p>` : "");
+}
+function equipTip(e) {
+  const req = ["STR", "DEX", "INT", "LUK"].map((k, i) => e.req[i] ? `${k} ${e.req[i]}` : "").filter(Boolean).join("、");
+  const hidden = e.from.length - e.fromLive.length;
+  return tipHead(iconTag(e, "equips"), e.name, `${EQUIP_KINDS[e.kind] || "裝備"} · ${jobText(e.job)} · Lv.${e.lv}`)
+    + tipRows([["需求", req], ["攻擊", atk(e)], ["防禦", def(e)], ["其他加成", incText(e.inc, ["PAD", "MAD", "PDD", "MDD"])],
+      ["攻擊速度", e.spd != null ? e.spd : ""], ["可升級", e.tuc ? `${e.tuc} 次` : ""], ["商店價", e.price != null ? fmtInt(e.price) : ""],
+      ["會掉的怪", e.fromLive.length ? someMobs(e.fromLive) : hidden ? `只有還沒開放的 ${hidden} 隻` : "圖鑑卡上沒有"]])
+    + (e.desc ? `<p>${esc(e.desc)}</p>` : "");
+}
+function tipHtml(kind, id) {
+  if (kind === "mob") { const m = ibook.mobById.get(id); return m ? mobTip(m) : ""; }
+  if (kind === "item") { const e = ibook.itemById.get(id); return e ? itemTip(e) : ""; }
+  if (kind === "equip") { const e = ibook.equipById.get(id); return e ? equipTip(e) : ""; }
+  return "";
+}
+function hideTip() {
+  if (tip.hidden) return;
+  tip.hidden = true;
+  document.querySelector("[data-tip].on")?.classList.remove("on");
+}
+function showTip(anchor) {
+  const key = `${anchor.dataset.tip}:${anchor.dataset.id}`;
+  if (!tip.hidden && tip.dataset.key === key) { hideTip(); return; }
+  const html = tipHtml(anchor.dataset.tip, Number(anchor.dataset.id));
+  if (!html) return;
+  hideTip();
+  tip.innerHTML = html + '<button type="button" class="tip-x" aria-label="關閉">✕</button>';
+  tip.dataset.key = key;
+  tip.hidden = false;
+  anchor.classList.add("on");
+  const r = anchor.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  let top = r.bottom + 6;
+  if (top + h > innerHeight - 8) top = Math.max(8, r.top - 6 - h);
+  tip.style.top = `${top}px`;
+  tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+  tip.scrollTop = 0;
+}
+document.addEventListener("click", (e) => {
+  const anchor = e.target.closest("[data-tip]");
+  if (anchor) { showTip(anchor); return; }
+  if (e.target.closest(".tip-x") || !tip.contains(e.target)) hideTip();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
+addEventListener("resize", hideTip);
+document.addEventListener("scroll", (e) => { if (!tip.contains(e.target)) hideTip(); }, true);   // 表格自己的捲動也算，小卡裡面捲不算
+
 // 圖鑑裡選了哪個分類也記著；道具、裝備第一次切到才載入
 const SUB_KEY = "mapleexp.book-sub";
 function setSub(id) {
@@ -2356,7 +2480,7 @@ function setTab(id) {
   try { localStorage.setItem(TAB_KEY, id); } catch { /* 存不了就算了 */ }
   history.replaceState(null, "", id === "train" ? location.pathname + location.search : `#${id}`);
   if (id === "train") fitHistoryHeight();     // 藏著的時候量不到列高，切回來再量
-  if (id === "book") { loadBook(); setSub(ibook.sub); }
+  if (id === "book") { loadItemBook(); setSub(ibook.sub); }   // 連道具資料一起載：怪物的掉落物要縮圖
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
 {
