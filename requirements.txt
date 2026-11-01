@@ -2,3 +2,5 @@
 numpy>=1.26
 # 選用：test_gamedata 有幾個案例要解 lz4 壓縮，沒裝會 skip。
 lz4>=4.3
+# 選用：scripts/export_monsterbook.py 匯出怪物圖要 UnityPy（pip install UnityPy，Pillow 會跟著裝）。
+# 只有本機匯出用得到，不列在這裡免得 CI 多裝一堆。

@@ -41,6 +41,7 @@ jobs:
           cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
           cp -r web/sounds _site/
           cp -r web/goddess _site/
+          cp -r web/mobs _site/
 
       - uses: actions/configure-pages@v5
 

@@ -337,12 +337,16 @@
   table.book .mob-kind { margin-left: 6px; font-size: 11px; color: var(--muted); }
   table.book .boss { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; color: var(--bad);
     border: 1px solid var(--bad); border-radius: 2px; vertical-align: 1px; }
+  table.book .mob-pic { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 36px;
+    margin-right: 8px; vertical-align: middle; }
   table.book tr.detail td { padding: 6px 6px 18px; white-space: normal; border-top: 0; background: var(--ground); }
   .mob-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; }
   @media (max-width: 760px) { .mob-detail { grid-template-columns: minmax(0, 1fr); } }
   .mob-detail h4 { margin: 0 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
   .mob-detail p { margin: 0; font-size: 13px; line-height: 1.6; white-space: pre-line; }
-  .mob-detail .desc { grid-column: 1 / -1; }
+  .mob-detail .portrait { grid-column: 1 / -1; display: flex; gap: 16px; align-items: flex-start; }
+  .mob-detail .portrait img { flex: none; }
+  .mob-detail .desc { flex: 1 1 auto; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .chips span { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
   .chips span.hit { border-color: var(--accent); color: var(--accent); font-weight: 700; }
@@ -485,7 +489,7 @@
 <main>
   <header>
     <img class="logo" src="favicon.png" alt="">
-    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.9.0</span><small>陪你練等坐牢的好幫手</small></div>
+    <div class="mark">服刑日誌<span class="ver" id="app-version">v0.10.0</span><small>陪你練等坐牢的好幫手</small></div>
     <nav class="tabs" role="tablist" aria-label="功能">
       <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">練功助手</button>
       <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">怪物圖鑑</button>
@@ -649,7 +653,7 @@
           <tbody id="book-body"></tbody>
         </table>
       </div>
-      <p class="note" id="book-note">數值與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開掉落物與出現地圖。</p>
+      <p class="note" id="book-note">數值、怪物圖與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開大圖、掉落物與出現地圖。</p>
     </section>
   </div>
 
@@ -1835,9 +1839,17 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
 const expPerHp = (m) => (m.hp > 0 && m.exp != null ? m.exp / m.hp : null);
 const mapLabel = (id) => (book.data.maps[id] || ["", ""]).join(" ").trim();
+// 怪物圖是匯出腳本裁好的站姿 PNG（web/mobs/<id>.png），pic 記著原始寬高；縮進指定的框、不放大，
+// 寬高先寫進標籤，捲動時圖還沒載進來列高也不會跳。
+function picTag(m, maxW, maxH, extra = "") {
+  if (!m.pic) return "";
+  const [w, h] = m.pic;
+  const k = Math.min(1, maxW / w, maxH / h);
+  return `<img src="mobs/${m.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(m.name)}"${extra}>`;
+}
 const BOOK_COLS = [
   { label: "怪物", sort: (m) => m.name, html: (m) =>
-    `<span class="mob-name">${esc(m.name)}</span>${m.type ? `<span class="mob-kind">${esc(m.type)}</span>` : ""}${m.boss ? '<span class="boss">BOSS</span>' : ""}` },
+    `<span class="mob-pic">${picTag(m, 44, 36, ' loading="lazy" decoding="async"')}</span><span class="mob-name">${esc(m.name)}</span>${m.type ? `<span class="mob-kind">${esc(m.type)}</span>` : ""}${m.boss ? '<span class="boss">BOSS</span>' : ""}` },
   { label: "等級", num: true, sort: (m) => m.level, text: (m) => m.level },
   { label: "HP", num: true, sort: (m) => m.hp, text: (m) => fmtInt(m.hp) },
   { label: "MP", num: true, sort: (m) => m.mp, text: (m) => fmtInt(m.mp) },
@@ -1915,8 +1927,10 @@ function bookDetail(m, q, here) {
     const label = `${street} ${name}`.trim();
     return `<li class="${label === here ? "here" : ""}"><small>${esc(street)}</small>${esc(name)}</li>`;
   });
+  const portrait = picTag(m, 240, 200, ' decoding="async"');
+  const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
   return `<div class="mob-detail">
-    ${m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : ""}
+    ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="chips">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
     <div><h4>出現地圖 ${m.maps.length}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}</div>
     <p class="note">怪物 ID ${m.id}${m.undead ? " · 不死系" : ""}${m.pad != null ? ` · 物攻 ${fmtInt(m.pad)}` : ""}${m.mad != null ? ` · 魔攻 ${fmtInt(m.mad)}` : ""}</p>
@@ -1944,7 +1958,7 @@ function renderBook() {
   $("book-count").textContent = `${rows.length} / ${total} 隻`;
   const note = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 隻，只列前 ${BOOK_ROW_CAP} 隻，請縮小範圍。`
     : here && !rows.length ? `圖鑑上沒有「${here}」這張地圖的怪。` : "";
-  $("book-note").textContent = note || "數值與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開掉落物與出現地圖。";
+  $("book-note").textContent = note || "數值、怪物圖與掉落物來自遊戲客戶端的資料檔（怪物卡上列的掉落物，沒有機率）。點一列展開大圖、掉落物與出現地圖。";
   const body = $("book-body");
   body.textContent = "";
   for (const m of shown) {
