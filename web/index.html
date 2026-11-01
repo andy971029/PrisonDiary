@@ -74,6 +74,14 @@
   .tabs button:hover { color: var(--ink); background: var(--ground); }
   .tabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
   .tab-panel[hidden] { display: none; }
+  /* 圖鑑裡的分類（怪物／道具／裝備）：跟功能頁籤同一套分段按鈕，小一號 */
+  .subtabs { display: inline-flex; gap: 3px; padding: 3px; margin-bottom: 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+  .subtabs button { font: 700 13px var(--body); letter-spacing: .06em; padding: 5px 14px; margin: 0;
+    background: none; border: 0; border-radius: 3px; color: var(--muted); }
+  .subtabs button:hover { color: var(--ink); background: var(--ground); }
+  .subtabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
+  .sub-panel[hidden] { display: none; }
   /* 控制鈕列：頂列右上，靠右排 */
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
   @media (max-width: 900px) {
@@ -346,6 +354,15 @@
     margin-right: 8px; vertical-align: middle; }
   table.book .soon { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; color: var(--muted);
     border: 1px solid var(--line); border-radius: 2px; vertical-align: 1px; }
+  /* 道具、裝備的圖示：從圖集（web/icons/*.png）挖一格出來，位置寫在 style 裡 */
+  .ic { display: inline-block; width: var(--icell, 36px); height: var(--icell, 36px); flex: none;
+    vertical-align: middle; margin-right: 8px; background-repeat: no-repeat; }
+  .book-tools select { font: 500 14px var(--body); padding: 6px 8px; color: var(--ink); background: var(--ground);
+    border: 1px solid var(--line); border-radius: 2px; }
+  table.book .fx { display: inline-block; max-width: 340px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: normal; }
+  table.book .fx b { color: var(--ink); font-weight: 600; }
+  .mob-detail .facts-line { font-size: 13px; line-height: 1.7; }
+  .mob-detail .facts-line b { font-weight: 600; margin-right: 10px; }
   table.book tr.detail td { padding: 6px 6px 18px; white-space: normal; border-top: 0; background: var(--ground); }
   .mob-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; }
   @media (max-width: 760px) { .mob-detail { grid-template-columns: minmax(0, 1fr); } }
@@ -497,7 +514,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.12.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.13.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -646,7 +663,12 @@
   </div>
 
   <div id="tab-book" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-book" hidden>
-    <section id="bestiary">
+    <nav class="subtabs" role="tablist" aria-label="圖鑑分類">
+      <button role="tab" data-sub="mobs" aria-selected="true" aria-controls="bestiary">怪物</button>
+      <button role="tab" data-sub="items" aria-selected="false" aria-controls="itembook">道具</button>
+      <button role="tab" data-sub="equips" aria-selected="false" aria-controls="equipbook">裝備</button>
+    </nav>
+    <section id="bestiary" class="sub-panel" role="tabpanel">
       <div class="sec-head">
         <h2>怪物圖鑑<span class="h2-note">（客戶端資料）</span></h2>
         <span class="sec-sub" id="book-count">載入中…</span>
@@ -665,6 +687,47 @@
         </table>
       </div>
       <p class="note" id="book-note">數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。</p>
+    </section>
+    <section id="itembook" class="sub-panel" role="tabpanel" hidden>
+      <div class="sec-head">
+        <h2>道具圖鑑<span class="h2-note">（客戶端資料）</span></h2>
+        <span class="sec-sub" id="items-count">載入中…</span>
+      </div>
+      <div class="book-tools">
+        <input type="search" id="items-q" placeholder="搜尋道具名稱、說明或會掉的怪" aria-label="搜尋道具名稱、說明或會掉的怪">
+        <select id="items-kind" aria-label="類別"><option value="">全部類別</option></select>
+        <label class="switch" title="只列已開放的怪會掉的道具（怪物圖鑑卡上列的掉落物，沒有機率）"><input type="checkbox" id="items-drop"><i></i>只看怪物會掉的</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="items-head"></tr></thead>
+          <tbody id="items-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="items-note"></p>
+    </section>
+    <section id="equipbook" class="sub-panel" role="tabpanel" hidden>
+      <div class="sec-head">
+        <h2>裝備圖鑑<span class="h2-note">（客戶端資料）</span></h2>
+        <span class="sec-sub" id="equips-count">載入中…</span>
+      </div>
+      <div class="book-tools">
+        <input type="search" id="equips-q" placeholder="搜尋裝備名稱或會掉的怪" aria-label="搜尋裝備名稱或會掉的怪">
+        <select id="equips-kind" aria-label="類別"><option value="">全部類別</option></select>
+        <select id="equips-job" aria-label="職業">
+          <option value="">全部職業</option><option value="1">劍士</option><option value="2">法師</option>
+          <option value="4">弓箭手</option><option value="8">盜賊</option><option value="16">海盜</option>
+        </select>
+        <label class="lv">等級 <input type="number" id="equips-lo" min="0" max="250" placeholder="0" aria-label="最低需求等級"> – <input type="number" id="equips-hi" min="0" max="250" placeholder="250" aria-label="最高需求等級"></label>
+        <label class="switch" title="只列已開放的怪會掉的裝備（怪物圖鑑卡上列的掉落物，沒有機率）"><input type="checkbox" id="equips-drop"><i></i>只看怪物會掉的</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="equips-head"></tr></thead>
+          <tbody id="equips-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="equips-note"></p>
     </section>
   </div>
 
@@ -1844,7 +1907,7 @@ renderGoddess(true);
 // monsterbook.json 是客戶端資料的快照（scripts/export_monsterbook.py）：每隻怪的數值、圖鑑卡上的
 // 掉落物與出現地圖、各種名稱。第一次切到這一頁才載入（約 500 KB），載完就留在記憶體裡。
 // 搜尋同時比對怪物名、型態、掉落物名與地圖名，所以打「嫩寶殼」會找到嫩寶、打「奇幻村」會找到那張圖的怪。
-const book = { data: null, loading: false, open: new Set(), sort: { col: 1, dir: 1 }, here: false, lastMap: "" };
+const book = { data: null, promise: null, open: new Set(), sort: { col: 1, dir: 1 }, here: false, lastMap: "" };
 const BOOK_ROW_CAP = 400;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
@@ -1893,9 +1956,12 @@ function buildBookHead() {
 }
 buildBookHead();
 
-async function loadBook() {
-  if (book.data || book.loading) return;
-  book.loading = true;
+// 回傳同一個 promise：道具圖鑑要等怪物資料載完才能對掉落怪物，第二個呼叫者也等得到。
+function loadBook() {
+  if (!book.promise) book.promise = loadBookNow();
+  return book.promise;
+}
+async function loadBookNow() {
   try {
     const res = await fetch("monsterbook.json", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1916,8 +1982,6 @@ async function loadBook() {
   } catch (err) {
     $("book-count").textContent = "載入失敗";
     $("book-note").textContent = "讀不到 monsterbook.json：" + err.message;
-  } finally {
-    book.loading = false;
   }
 }
 
@@ -2034,9 +2098,259 @@ function syncBookTools() {
   }
 }
 
+// ---------------------------------------------------------------- 道具、裝備圖鑑
+// itembook.json 是客戶端資料的快照（scripts/export_itembook.py）：裝備數值、道具效果、名稱說明，
+// 加上從怪物圖鑑卡反查的掉落來源；圖示打包在 web/icons/ 的兩張圖集裡，每個條目只記序號。
+// 切到道具或裝備分類才載入（約 1.4 MB），需要怪物圖鑑的資料來對掉落怪物的名字與開放與否。
+const EQUIP_KINDS = {
+  "100": "帽子", "101": "臉飾", "102": "眼飾", "103": "耳環", "104": "上衣", "105": "套服", "106": "褲裙", "107": "鞋子",
+  "108": "手套", "109": "盾牌", "110": "披風", "111": "戒指", "112": "墜飾", "113": "腰帶", "114": "勳章",
+  "130": "單手劍", "131": "單手斧", "132": "單手棍", "133": "短劍", "137": "短杖", "138": "長杖", "140": "雙手劍",
+  "141": "雙手斧", "142": "雙手棍", "143": "槍", "144": "矛", "145": "弓", "146": "弩", "147": "拳套", "148": "指虎", "149": "火槍",
+};
+const ITEM_KINDS = {
+  "0200": "藥水", "0201": "食物", "0202": "料理與增益", "0203": "傳送卷軸", "0204": "卷軸", "0205": "解除異常", "0206": "箭矢",
+  "0207": "飛鏢", "0210": "召喚袋", "0212": "寵物飼料", "0221": "變身藥", "0224": "禮盒", "0227": "特殊", "0228": "精通書",
+  "0233": "子彈", "0238": "怪物卡", "0243": "禮券", "0245": "經驗券", "0254": "髮型券", "0263": "禮券", "0283": "時裝套組",
+  "0289": "整形券", "0301": "椅子", "0380": "通行證", "0400": "怪物掉落物", "0401": "礦石", "0402": "寶石原石",
+  "0403": "任務道具", "0408": "五子棋", "0416": "寵物說明書", "0421": "訂婚戒指", "0422": "花盆", "0425": "寶石", "0426": "怪物結晶",
+  "0431": "硬幣",
+};
+const JOB_NAMES = [[1, "劍士"], [2, "法師"], [4, "弓箭手"], [8, "盜賊"], [16, "海盜"]];
+const INC_LABEL = { STR: "STR", DEX: "DEX", INT: "INT", LUK: "LUK", MHP: "HP", MMP: "MP", PAD: "物攻", MAD: "魔攻",
+  PDD: "物防", MDD: "魔防", ACC: "命中", EVA: "迴避", Speed: "速度", Jump: "跳躍" };
+const signed = (v) => (v > 0 ? "+" : "") + v;
+const incText = (inc, skip = []) => Object.entries(inc).filter(([k]) => !skip.includes(k))
+  .map(([k, v]) => `${INC_LABEL[k] || k} ${signed(v)}`).join("、");
+const jobText = (job) => job < 0 ? "初心者" : !job ? "全職業"
+  : JOB_NAMES.filter(([bit]) => job & bit).map(([, name]) => name).join("／") || "全職業";
+const itemKind = (e) => ITEM_KINDS[e.kind] || (e.kind.startsWith("02") ? "消耗" : e.kind.startsWith("03") ? "裝飾" : "其他");
+const minutes = (sec) => sec >= 60 ? `${Math.round(sec / 60)} 分` : `${sec} 秒`;
+// 道具效果的一句話：藥水的回復、料理的增益、卷軸的成功率與加成
+function specText(e) {
+  const s = e.spec, out = [];
+  if (s.hp) out.push(`HP ${signed(s.hp)}`);
+  if (s.hpR) out.push(`HP ${signed(s.hpR)}%`);
+  if (s.mp) out.push(`MP ${signed(s.mp)}`);
+  if (s.mpR) out.push(`MP ${signed(s.mpR)}%`);
+  for (const [k, label] of [["pad", "物攻"], ["mad", "魔攻"], ["pdd", "物防"], ["mdd", "魔防"], ["acc", "命中"], ["eva", "迴避"], ["speed", "速度"], ["jump", "跳躍"]])
+    if (s[k]) out.push(`${label} ${signed(s[k])}`);
+  if (s.expBuff) out.push(`經驗 ${s.expBuff}%`);
+  if (s.morph) out.push("變身");
+  if (s.moveTo != null) out.push("傳送");
+  if (s.poison || s.darkness || s.weakness || s.curse || s.seal) out.push("解除異常狀態");
+  if (s.time) out.push(minutes(s.time));
+  if (e.rate != null) out.unshift(`成功率 ${e.rate}%`);
+  const inc = incText(e.inc);
+  if (inc) out.push(inc);
+  return out.join("、");
+}
+
+const ibook = { data: null, loading: false, sub: "mobs", mobById: new Map() };
+function iconTag(e, sheet) {
+  if (e.ic == null) return '<span class="ic"></span>';
+  const { cell, cols } = ibook.data;
+  return `<span class="ic" style="background-image:url(icons/${sheet}.png);background-position:-${(e.ic % cols) * cell}px -${Math.floor(e.ic / cols) * cell}px"></span>`;
+}
+function sourcesHtml(e) {
+  const live = e.fromLive.map((id) => { const m = ibook.mobById.get(id); return `<span title="Lv.${m.level}">${esc(m.name)}<small> Lv.${m.level}</small></span>`; });
+  const hidden = e.from.length - e.fromLive.length;
+  return `<div><h4>會掉的怪 ${e.fromLive.length}</h4>${live.length ? `<div class="chips">${live.join("")}</div>` : '<p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>'}${hidden ? `<p class="note">另有 ${hidden} 隻還沒開放的怪會掉。</p>` : ""}</div>`;
+}
+function itemDetail(e) {
+  const fx = specText(e);
+  return `<div class="mob-detail">
+    <div class="portrait">${iconTag(e, "items")}<div class="desc">${e.desc ? `<h4>說明</h4><p>${esc(e.desc)}</p>` : '<p class="note">沒有說明。</p>'}</div></div>
+    <div>${fx ? `<h4>效果</h4><p class="facts-line">${esc(fx)}</p>` : ""}<p class="note">${itemKind(e)} · 道具 ID ${e.id}${e.lv ? ` · 等級 ${e.lv}` : ""}${e.price != null ? ` · 商店價 ${fmtInt(e.price)}` : ""}${e.max ? ` · 一格最多 ${fmtInt(e.max)}` : ""}</p></div>
+    ${sourcesHtml(e)}
+  </div>`;
+}
+function equipDetail(e) {
+  const req = ["STR", "DEX", "INT", "LUK"].map((k, i) => e.req[i] ? `${k} ${e.req[i]}` : "").filter(Boolean).join("、");
+  const facts = [`等級 ${e.lv}`, jobText(e.job), req ? `需求 ${req}` : "", e.spd != null ? `攻擊速度 ${e.spd}` : "",
+    `可升級 ${e.tuc} 次`, e.price != null ? `商店價 ${fmtInt(e.price)}` : ""].filter(Boolean).join(" · ");
+  const inc = incText(e.inc);
+  return `<div class="mob-detail">
+    <div class="portrait">${iconTag(e, "equips")}<div class="desc">${e.desc ? `<h4>說明</h4><p>${esc(e.desc)}</p>` : ""}<p class="facts-line">${esc(facts)}</p></div></div>
+    <div><h4>能力</h4><p class="facts-line">${inc ? esc(inc) : "沒有加成"}</p><p class="note">${EQUIP_KINDS[e.kind] || "裝備"} · 裝備 ID ${e.id}</p></div>
+    ${sourcesHtml(e)}
+  </div>`;
+}
+const ITEM_COLS = [
+  { label: "道具", sort: (e) => e.name, html: (e) => `${iconTag(e, "items")}<span class="mob-name">${esc(e.name)}</span>` },
+  { label: "類別", sort: (e) => itemKind(e), text: (e) => itemKind(e) },
+  { label: "效果", sort: null, html: (e) => `<span class="fx">${esc(specText(e))}</span>` },
+  { label: "等級", num: true, sort: (e) => e.lv || null, text: (e) => e.lv || "" },
+  { label: "商店價", num: true, sort: (e) => e.price, text: (e) => e.price != null ? fmtInt(e.price) : "" },
+  { label: "會掉的怪", num: true, sort: (e) => e.fromLive.length, text: (e) => e.fromLive.length || "" },
+];
+const atk = (e) => (e.inc.PAD ? `物 ${e.inc.PAD}` : "") + (e.inc.PAD && e.inc.MAD ? "　" : "") + (e.inc.MAD ? `魔 ${e.inc.MAD}` : "");
+const def = (e) => (e.inc.PDD ? `物 ${e.inc.PDD}` : "") + (e.inc.PDD && e.inc.MDD ? "　" : "") + (e.inc.MDD ? `魔 ${e.inc.MDD}` : "");
+const EQUIP_COLS = [
+  { label: "裝備", sort: (e) => e.name, html: (e) => `${iconTag(e, "equips")}<span class="mob-name">${esc(e.name)}</span>` },
+  { label: "類別", sort: (e) => EQUIP_KINDS[e.kind] || "", text: (e) => EQUIP_KINDS[e.kind] || "" },
+  { label: "等級", num: true, sort: (e) => e.lv, text: (e) => e.lv },
+  { label: "職業", sort: (e) => jobText(e.job), text: (e) => jobText(e.job) },
+  { label: "需求", sort: null, html: (e) => `<span class="fx">${["STR", "DEX", "INT", "LUK"].map((k, i) => e.req[i] ? `${k} <b>${e.req[i]}</b>` : "").filter(Boolean).join("　")}</span>` },
+  { label: "攻擊", num: true, sort: (e) => (e.inc.PAD || 0) + (e.inc.MAD || 0) || null, text: atk },
+  { label: "防禦", num: true, sort: (e) => (e.inc.PDD || 0) + (e.inc.MDD || 0) || null, text: def },
+  { label: "其他加成", sort: null, html: (e) => `<span class="fx">${esc(incText(e.inc, ["PAD", "MAD", "PDD", "MDD"]))}</span>` },
+  { label: "升級", num: true, sort: (e) => e.tuc || null, text: (e) => e.tuc || "" },
+  { label: "會掉的怪", num: true, sort: (e) => e.fromLive.length, text: (e) => e.fromLive.length || "" },
+];
+
+// 道具與裝備共用一套表格：排序、篩選、點一列展開，跟怪物圖鑑一樣的操作
+function makeTable(key, cols, detail, filter, defaultNote, defaultSort) {
+  const st = { open: new Set(), sort: { ...defaultSort } };
+  const head = $(`${key}-head`), body = $(`${key}-body`);
+  cols.forEach((c, i) => {
+    const th = document.createElement("th");
+    th.className = (c.num ? "num " : "") + (c.sort ? "sortable" : "");
+    if (c.sort) {
+      th.tabIndex = 0;
+      th.addEventListener("click", () => { st.sort = { col: i, dir: st.sort.col === i ? -st.sort.dir : (c.num ? -1 : 1) }; render(); });
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); th.click(); } });
+    }
+    head.appendChild(th);
+  });
+  function render() {
+    if (!ibook.data) return;
+    const col = cols[st.sort.col];
+    [...head.children].forEach((th, i) => {
+      const on = i === st.sort.col;
+      th.textContent = cols[i].label + (on ? (st.sort.dir > 0 ? " ▲" : " ▼") : "");
+      th.setAttribute("aria-sort", on ? (st.sort.dir > 0 ? "ascending" : "descending") : "none");
+    });
+    const { rows, total } = filter();
+    rows.sort((x, y) => {
+      const a = col.sort(x), b = col.sort(y);
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
+      return (c || x.id - y.id) * st.sort.dir;
+    });
+    $(`${key}-count`).textContent = `${rows.length} / ${total}`;
+    $(`${key}-note`).textContent = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 個，只列前 ${BOOK_ROW_CAP} 個，請縮小範圍。` : defaultNote;
+    body.textContent = "";
+    for (const e of rows.slice(0, BOOK_ROW_CAP)) {
+      const tr = document.createElement("tr");
+      tr.className = "row" + (st.open.has(e.id) ? " open" : "");
+      tr.dataset.id = e.id;
+      tr.tabIndex = 0;
+      for (const c of cols) {
+        const td = document.createElement("td");
+        if (c.html) td.innerHTML = c.html(e);
+        else td.textContent = c.text(e) ?? "";
+        if (c.num) td.className = "num";
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+      if (st.open.has(e.id)) {
+        const d = document.createElement("tr");
+        d.className = "detail";
+        const td = document.createElement("td");
+        td.colSpan = cols.length;
+        td.innerHTML = detail(e);
+        d.appendChild(td);
+        body.appendChild(d);
+      }
+    }
+  }
+  body.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.row");
+    if (!tr) return;
+    const id = Number(tr.dataset.id);
+    if (st.open.has(id)) st.open.delete(id); else st.open.add(id);
+    render();
+  });
+  body.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr.row")) { e.preventDefault(); e.target.click(); }
+  });
+  return render;
+}
+const renderItems = makeTable("items", ITEM_COLS, itemDetail, () => {
+  const q = $("items-q").value.trim().toLowerCase(), kind = $("items-kind").value, drop = $("items-drop").checked;
+  const pool = ibook.data.items;
+  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
+}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開說明與會掉的怪。", { col: 1, dir: 1 });
+const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
+  const q = $("equips-q").value.trim().toLowerCase(), kind = $("equips-kind").value, job = Number($("equips-job").value);
+  const lo = Number($("equips-lo").value) || 0, hi = $("equips-hi").value === "" ? Infinity : Number($("equips-hi").value);
+  const drop = $("equips-drop").checked;
+  const pool = ibook.data.equips;
+  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!job || e.job <= 0 || (e.job & job)) && e.lv >= lo && e.lv <= hi
+    && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
+}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開能力與會掉的怪。", { col: 2, dir: 1 });
+for (const id of ["items-q", "equips-q", "equips-lo", "equips-hi"]) $(id).addEventListener("input", () => renderSub());
+for (const id of ["items-kind", "items-drop", "equips-kind", "equips-job", "equips-drop"]) $(id).addEventListener("change", () => renderSub());
+function renderSub() { if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips(); }
+
+function fillKinds(select, kinds) {
+  for (const [code, label] of kinds) {
+    const opt = document.createElement("option");
+    opt.value = code; opt.textContent = label;
+    select.appendChild(opt);
+  }
+}
+async function loadItemBook() {
+  if (ibook.data || ibook.loading) return;
+  ibook.loading = true;
+  try {
+    await loadBook();
+    if (!book.data) throw new Error("怪物圖鑑沒載入");
+    const res = await fetch("itembook.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    ibook.mobById = new Map(book.data.mobs.map((m) => [m.id, m]));
+    const prep = (e, kindName) => {
+      e.fromLive = e.from.filter((id) => ibook.mobById.get(id)?.live);
+      e.hay = [e.name, e.desc, kindName, ...e.fromLive.map((id) => ibook.mobById.get(id).name)].join("\n").toLowerCase();
+    };
+    for (const e of data.items) prep(e, itemKind(e));
+    for (const e of data.equips) prep(e, EQUIP_KINDS[e.kind] || "");
+    document.documentElement.style.setProperty("--icell", `${data.cell}px`);
+    const seen = new Map();
+    for (const e of data.items) seen.set(e.kind, itemKind(e));
+    fillKinds($("items-kind"), [...seen].sort());
+    fillKinds($("equips-kind"), Object.entries(EQUIP_KINDS));
+    ibook.data = data;
+    renderItems();
+    renderEquips();
+  } catch (err) {
+    for (const key of ["items", "equips"]) {
+      $(`${key}-count`).textContent = "載入失敗";
+      $(`${key}-note`).textContent = "讀不到 itembook.json：" + err.message;
+    }
+  } finally {
+    ibook.loading = false;
+  }
+}
+// 圖鑑裡選了哪個分類也記著；道具、裝備第一次切到才載入
+const SUB_KEY = "mapleexp.book-sub";
+function setSub(id) {
+  if (!document.querySelector(`.subtabs [data-sub="${id}"]`)) id = "mobs";
+  ibook.sub = id;
+  for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.setAttribute("aria-selected", String(btn.dataset.sub === id));
+  $("bestiary").hidden = id !== "mobs";
+  $("itembook").hidden = id !== "items";
+  $("equipbook").hidden = id !== "equips";
+  try { localStorage.setItem(SUB_KEY, id); } catch { /* 存不了就算了 */ }
+  if (!$("tab-book").hidden) {
+    history.replaceState(null, "", id === "mobs" ? "#book" : `#book/${id}`);   // #book/items 可以直接分享
+    if (id !== "mobs") loadItemBook();
+  }
+}
+for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEventListener("click", () => setSub(btn.dataset.sub));
+{
+  let saved = "mobs";
+  try { saved = localStorage.getItem(SUB_KEY) || "mobs"; } catch { /* 讀不到就用預設 */ }
+  ibook.sub = saved;
+}
+
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
-// 網址加 #book 可以直接開圖鑑（分享連結用），網址上的優先於記住的。
+// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備），網址上的優先於記住的。
 const TAB_KEY = "mapleexp.tab";
 const hasTab = (id) => !!document.querySelector(`.tabs [data-tab="${id}"]`);
 function setTab(id) {
@@ -2045,13 +2359,14 @@ function setTab(id) {
   try { localStorage.setItem(TAB_KEY, id); } catch { /* 存不了就算了 */ }
   history.replaceState(null, "", id === "train" ? location.pathname + location.search : `#${id}`);
   if (id === "train") fitHistoryHeight();     // 藏著的時候量不到列高，切回來再量
-  if (id === "book") loadBook();
+  if (id === "book") { loadBook(); setSub(ibook.sub); }
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
 {
   let saved = "";
   try { saved = localStorage.getItem(TAB_KEY) || ""; } catch { /* 讀不到就用預設 */ }
-  const fromUrl = location.hash.slice(1);
+  const [fromUrl, sub] = location.hash.slice(1).split("/");
+  if (fromUrl === "book" && sub) ibook.sub = sub;
   setTab(hasTab(fromUrl) ? fromUrl : hasTab(saved) ? saved : "train");
 }
 
