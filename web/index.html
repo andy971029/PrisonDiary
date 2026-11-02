@@ -405,6 +405,8 @@
   .tip p { margin: 8px 0 0; white-space: pre-line; color: var(--muted); font-size: 12px; }
   .tip h4 { margin: 10px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
   .tip p + h4 { margin-top: 12px; }
+  .chips .reveal { border-style: dashed; color: var(--muted); }
+  .chips .reveal:hover { color: var(--accent); }
   .chips .soon { font-style: normal; padding: 0 4px; font-size: 10px; font-weight: 700; color: var(--muted);
     border: 1px solid var(--line); border-radius: 2px; }
   .tip .tip-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; line-height: 1;
@@ -550,7 +552,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2207,11 +2209,16 @@ function iconTag(e, sheet, size) {
 }
 // 怪物 chip：預設點了彈小卡；小卡裡的用 goto，點了跳到怪物圖鑑那一列並展開
 const mobChip = (m, act = "tip") => `<button type="button" data-${act}="mob" data-id="${m.id}"${act === "goto" ? ' title="到怪物圖鑑看這隻"' : ""}><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small>${m.live ? "" : '<i class="soon">未開放</i>'}</button>`;
-function sourcesHtml(e) {
-  const live = e.fromLive.map((id) => mobChip(ibook.mobById.get(id)));
-  const hidden = e.from.length - e.fromLive.length;
-  return `<div><h4>會掉的怪 ${e.fromLive.length}</h4>${live.length ? `<div class="chips">${live.join("")}</div>` : '<p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>'}${hidden ? `<p class="note">另有 ${hidden} 隻還沒開放的怪會掉。</p>` : ""}</div>`;
+// 「會掉的怪」：預設只列已開放的，未開放的收在最後一顆按鈕後面，點了才攤出來（道具／裝備圖鑑與小卡共用）
+function sourceChips(e, act = "tip") {
+  const mobs = e.from.map((id) => ibook.mobById.get(id)).filter(Boolean).sort((a, b) => (a.level - b.level) || (a.id - b.id));
+  const live = mobs.filter((m) => m.live), soon = mobs.filter((m) => !m.live);
+  if (!mobs.length) return '<h4>會掉的怪 0</h4><p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>';
+  const reveal = soon.length ? `<button type="button" class="reveal" data-reveal title="客戶端沒有任何一張會生成牠們的地圖，還沒開放">${live.length ? "另有" : "只有"}未開放的 ${soon.length} 隻…</button>` : "";
+  return `<h4>會掉的怪 ${live.length}</h4><div class="chips">${live.map((m) => mobChip(m, act)).join("")}${reveal}</div>`
+    + (soon.length ? `<div class="chips soon-chips" hidden>${soon.map((m) => mobChip(m, act)).join("")}</div>` : "");
 }
+const sourcesHtml = (e) => `<div>${sourceChips(e)}</div>`;
 function itemDetail(e) {
   const fx = specText(e);
   return `<div class="mob-detail">
@@ -2388,11 +2395,8 @@ async function loadItemBook() {
 const tip = $("tip");
 const tipHead = (pic, name, sub) => `<div class="tip-head"><div class="tip-pic">${pic}</div><div><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
 const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
-// 小卡裡的「會掉的怪」：全部列出，已開放的在前，未開放的掛標籤；點了跳到怪物圖鑑
-function tipSources(e) {
-  const mobs = e.from.map((id) => ibook.mobById.get(id)).filter(Boolean).sort((a, b) => (b.live - a.live) || (a.level - b.level) || (a.id - b.id));
-  return `<h4>會掉的怪 ${mobs.length}</h4>${mobs.length ? `<div class="chips">${mobs.map((m) => mobChip(m, "goto")).join("")}</div>` : '<p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>'}`;
-}
+// 小卡裡的「會掉的怪」：同一段，但點了怪物是跳到怪物圖鑑，不是再彈一張小卡
+const tipSources = (e) => sourceChips(e, "goto");
 function mobTip(m) {
   return tipHead(picTag(m, 96, 72, ' decoding="async"'), m.name, [m.type, m.boss ? "BOSS" : "", m.live ? "" : "還沒開放"].filter(Boolean).join(" · "))
     + tipRows([["等級", m.level], ["HP / MP", `${fmtInt(m.hp)} / ${fmtInt(m.mp)}`], ["EXP", fmtInt(m.exp)],
@@ -2469,6 +2473,13 @@ function showTip(anchor) {
   tip.scrollTop = 0;
 }
 document.addEventListener("click", (e) => {
+  const rv = e.target.closest("[data-reveal]");
+  if (rv) {                                              // 把收起來的未開放怪攤進同一排，按鈕自己退場
+    const soon = rv.parentElement.nextElementSibling;
+    if (soon?.classList.contains("soon-chips")) { rv.parentElement.append(...soon.children); soon.remove(); }
+    rv.remove();
+    return;
+  }
   const go = e.target.closest("[data-goto]");
   if (go) { gotoMob(Number(go.dataset.id)); return; }
   const anchor = e.target.closest("[data-tip]");
