@@ -376,6 +376,7 @@
   .mob-detail .desc { flex: 1 1 auto; min-width: 0; }
   /* 掉落物、會掉的怪：縮圖 chip，點了彈出小卡。裝備依職業、道具依類別分組 */
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips[hidden] { display: none; }                    /* display: flex 會蓋掉 hidden，收起來的未開放怪要真的藏住 */
   .chips > * { display: inline-flex; align-items: center; gap: 5px; margin: 0; font: 500 12px var(--body); line-height: 1.5;
     color: var(--ink); padding: 2px 8px 2px 4px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
   .chips > span { padding-left: 8px; }
@@ -552,7 +553,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.4</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
