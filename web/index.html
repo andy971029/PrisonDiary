@@ -553,7 +553,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.4</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.5</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2068,7 +2068,7 @@ function bookDetail(m, q, here) {
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
     <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
-    <p class="note">怪物 ID ${m.id}${m.undead ? " · 不死系" : ""}${m.pad != null ? ` · 物攻 ${fmtInt(m.pad)}` : ""}${m.mad != null ? ` · 魔攻 ${fmtInt(m.mad)}` : ""}</p>
+    <p class="note">${[m.undead ? "不死系" : "", m.pad != null ? `物攻 ${fmtInt(m.pad)}` : "", m.mad != null ? `魔攻 ${fmtInt(m.mad)}` : "", `怪物 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
   </div>`;
 }
 
@@ -2224,7 +2224,7 @@ function itemDetail(e) {
   const fx = specText(e);
   return `<div class="mob-detail">
     <div class="portrait">${iconTag(e, "items")}<div class="desc">${e.desc ? `<h4>說明</h4><p>${esc(e.desc)}</p>` : '<p class="note">沒有說明。</p>'}</div></div>
-    <div>${fx ? `<h4>效果</h4><p class="facts-line">${esc(fx)}</p>` : ""}<p class="note">${itemKind(e)} · 道具 ID ${e.id}${e.lv ? ` · 等級 ${e.lv}` : ""}${e.price != null ? ` · 商店價 ${fmtInt(e.price)}` : ""}${e.max ? ` · 一格最多 ${fmtInt(e.max)}` : ""}</p></div>
+    <div>${fx ? `<h4>效果</h4><p class="facts-line">${esc(fx)}</p>` : ""}<p class="note">${[itemKind(e), e.lv ? `等級 ${e.lv}` : "", e.price != null ? `商店價 ${fmtInt(e.price)}` : "", e.max ? `一格最多 ${fmtInt(e.max)}` : "", `道具 ID ${e.id}`].filter(Boolean).join(" · ")}</p></div>
     ${sourcesHtml(e)}
   </div>`;
 }
