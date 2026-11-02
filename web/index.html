@@ -84,7 +84,8 @@
   .book-card .sec-head { align-items: center; }
   .book-card .sec-sub[data-for] { display: none; }
   .book-card[data-sub="mobs"] .sec-sub[data-for="mobs"], .book-card[data-sub="items"] .sec-sub[data-for="items"],
-  .book-card[data-sub="equips"] .sec-sub[data-for="equips"] { display: inline; }
+  .book-card[data-sub="equips"] .sec-sub[data-for="equips"], .book-card[data-sub="quests"] .sec-sub[data-for="quests"],
+  .book-card[data-sub="npcs"] .sec-sub[data-for="npcs"], .book-card[data-sub="maps"] .sec-sub[data-for="maps"] { display: inline; }
   .sub-panel[hidden] { display: none; }
   /* 控制鈕列：頂列右上，靠右排 */
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
@@ -406,6 +407,19 @@
   .tip p { margin: 8px 0 0; white-space: pre-line; color: var(--muted); font-size: 12px; }
   .tip h4 { margin: 10px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
   .tip p + h4 { margin-top: 12px; }
+  /* NPC 站姿圖：表格裡 44px 的框，chip 裡 32px；地圖與任務 chip 沒圖，名字前面是區域或等級的小字 */
+  table.book .npc-pic { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+    margin-right: 8px; vertical-align: middle; }
+  .chips .npc-pic { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin: 0; }
+  .chips small.pre { margin-right: 2px; }
+  .chips .n { font-weight: 700; color: var(--ink); }
+  .mob-detail .pair { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .mob-detail .pair > small { flex: none; color: var(--muted); font-size: 12px; }
+  .mob-detail .pair .chips { display: inline-flex; }
+  .mob-detail .quest-text p + h4 { margin-top: 10px; }
+  .mob-detail .talk { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+  .mob-detail .talk li { margin: 0 0 2px; }
+  .mob-detail .npc-portrait { flex: none; display: flex; align-items: flex-end; justify-content: center; min-width: 80px; }
   .chips .reveal { border-style: dashed; color: var(--muted); }
   .chips .reveal:hover { color: var(--accent); }
   .chips .soon { font-style: normal; padding: 0 4px; font-size: 10px; font-weight: 700; color: var(--muted);
@@ -413,10 +427,12 @@
   .tip .tip-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; line-height: 1;
     font: 700 14px var(--body); background: none; border: 0; color: var(--muted); }
   .tip .tip-x:hover { color: var(--ink); }
-  .mob-maps { margin: 0; padding: 0; list-style: none; font-size: 13px; columns: 2; column-gap: 20px; }
-  .mob-maps li { break-inside: avoid; }
-  .mob-maps li small { color: var(--muted); margin-right: 4px; }
-  .mob-maps li.here { color: var(--accent); font-weight: 700; }
+  .mob-detail h5 { margin: 8px 0 4px; font: 700 12px var(--body); color: var(--muted); }
+  .tip h5 { margin: 8px 0 4px; font: 700 12px var(--body); color: var(--muted); }
+  .tip .goto-row { margin-top: 10px; }
+  .tip .goto-row button { font: 500 12px var(--body); padding: 3px 10px; background: transparent; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: 2px; }
+  .tip .goto-row button:hover { color: var(--accent); border-color: var(--accent); }
   video, canvas#frame { display: none; }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
@@ -553,7 +569,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.6</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.15.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -707,10 +723,16 @@
         <button role="tab" data-sub="mobs" aria-selected="true" aria-controls="bestiary">怪物</button>
         <button role="tab" data-sub="items" aria-selected="false" aria-controls="itembook">道具</button>
         <button role="tab" data-sub="equips" aria-selected="false" aria-controls="equipbook">裝備</button>
+        <button role="tab" data-sub="quests" aria-selected="false" aria-controls="questbook">任務</button>
+        <button role="tab" data-sub="npcs" aria-selected="false" aria-controls="npcbook">NPC</button>
+        <button role="tab" data-sub="maps" aria-selected="false" aria-controls="mapbook">地圖</button>
       </nav>
       <span class="sec-sub" id="book-count" data-for="mobs">載入中…</span>
       <span class="sec-sub" id="items-count" data-for="items">載入中…</span>
       <span class="sec-sub" id="equips-count" data-for="equips">載入中…</span>
+      <span class="sec-sub" id="quests-count" data-for="quests">載入中…</span>
+      <span class="sec-sub" id="npcs-count" data-for="npcs">載入中…</span>
+      <span class="sec-sub" id="maps-count" data-for="maps">載入中…</span>
     </div>
     <section id="bestiary" class="sub-panel" role="tabpanel" aria-label="怪物圖鑑">
       <div class="book-tools">
@@ -733,6 +755,7 @@
         <input type="search" id="items-q" placeholder="搜尋道具名稱、說明或會掉的怪" aria-label="搜尋道具名稱、說明或會掉的怪">
         <select id="items-kind" aria-label="類別"><option value="">全部類別</option></select>
         <label class="switch" title="只列已開放的怪會掉的道具（怪物圖鑑卡上列的掉落物，沒有機率）"><input type="checkbox" id="items-drop"><i></i>只看怪物會掉的</label>
+        <label class="switch" title="只列接得到的任務會給的道具"><input type="checkbox" id="items-quest"><i></i>只看任務給的</label>
       </div>
       <div class="hist-wrap">
         <table class="hist book">
@@ -752,6 +775,7 @@
         </select>
         <label class="lv">等級 <input type="number" id="equips-lo" min="0" max="250" placeholder="0" aria-label="最低需求等級"> – <input type="number" id="equips-hi" min="0" max="250" placeholder="250" aria-label="最高需求等級"></label>
         <label class="switch" title="只列已開放的怪會掉的裝備（怪物圖鑑卡上列的掉落物，沒有機率）"><input type="checkbox" id="equips-drop"><i></i>只看怪物會掉的</label>
+        <label class="switch" title="只列接得到的任務會給的裝備"><input type="checkbox" id="equips-quest"><i></i>只看任務給的</label>
       </div>
       <div class="hist-wrap">
         <table class="hist book">
@@ -760,6 +784,57 @@
         </table>
       </div>
       <p class="note" id="equips-note"></p>
+    </section>
+    <section id="questbook" class="sub-panel" role="tabpanel" aria-label="任務圖鑑" hidden>
+      <div class="book-tools">
+        <input type="search" id="quests-q" placeholder="搜尋任務、NPC、獎勵道具或要打的怪" aria-label="搜尋任務、NPC、獎勵道具或要打的怪">
+        <select id="quests-area" aria-label="區域"><option value="">全部區域</option></select>
+        <select id="quests-job" aria-label="職業">
+          <option value="">全部職業</option><option value="1">劍士</option><option value="2">法師</option>
+          <option value="4">弓箭手</option><option value="8">盜賊</option><option value="16">海盜</option>
+        </select>
+        <label class="lv">等級 <input type="number" id="quests-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="quests-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
+        <label class="switch" title="只列會給道具或裝備的任務"><input type="checkbox" id="quests-item"><i></i>只看給道具的</label>
+        <label class="switch" title="接任務的 NPC 不在任何一張已開放的地圖上，或是活動已經結束的任務"><input type="checkbox" id="quests-all"><i></i>含接不到的任務</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="quests-head"></tr></thead>
+          <tbody id="quests-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="quests-note"></p>
+    </section>
+    <section id="npcbook" class="sub-panel" role="tabpanel" aria-label="NPC 圖鑑" hidden>
+      <div class="book-tools">
+        <input type="search" id="npcs-q" placeholder="搜尋 NPC、職稱、所在地圖或任務" aria-label="搜尋 NPC、職稱、所在地圖或任務">
+        <select id="npcs-func" aria-label="職稱"><option value="">全部職稱</option></select>
+        <label class="switch" title="只列會接或交任務的 NPC"><input type="checkbox" id="npcs-quest"><i></i>只看有任務的</label>
+        <label class="switch" title="客戶端有資料的地圖上都沒站著的 NPC：任務裡才出現的、活動用的、或在還沒開放的區域"><input type="checkbox" id="npcs-all"><i></i>含不在場的 NPC</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="npcs-head"></tr></thead>
+          <tbody id="npcs-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="npcs-note"></p>
+    </section>
+    <section id="mapbook" class="sub-panel" role="tabpanel" aria-label="地圖圖鑑" hidden>
+      <div class="book-tools">
+        <input type="search" id="maps-q" placeholder="搜尋地圖、區域、怪物或 NPC" aria-label="搜尋地圖、區域、怪物或 NPC">
+        <select id="maps-street" aria-label="區域"><option value="">全部區域</option></select>
+        <button class="secondary" id="maps-here" disabled title="讀到地圖名稱後，跳到目前所在的地圖">目前地圖</button>
+        <label class="switch" title="只列有怪會生成的地圖"><input type="checkbox" id="maps-mob"><i></i>只看有怪的</label>
+        <label class="switch" title="只列城鎮"><input type="checkbox" id="maps-town"><i></i>只看城鎮</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="maps-head"></tr></thead>
+          <tbody id="maps-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="maps-note"></p>
     </section>
   </div>
 
@@ -2057,17 +2132,13 @@ function dropGroups(m, q) {
 }
 function bookDetail(m, q, here) {
   const drops = dropGroups(m, q);
-  const maps = (m.live ? m.spawn : m.maps).map((id) => {
-    const [street, name] = book.data.maps[id] || ["", String(id)];
-    const label = `${street} ${name}`.trim();
-    return `<li class="${label === here ? "here" : ""}"><small>${esc(street)}</small>${esc(name)}</li>`;
-  });
+  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", mapLabel(id) === here));
   const portrait = picTag(m, 240, 200, ' decoding="async"');
   const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
   return `<div class="mob-detail">
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
-    <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<ul class="mob-maps">${maps.join("")}</ul>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
+    <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<div class="chips">${maps.join("")}</div>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
     <p class="note">${[m.undead ? "不死系" : "", m.pad != null ? `物攻 ${fmtInt(m.pad)}` : "", m.mad != null ? `魔攻 ${fmtInt(m.mad)}` : "", `怪物 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
   </div>`;
 }
@@ -2143,7 +2214,7 @@ $("book-here").addEventListener("click", () => {
 // 每格叫一次：讀到地圖才能按「目前地圖的怪」；地圖換了而且開著地圖篩選就重列。
 function syncBookTools() {
   const map = $("map-name").textContent;
-  $("book-here").disabled = !map || map === "--";
+  $("book-here").disabled = $("maps-here").disabled = !map || map === "--";
   if ($("book-here").disabled && book.here) { book.here = false; $("book-here").classList.remove("on"); }
   if (map !== book.lastMap) {
     book.lastMap = map;
@@ -2199,7 +2270,7 @@ function specText(e) {
   return out.join("、");
 }
 
-const ibook = { data: null, loading: false, sub: "mobs", mobById: new Map(), itemById: new Map(), equipById: new Map() };
+const ibook = { data: null, promise: null, sub: "mobs", mobById: new Map(), itemById: new Map(), equipById: new Map() };
 // 圖集挖一格：size 給了就整張圖集等比縮小再挖（chip 裡用 24px）
 function iconTag(e, sheet, size) {
   if (e.ic == null) return `<span class="ic"${size ? ` style="width:${size}px;height:${size}px"` : ""}></span>`;
@@ -2209,15 +2280,21 @@ function iconTag(e, sheet, size) {
   return `<span class="ic" style="${sized}background-image:url(icons/${sheet}.png);background-position:-${(e.ic % cols) * cell * k}px -${Math.floor(e.ic / cols) * cell * k}px"></span>`;
 }
 // 怪物 chip：預設點了彈小卡；小卡裡的用 goto，點了跳到怪物圖鑑那一列並展開
-const mobChip = (m, act = "tip") => `<button type="button" data-${act}="mob" data-id="${m.id}"${act === "goto" ? ' title="到怪物圖鑑看這隻"' : ""}><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small>${m.live ? "" : '<i class="soon">未開放</i>'}</button>`;
+const mobChip = (m, act = "tip", extra = "") => `<button type="button" data-${act}="mob" data-id="${m.id}"${act === "goto" ? ' title="到怪物圖鑑看這隻"' : ""}><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small>${extra}${m.live ? "" : '<i class="soon">未開放</i>'}</button>`;
 // 「會掉的怪」：預設只列已開放的，未開放的收在最後一顆按鈕後面，點了才攤出來（道具／裝備圖鑑與小卡共用）
 function sourceChips(e, act = "tip") {
   const mobs = e.from.map((id) => ibook.mobById.get(id)).filter(Boolean).sort((a, b) => (a.level - b.level) || (a.id - b.id));
   const live = mobs.filter((m) => m.live), soon = mobs.filter((m) => !m.live);
-  if (!mobs.length) return '<h4>會掉的怪 0</h4><p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>';
+  const quests = questSources(e, act);
+  if (!mobs.length) return `<h4>會掉的怪 0</h4><p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>${quests}`;
   const reveal = soon.length ? `<button type="button" class="reveal" data-reveal title="客戶端沒有任何一張會生成牠們的地圖，還沒開放">${live.length ? "另有" : "只有"}未開放的 ${soon.length} 隻…</button>` : "";
   return `<h4>會掉的怪 ${live.length}</h4><div class="chips">${live.map((m) => mobChip(m, act)).join("")}${reveal}</div>`
-    + (soon.length ? `<div class="chips soon-chips" hidden>${soon.map((m) => mobChip(m, act)).join("")}</div>` : "");
+    + (soon.length ? `<div class="chips soon-chips" hidden>${soon.map((m) => mobChip(m, act)).join("")}</div>` : "") + quests;
+}
+// 「任務獎勵」：接得到的任務會給這個道具的；任務圖鑑還沒載就先不列
+function questSources(e, act = "tip") {
+  const qs = questsGiving(e.id);
+  return qs.length ? `<h4>任務獎勵 ${qs.length}</h4><div class="chips">${qs.map((q) => questChip(q, act)).join("")}</div>` : "";
 }
 const sourcesHtml = (e) => `<div>${sourceChips(e)}</div>`;
 function itemDetail(e) {
@@ -2246,6 +2323,7 @@ const ITEM_COLS = [
   { label: "等級", num: true, sort: (e) => e.lv || null, text: (e) => e.lv || "" },
   { label: "商店價", num: true, sort: (e) => e.price, text: (e) => e.price != null ? fmtInt(e.price) : "" },
   { label: "會掉的怪", num: true, sort: (e) => e.fromLive.length, text: (e) => e.fromLive.length || "" },
+  { label: "任務", num: true, title: "接得到的任務裡，會給這個當獎勵的", sort: (e) => questsGiving(e.id).length, text: (e) => questsGiving(e.id).length || "" },
 ];
 const atk = (e) => (e.inc.PAD ? `物 ${e.inc.PAD}` : "") + (e.inc.PAD && e.inc.MAD ? "　" : "") + (e.inc.MAD ? `魔 ${e.inc.MAD}` : "");
 const def = (e) => (e.inc.PDD ? `物 ${e.inc.PDD}` : "") + (e.inc.PDD && e.inc.MDD ? "　" : "") + (e.inc.MDD ? `魔 ${e.inc.MDD}` : "");
@@ -2260,12 +2338,16 @@ const EQUIP_COLS = [
   { label: "其他加成", sort: null, html: (e) => `<span class="fx">${esc(incText(e.inc, ["PAD", "MAD", "PDD", "MDD"]))}</span>` },
   { label: "升級", num: true, sort: (e) => e.tuc || null, text: (e) => e.tuc || "" },
   { label: "會掉的怪", num: true, sort: (e) => e.fromLive.length, text: (e) => e.fromLive.length || "" },
+  { label: "任務", num: true, title: "接得到的任務裡，會給這個當獎勵的", sort: (e) => questsGiving(e.id).length, text: (e) => questsGiving(e.id).length || "" },
 ];
 
 // 道具與裝備共用一套表格：排序、篩選、點一列展開，跟怪物圖鑑一樣的操作
-function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit) {
+// opts.ready 說資料載好了沒（預設看道具圖鑑）；opts.reset(q) 把篩選清掉、搜尋設成 q，跳到某一列時用；opts.name(e) 給那一列的名字
+function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit, opts = {}) {
   const st = { open: new Set(), sort: { ...defaultSort } };
   const head = $(`${key}-head`), body = $(`${key}-body`);
+  const ready = opts.ready || (() => !!ibook.data);
+  const cap = opts.cap || BOOK_ROW_CAP;
   cols.forEach((c, i) => {
     const th = document.createElement("th");
     th.className = (c.num ? "num " : "") + (c.sort ? "sortable" : "");
@@ -2277,7 +2359,7 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit) {
     head.appendChild(th);
   });
   function render() {
-    if (!ibook.data) return;
+    if (!ready()) return;
     const col = cols[st.sort.col];
     [...head.children].forEach((th, i) => {
       const on = i === st.sort.col;
@@ -2294,9 +2376,9 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit) {
       return (c || x.id - y.id) * st.sort.dir;
     });
     $(`${key}-count`).textContent = `${rows.length} / ${total} ${unit}`;
-    $(`${key}-note`).textContent = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} ${unit}，只列前 ${BOOK_ROW_CAP} ${unit}，請縮小範圍。` : defaultNote;
+    $(`${key}-note`).textContent = rows.length > cap ? `符合 ${rows.length} ${unit}，只列前 ${cap} ${unit}，請縮小範圍。` : defaultNote;
     body.textContent = "";
-    for (const e of rows.slice(0, BOOK_ROW_CAP)) {
+    for (const e of rows.slice(0, cap)) {
       const tr = document.createElement("tr");
       tr.className = "row" + (st.open.has(e.id) ? " open" : "");
       tr.dataset.id = e.id;
@@ -2330,24 +2412,52 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit) {
   body.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr.row")) { e.preventDefault(); e.target.click(); }
   });
+  // 跳到某一列並展開：篩選會把它濾掉就清掉篩選；符合的太多列不出來就用名字搜；最後捲到眼前
+  render.open = (id, name = "") => {
+    if (!ready()) return;
+    const visible = () => filter().rows.some((e) => e.id === id);
+    if (!visible() && opts.reset) opts.reset("");
+    if (filter().rows.length > cap && opts.reset) opts.reset(name);
+    st.open.add(id);
+    render();
+    scrollToRow(body, id);
+  };
   return render;
 }
+function scrollToRow(body, id) {
+  const tr = body.querySelector(`tr.row[data-id="${id}"]`);
+  if (!tr) return;
+  tr.scrollIntoView({ block: "start" });
+  const wrap = tr.closest(".hist-wrap");
+  wrap.scrollTop -= wrap.querySelector("thead").offsetHeight;   // 別被黏在頂上的表頭蓋住
+  tr.focus({ preventScroll: true });
+}
+// 清掉某個分類的篩選控制項（搜尋框設成 q），跳到某一列前用
+function resetTools(ids, qId, q = "") {
+  for (const id of ids) { const el = $(id); if (el.type === "checkbox") el.checked = false; else el.value = ""; }
+  $(qId).value = q;
+}
 const renderItems = makeTable("items", ITEM_COLS, itemDetail, () => {
-  const q = $("items-q").value.trim().toLowerCase(), kind = $("items-kind").value, drop = $("items-drop").checked;
+  const q = $("items-q").value.trim().toLowerCase(), kind = $("items-kind").value, drop = $("items-drop").checked, quest = $("items-quest").checked;
   const pool = ibook.data.items;
-  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開說明與會掉的怪。", { col: 1, dir: 1 }, "個");
+  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length) && (!q || e.hay.includes(q))), total: pool.length };
+}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；「任務」是接得到的任務會給的。商店賣的這裡看不出來。點一列展開說明與來源。", { col: 1, dir: 1 }, "個",
+  { reset: (q) => resetTools(["items-kind", "items-drop", "items-quest"], "items-q", q) });
 const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
   const q = $("equips-q").value.trim().toLowerCase(), kind = $("equips-kind").value, job = Number($("equips-job").value);
   const lo = Number($("equips-lo").value) || 0, hi = $("equips-hi").value === "" ? Infinity : Number($("equips-hi").value);
-  const drop = $("equips-drop").checked;
+  const drop = $("equips-drop").checked, quest = $("equips-quest").checked;
   const pool = ibook.data.equips;
   return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!job || e.job <= 0 || (e.job & job)) && e.lv >= lo && e.lv <= hi
-    && (!drop || e.fromLive.length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；商店、任務拿得到的這裡看不出來。點一列展開能力與會掉的怪。", { col: 2, dir: 1 }, "件");
+    && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length) && (!q || e.hay.includes(q))), total: pool.length };
+}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；「任務」是接得到的任務會給的。商店賣的這裡看不出來。點一列展開能力與來源。", { col: 2, dir: 1 }, "件",
+  { reset: (q) => resetTools(["equips-kind", "equips-job", "equips-lo", "equips-hi", "equips-drop", "equips-quest"], "equips-q", q) });
 for (const id of ["items-q", "equips-q", "equips-lo", "equips-hi"]) $(id).addEventListener("input", () => renderSub());
-for (const id of ["items-kind", "items-drop", "equips-kind", "equips-job", "equips-drop"]) $(id).addEventListener("change", () => renderSub());
-function renderSub() { if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips(); }
+for (const id of ["items-kind", "items-drop", "items-quest", "equips-kind", "equips-job", "equips-drop", "equips-quest"]) $(id).addEventListener("change", () => renderSub());
+function renderSub() {
+  if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips();
+  else if (ibook.sub === "quests") renderQuests(); else if (ibook.sub === "npcs") renderNpcs(); else if (ibook.sub === "maps") renderMaps();
+}
 
 function fillKinds(select, kinds) {
   for (const [code, label] of kinds) {
@@ -2356,9 +2466,12 @@ function fillKinds(select, kinds) {
     select.appendChild(opt);
   }
 }
-async function loadItemBook() {
-  if (ibook.data || ibook.loading) return;
-  ibook.loading = true;
+// 回同一個 promise：同時從幾個地方要資料也只抓一次，等的人都等得到
+function loadItemBook() {
+  if (!ibook.promise) ibook.promise = loadItemBookNow();
+  return ibook.promise;
+}
+async function loadItemBookNow() {
   try {
     await loadBook();
     if (!book.data) throw new Error("怪物圖鑑沒載入");
@@ -2388,13 +2501,216 @@ async function loadItemBook() {
       $(`${key}-count`).textContent = "載入失敗";
       $(`${key}-note`).textContent = "讀不到 itembook.json：" + err.message;
     }
-  } finally {
-    ibook.loading = false;
   }
 }
+
+// ---------------------------------------------------------------- 任務、NPC、地圖圖鑑
+// questbook.json、npcbook.json、mapbook.json 是客戶端資料的快照（scripts/export_worldbook.py），三份一起載（約 850 KB）。
+// 要先有怪物與道具圖鑑才對得到名字；道具與裝備的「任務獎勵」、怪物的出現地圖小卡也靠這些。
+const wbook = { data: null, promise: null, questById: new Map(), npcById: new Map(), mapById: new Map(),
+  questsByItem: new Map(), questsByNpc: new Map(), questsByMob: new Map(), questsByNext: new Map() };
+const TODAY = new Date().toISOString().slice(0, 10);
+const AUTO_TEXT = { start: "自動開始", accept: "自動接受", complete: "自動完成" };
+const questsGiving = (itemId) => wbook.questsByItem.get(itemId) || [];
+const itemName = (id) => ibook.itemById.get(id)?.name || ibook.equipById.get(id)?.name || wbook.data?.quests.items[id] || book.data?.items[id] || String(id);
+const npcName = (id) => wbook.npcById.get(id)?.name || (id == null ? "" : `NPC ${id}`);
+const mobName = (id) => ibook.mobById.get(id)?.name || String(id);
+const mapLabelW = (id) => { const m = wbook.mapById.get(id); return m ? `${m.street} ${m.name}`.trim() : mapLabel(id) || String(id); };
+const minutesText = (min) => min % 1440 === 0 ? `${min / 1440} 天` : min % 60 === 0 ? `${min / 60} 小時` : `${min} 分鐘`;
+const lvText = (lv) => lv[0] ? `${lv[0]}${lv[1] ? `–${lv[1]}` : ""}` : lv[1] ? `–${lv[1]}` : "";
+function npcPicTag(n, maxW, maxH, extra = "") {
+  if (!n.pic) return "";
+  const [w, h] = n.pic;
+  const k = Math.min(1, maxW / w, maxH / h);
+  return `<img src="npcs/${n.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(n.name)}"${extra}>`;
+}
+const countTag = (n, title = "") => n > 1 ? `<small class="n"${title ? ` title="${title}"` : ""}>×${fmtInt(n)}</small>` : "";
+// 道具 chip：道具圖鑑有的帶圖示、點了彈小卡；沒有的（現金道具之類）只列名字
+function itemChip(id, count = 1, act = "tip", extra = "") {
+  const eq = ibook.equipById.get(id), e = eq || ibook.itemById.get(id);
+  if (!e) return `<span>${esc(itemName(id))}${countTag(count)}${extra}</span>`;
+  return `<button type="button" data-${act}="${eq ? "equip" : "item"}" data-id="${id}">${iconTag(e, eq ? "equips" : "items", 24)}${esc(e.name)}${countTag(count)}${extra}</button>`;
+}
+const mobChipById = (id, count = 1, act = "tip", title = "") => {
+  const m = ibook.mobById.get(id);
+  return m ? mobChip(m, act, countTag(count, title)) : `<span>${esc(String(id))}${countTag(count, title)}</span>`;
+};
+const questChip = (q, act = "tip") => `<button type="button" data-${act}="quest" data-id="${q.id}">${q.lv[0] ? `<small class="pre">Lv.${q.lv[0]}</small>` : ""}${esc(q.name)}${q.live ? "" : `<i class="soon">${q.expired ? "已結束" : "接不到"}</i>`}</button>`;
+const npcChip = (n, act = "tip") => `<button type="button" data-${act}="npc" data-id="${n.id}"><span class="npc-pic">${npcPicTag(n, 32, 32, ' loading="lazy" decoding="async"')}</span>${esc(n.name)}${n.func ? `<small>${esc(n.func)}</small>` : ""}${n.maps.length ? "" : '<i class="soon">不在場</i>'}</button>`;
+const npcChipById = (id, act = "tip") => { const n = wbook.npcById.get(id); return n ? npcChip(n, act) : `<span>NPC ${id}</span>`; };
+// 地圖 chip：地圖圖鑑有的點了彈小卡；沒有的（圖鑑卡上列的、還沒開放的）只列名字
+function mapChip(id, act = "tip", hit = false) {
+  const m = wbook.mapById.get(id);
+  const [street, name] = m ? [m.street, m.name] : (book.data.maps[id] || ["", String(id)]);
+  const inner = `${street ? `<small class="pre">${esc(street)}</small>` : ""}${esc(name)}`;
+  if (!m) return `<span class="${hit ? "hit" : ""}">${inner}${wbook.data ? '<i class="soon">未開放</i>' : ""}</span>`;
+  return `<button type="button" class="${hit ? "hit" : ""}" data-${act}="map" data-id="${id}">${inner}</button>`;
+}
+
+function loadWorld() {
+  if (!wbook.promise) wbook.promise = loadWorldNow();
+  return wbook.promise;
+}
+async function loadWorldNow() {
+  try {
+    await loadItemBook();
+    if (!ibook.data) throw new Error("道具圖鑑沒載入");
+    const [quests, npcs, maps] = await Promise.all(["questbook.json", "npcbook.json", "mapbook.json"].map(async (file) => {
+      const res = await fetch(file, { cache: "no-store" });
+      if (!res.ok) throw new Error(`${file}：HTTP ${res.status}`);
+      return res.json();
+    }));
+    wbook.npcById = new Map(npcs.npcs.map((n) => [n.id, n]));
+    wbook.mapById = new Map(maps.maps.map((m) => [m.id, m]));
+    wbook.questById = new Map(quests.quests.map((q) => [q.id, q]));
+    const push = (index, key, q) => { if (!index.has(key)) index.set(key, []); if (!index.get(key).includes(q)) index.get(key).push(q); };
+    for (const q of quests.quests) {
+      q.expired = !!(q.until && q.until < TODAY);
+      // 接任務的 NPC 站在已開放的地圖上才接得到；沒 NPC 的（自動開始的）算接得到
+      q.live = !q.expired && (!q.start || !!wbook.npcById.get(q.start)?.maps.length);
+      q.areaName = quests.cats[q.area] || "其他";
+      if (q.live) for (const [id] of q.give.items) push(wbook.questsByItem, id, q);
+      for (const id of [q.start, q.end]) if (id) push(wbook.questsByNpc, id, q);
+      for (const [id] of q.need.mobs) push(wbook.questsByMob, id, q);
+      if (q.give.next) push(wbook.questsByNext, q.give.next, q);
+    }
+    for (const q of quests.quests) {
+      q.hay = [q.name, q.parent, q.areaName, npcName(q.start), npcName(q.end), ...q.give.items.map(([id]) => itemName(id)),
+        ...q.need.items.map(([id]) => itemName(id)), ...q.need.mobs.map(([id]) => mobName(id))].join("\n").toLowerCase();
+    }
+    for (const n of npcs.npcs) {
+      n.quests = wbook.questsByNpc.get(n.id) || [];
+      n.hay = [n.name, n.func, ...n.maps.map(mapLabelW), ...n.quests.map((q) => q.name)].join("\n").toLowerCase();
+    }
+    for (const m of maps.maps) {
+      const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
+      m.lvLo = levels.length ? Math.min(...levels) : null;
+      m.lvHi = levels.length ? Math.max(...levels) : null;
+      m.hay = [m.street, m.name, m.desc, ...m.mobs.map(([id]) => mobName(id)), ...m.npcs.map(npcName)].join("\n").toLowerCase();
+    }
+    wbook.data = { quests, npcs, maps };
+    fillKinds($("quests-area"), [...Object.entries(quests.cats), ["none", "其他"]]);
+    fillKinds($("npcs-func"), [...new Set(npcs.npcs.map((n) => n.func).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant")).map((f) => [f, f]));
+    fillKinds($("maps-street"), [...new Set(maps.maps.map((m) => m.street))].map((s) => [s, s]));
+    renderQuests(); renderNpcs(); renderMaps();
+    renderItems(); renderEquips(); renderBook();          // 道具、裝備補上任務獎勵；怪物的出現地圖變成能點的 chip
+  } catch (err) {
+    for (const key of ["quests", "npcs", "maps"]) {
+      $(`${key}-count`).textContent = "載入失敗";
+      $(`${key}-note`).textContent = "讀不到任務、NPC 或地圖圖鑑：" + err.message;
+    }
+  }
+}
+
+// 任務獎勵：固定給的、擇一的、隨機一樣的分開列，道具上掛職業與性別限制
+function rewardHtml(q, act = "tip") {
+  const g = q.give, out = [];
+  const facts = [g.exp ? `EXP ${fmtInt(g.exp)}` : "", g.meso ? `楓幣 ${fmtInt(g.meso)}` : "", g.pop ? `人氣 ${signed(g.pop)}` : "", g.skills.length ? "技能" : ""].filter(Boolean).join(" · ");
+  if (facts) out.push(`<p class="facts-line">${esc(facts)}</p>`);
+  const chip = ([id, n, , job, gender]) => itemChip(id, n, act, `${job ? `<small>${esc(jobText(job))}</small>` : ""}${gender === 0 ? "<small>男</small>" : gender === 1 ? "<small>女</small>" : ""}`);
+  const groups = [["", (p) => p == null], ["擇一", (p) => p === -1], ["隨機一樣", (p) => p > 0]];
+  for (const [label, test] of groups) {
+    const items = g.items.filter(([, , prop]) => test(prop));
+    if (items.length) out.push(`${label ? `<h5>${label}</h5>` : ""}<div class="chips">${items.map(chip).join("")}</div>`);
+  }
+  return out.join("");
+}
+const questFacts = (q) => [q.lv[0] ? `等級 ${q.lv[0]} 以上` : "", q.lv[1] ? `等級 ${q.lv[1]} 以下` : "", q.job ? jobText(q.job) : "",
+  q.interval != null ? (q.interval ? `每 ${minutesText(q.interval)} 可再接` : "可重複接") : "", q.until ? `活動至 ${q.until}` : "", q.auto ? AUTO_TEXT[q.auto] : ""].filter(Boolean).join(" · ");
+const pair = (label, chips) => chips ? `<div class="pair"><small>${label}</small><div class="chips">${chips}</div></div>` : "";
+function questDetail(q) {
+  const facts = questFacts(q);
+  const pre = q.pre.map(([id]) => wbook.questById.get(id)).filter(Boolean).map((p) => questChip(p)).join("");
+  const next = q.give.next && wbook.questById.get(q.give.next) ? questChip(wbook.questById.get(q.give.next)) : "";
+  const leads = (wbook.questsByNext.get(q.id) || []).filter((p) => !q.pre.some(([id]) => id === p.id)).map((p) => questChip(p)).join("");
+  const need = [...q.hold.map(([id, n]) => itemChip(id, n)), ...q.need.items.map(([id, n]) => itemChip(id, n)), ...q.need.mobs.map(([id, n]) => mobChipById(id, n, "tip", "要打的數量"))];
+  const give = rewardHtml(q);
+  const texts = [["接任務前", q.info[0]], ["進行中", q.info[1]], ["完成後", q.info[2]]].filter(([, t]) => t).map(([h, t]) => `<h4>${h}</h4><p>${esc(t)}</p>`).join("");
+  return `<div class="mob-detail">
+    <div class="portrait"><div class="desc">${facts ? `<p class="facts-line">${esc(facts)}</p>` : ""}${q.live ? "" : `<p class="note">${q.expired ? "活動已經結束。" : "接任務的 NPC 不在任何一張已開放的地圖上，現在接不到。"}</p>`}
+      ${pair("接任務", q.start ? npcChipById(q.start) : q.auto ? `<span>${AUTO_TEXT[q.auto]}</span>` : "")}${pair("交任務", q.end ? npcChipById(q.end) : "")}${pair("前置任務", pre || leads)}${pair("接續任務", next)}</div></div>
+    <div><h4>需求</h4>${need.length ? `<div class="chips">${need.join("")}</div>` : '<p class="note">沒有要交的東西或要打的怪。</p>'}${q.startItems.length ? `<h4>接任務時給</h4><div class="chips">${q.startItems.map(([id, n]) => itemChip(id, n)).join("")}</div>` : ""}</div>
+    <div><h4>獎勵</h4>${give || '<p class="note">沒有獎勵。</p>'}</div>
+    ${texts ? `<div class="quest-text" style="grid-column: 1 / -1">${texts}</div>` : ""}
+    <p class="note">${[q.areaName, q.parent && q.parent !== q.name ? `任務線「${q.parent}」` : "", `任務 ID ${q.id}`].filter(Boolean).join(" · ")}</p>
+  </div>`;
+}
+function npcDetail(n) {
+  const starts = n.quests.filter((q) => q.start === n.id), ends = n.quests.filter((q) => q.end === n.id && q.start !== n.id);
+  const crafts = /^(refine|make)/.test(n.script);
+  return `<div class="mob-detail">
+    <div class="portrait"><div class="npc-portrait">${npcPicTag(n, 160, 160, ' decoding="async"')}</div><div class="desc">${n.func ? `<p class="facts-line">${esc(n.func)}</p>` : ""}${crafts ? '<p class="note">會幫玩家製作或精煉東西的 NPC；配方在伺服器端，客戶端沒有。</p>' : ""}${n.talk.length ? `<h4>對話</h4><ul class="talk">${n.talk.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div></div>
+    <div><h4>所在地圖 ${n.maps.length}</h4>${n.maps.length ? `<div class="chips">${n.maps.map((id) => mapChip(id)).join("")}</div>` : '<p class="note">不在任何一張已開放的地圖上。</p>'}${n.away ? `<p class="note">另在 ${n.away} 張還沒開放的地圖上。</p>` : ""}</div>
+    <div><h4>任務 ${n.quests.length}</h4>${starts.length ? `<h5>接</h5><div class="chips">${starts.map((q) => questChip(q)).join("")}</div>` : ""}${ends.length ? `<h5>交</h5><div class="chips">${ends.map((q) => questChip(q)).join("")}</div>` : ""}${n.quests.length ? "" : '<p class="note">沒有任務。</p>'}</div>
+    <p class="note">NPC ID ${n.id}${n.script ? ` · 腳本 ${esc(n.script)}` : ""}</p>
+  </div>`;
+}
+function mapDetail(m) {
+  const facts = [m.town ? "城鎮" : "", m.lvLo ? `怪物等級 ${m.lvLo === m.lvHi ? m.lvLo : `${m.lvLo}–${m.lvHi}`}` : "", m.bgm ? `BGM ${m.bgm}` : ""].filter(Boolean).join(" · ");
+  return `<div class="mob-detail">
+    <div class="portrait"><div class="desc">${facts ? `<p class="facts-line">${esc(facts)}</p>` : ""}${m.desc ? `<p>${esc(m.desc)}</p>` : ""}${pair("回程地圖", m.ret && m.ret !== m.id ? mapChip(m.ret) : "")}</div></div>
+    <div><h4>怪物 ${m.mobs.length}</h4>${m.mobs.length ? `<div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "tip", "生成點數")).join("")}</div>` : '<p class="note">沒有怪會生成。</p>'}</div>
+    <div><h4>NPC ${m.npcs.length}</h4>${m.npcs.length ? `<div class="chips">${m.npcs.map((id) => npcChipById(id)).join("")}</div>` : '<p class="note">沒有 NPC。</p>'}</div>
+    <div><h4>通往 ${m.to.length}</h4>${m.to.length ? `<div class="chips">${m.to.map((id) => mapChip(id)).join("")}</div>` : '<p class="note">沒有通往別張圖的傳送點。</p>'}${m.away ? `<p class="note">另有 ${m.away} 個傳送點通往還沒開放的地圖。</p>` : ""}</div>
+    <p class="note">${[m.street, `地圖 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
+  </div>`;
+}
+
+const npcCell = (id) => { const n = wbook.npcById.get(id); return n ? `<span class="npc-pic">${npcPicTag(n, 44, 44, ' loading="lazy" decoding="async"')}</span>${esc(n.name)}` : `NPC ${id}`; };
+const fewNames = (names, unit) => `<span class="fx">${names.slice(0, 3).map(esc).join("、")}${names.length > 3 ? `…另 ${names.length - 3} ${unit}` : ""}</span>`;
+const QUEST_COLS = [
+  { label: "任務", sort: (q) => q.name, html: (q) => `<span class="mob-name">${esc(q.name)}</span>${q.parent && q.parent !== q.name ? `<span class="mob-kind">${esc(q.parent)}</span>` : ""}${q.interval != null ? '<span class="soon" title="可以重複接">重複</span>' : ""}${q.live ? "" : `<span class="soon" title="${q.expired ? "活動已經結束" : "接任務的 NPC 不在任何一張已開放的地圖上"}">${q.expired ? "已結束" : "接不到"}</span>`}` },
+  { label: "區域", sort: (q) => q.area ?? 99, text: (q) => q.areaName },        // 照客戶端的區域順序（楓之島、維多利亞…），不是筆畫
+  { label: "等級", num: true, sort: (q) => q.lv[0] ?? q.lv[1], text: (q) => lvText(q.lv) },
+  { label: "職業", sort: (q) => jobText(q.job), text: (q) => jobText(q.job) },
+  { label: "接任務", sort: (q) => q.start ? npcName(q.start) : null, html: (q) => q.start ? npcCell(q.start) : q.auto ? `<span class="fx">${AUTO_TEXT[q.auto]}</span>` : "" },
+  { label: "EXP", num: true, sort: (q) => q.give.exp || null, text: (q) => q.give.exp ? fmtInt(q.give.exp) : "" },
+  { label: "楓幣", num: true, sort: (q) => q.give.meso || null, text: (q) => q.give.meso ? fmtInt(q.give.meso) : "" },
+  { label: "獎勵道具", sort: (q) => q.give.items.length || null, html: (q) => fewNames(q.give.items.map(([id]) => itemName(id)), "樣") },
+];
+const NPC_COLS = [
+  { label: "NPC", sort: (n) => n.name, html: (n) => `<span class="npc-pic">${npcPicTag(n, 44, 44, ' loading="lazy" decoding="async"')}</span><span class="mob-name">${esc(n.name)}</span>${n.maps.length ? "" : '<span class="soon" title="客戶端有資料的地圖上都沒站著牠">不在場</span>'}` },
+  { label: "職稱", sort: (n) => n.func || null, text: (n) => n.func },
+  { label: "所在地圖", sort: (n) => n.maps.length ? mapLabelW(n.maps[0]) : null, html: (n) => fewNames(n.maps.map(mapLabelW), "張") },
+  { label: "任務", num: true, sort: (n) => n.quests.length || null, text: (n) => n.quests.length || "" },
+];
+const MAP_COLS = [
+  { label: "地圖", sort: (m) => m.name, html: (m) => `<span class="mob-name">${esc(m.name)}</span>${m.town ? '<span class="mob-kind">城鎮</span>' : ""}` },
+  { label: "區域", sort: (m) => m.street, text: (m) => m.street },
+  { label: "怪物", sort: (m) => m.mobs.length || null, html: (m) => fewNames(m.mobs.map(([id]) => mobName(id)), "種") },
+  { label: "等級", num: true, title: "這張圖的怪的等級範圍", sort: (m) => m.lvLo, text: (m) => m.lvLo ? (m.lvLo === m.lvHi ? String(m.lvLo) : `${m.lvLo}–${m.lvHi}`) : "" },
+  { label: "NPC", num: true, sort: (m) => m.npcs.length || null, text: (m) => m.npcs.length || "" },
+  { label: "通往", num: true, sort: (m) => m.to.length || null, text: (m) => m.to.length || "" },
+];
+const worldReady = () => !!wbook.data;
+const renderQuests = makeTable("quests", QUEST_COLS, questDetail, () => {
+  const q = $("quests-q").value.trim().toLowerCase(), area = $("quests-area").value, job = Number($("quests-job").value);
+  const lo = Number($("quests-lo").value) || 0, hi = $("quests-hi").value === "" ? Infinity : Number($("quests-hi").value);
+  const item = $("quests-item").checked, all = $("quests-all").checked;
+  const pool = wbook.data.quests.quests.filter((x) => all || x.live);
+  return { rows: pool.filter((x) => (!area || (area === "none" ? x.area == null : String(x.area) === area)) && (!job || x.job <= 0 || (x.job & job))
+    && (x.lv[1] == null || x.lv[1] >= lo) && (x.lv[0] == null || x.lv[0] <= hi) && (!item || x.give.items.length) && (!q || x.hay.includes(q))), total: pool.length };
+}, "任務的條件、獎勵與說明來自遊戲客戶端的資料檔。預設只列接得到的：接任務的 NPC 站在已開放的地圖上、活動沒結束。點一列展開需求、獎勵與說明。", { col: 1, dir: 1 }, "個",
+  { ready: worldReady, cap: 600, reset: (q) => { resetTools(["quests-area", "quests-job", "quests-lo", "quests-hi", "quests-item"], "quests-q", q); $("quests-all").checked = true; } });
+const renderNpcs = makeTable("npcs", NPC_COLS, npcDetail, () => {
+  const q = $("npcs-q").value.trim().toLowerCase(), func = $("npcs-func").value, quest = $("npcs-quest").checked, all = $("npcs-all").checked;
+  const pool = wbook.data.npcs.npcs.filter((n) => all || n.maps.length);
+  return { rows: pool.filter((n) => (!func || n.func === func) && (!quest || n.quests.length) && (!q || n.hay.includes(q))), total: pool.length };
+}, "名字、職稱、對話與站的位置來自遊戲客戶端的資料檔。預設只列站在已開放地圖上的 NPC。點一列展開所在地圖與任務。", { col: 2, dir: 1 }, "個",
+  { ready: worldReady, reset: (q) => { resetTools(["npcs-func", "npcs-quest"], "npcs-q", q); $("npcs-all").checked = true; } });
+const renderMaps = makeTable("maps", MAP_COLS, mapDetail, () => {
+  const q = $("maps-q").value.trim().toLowerCase(), street = $("maps-street").value, mob = $("maps-mob").checked, town = $("maps-town").checked;
+  const pool = wbook.data.maps.maps;
+  return { rows: pool.filter((m) => (!street || m.street === street) && (!mob || m.mobs.length) && (!town || m.town) && (!q || m.hay.includes(q))), total: pool.length };
+}, "只有客戶端有資料的地圖，也就是已開放的區域。怪物是生成清單上的（召喚出來的王不在上面）。點一列展開怪物、NPC 與相鄰地圖。", { col: 1, dir: 1 }, "張",
+  { ready: worldReady, cap: 600, reset: (q) => resetTools(["maps-street", "maps-mob", "maps-town"], "maps-q", q) });
+for (const id of ["quests-q", "quests-lo", "quests-hi", "npcs-q", "maps-q"]) $(id).addEventListener("input", () => renderSub());
+for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all", "maps-street", "maps-mob", "maps-town"]) $(id).addEventListener("change", () => renderSub());
+$("maps-here").addEventListener("click", () => { resetTools(["maps-street", "maps-mob", "maps-town"], "maps-q", $("map-name").textContent); renderMaps(); });
+
 // ---------------------------------------------------------------- 點 chip 彈出的小卡：怪物、道具、裝備各一種內容
 const tip = $("tip");
-const tipHead = (pic, name, sub) => `<div class="tip-head"><div class="tip-pic">${pic}</div><div><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
+const tipHead = (pic, name, sub) => `<div class="tip-head">${pic ? `<div class="tip-pic">${pic}</div>` : ""}<div><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
 const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
 // 小卡裡的「會掉的怪」：同一段，但點了怪物是跳到怪物圖鑑，不是再彈一張小卡
 const tipSources = (e) => sourceChips(e, "goto");
@@ -2421,6 +2737,29 @@ function equipTip(e) {
     + (e.desc ? `<p>${esc(e.desc)}</p>` : "")
     + tipSources(e);
 }
+function questTip(q) {
+  return tipHead("", q.name, [q.areaName, q.parent && q.parent !== q.name ? q.parent : ""].filter(Boolean).join(" · "))
+    + tipRows([["條件", questFacts(q)], ["接任務", q.start ? npcName(q.start) : AUTO_TEXT[q.auto] || ""], ["交任務", q.end && q.end !== q.start ? npcName(q.end) : ""],
+      ["前置任務", q.pre.map(([id]) => wbook.questById.get(id)?.name).filter(Boolean).join("、")],
+      ["需求", [...q.need.items.map(([id, n]) => `${itemName(id)}${n > 1 ? ` ×${n}` : ""}`), ...q.need.mobs.map(([id, n]) => `${mobName(id)} ×${n}`)].join("、")],
+      ["獎勵", [q.give.exp ? `EXP ${fmtInt(q.give.exp)}` : "", q.give.meso ? `楓幣 ${fmtInt(q.give.meso)}` : "", q.give.pop ? `人氣 ${signed(q.give.pop)}` : ""].filter(Boolean).join("、")],
+      ["狀態", q.live ? "" : q.expired ? "活動已結束" : "接任務的 NPC 不在已開放的地圖上"]])
+    + (q.give.items.length ? `<h5>獎勵道具</h5><div class="chips">${q.give.items.map(([id, n]) => itemChip(id, n, "goto")).join("")}</div>` : "")
+    + (q.info[0] ? `<p>${esc(q.info[0])}</p>` : "");
+}
+function npcTip(n) {
+  return tipHead(npcPicTag(n, 72, 72, ' decoding="async"'), n.name, n.func)
+    + tipRows([["任務", n.quests.length || ""], ["對話", n.talk[0] || ""]])
+    + (n.maps.length ? `<h5>所在地圖</h5><div class="chips">${n.maps.map((id) => mapChip(id, "goto")).join("")}</div>`
+      : `<p>${n.away ? `只在 ${n.away} 張還沒開放的地圖上。` : "不在任何一張已開放的地圖上。"}</p>`);
+}
+function mapTip(m) {
+  return tipHead("", m.name, [m.street, m.town ? "城鎮" : "", m.lvLo ? `怪物 Lv.${m.lvLo === m.lvHi ? m.lvLo : `${m.lvLo}–${m.lvHi}`}` : ""].filter(Boolean).join(" · "))
+    + tipRows([["NPC", m.npcs.map(npcName).join("、")], ["通往", m.to.map((id) => wbook.mapById.get(id)?.name || id).join("、")],
+      ["回程", m.ret && m.ret !== m.id ? wbook.mapById.get(m.ret)?.name || "" : ""]])
+    + (m.mobs.length ? `<h5>怪物</h5><div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "goto", "生成點數")).join("")}</div>` : "")
+    + (m.desc ? `<p>${esc(m.desc)}</p>` : "");
+}
 // 小卡裡點了怪物：關小卡、切到怪物圖鑑，放寬到看得見牠的篩選，展開那一列並捲到眼前
 function gotoMob(id) {
   const m = ibook.mobById.get(id);
@@ -2438,17 +2777,27 @@ function gotoMob(id) {
   if (bookFilter().rows.length > BOOK_ROW_CAP) $("book-q").value = m.name;   // 太多列只列前幾百隻，用名字縮到牠
   book.open.add(id);
   renderBook();
-  const tr = $("book-body").querySelector(`tr.row[data-id="${id}"]`);
-  if (!tr) return;
-  tr.scrollIntoView({ block: "start" });
-  const wrap = tr.closest(".hist-wrap");
-  wrap.scrollTop -= wrap.querySelector("thead").offsetHeight;   // 別被黏在頂上的表頭蓋住
-  tr.focus({ preventScroll: true });
+  scrollToRow($("book-body"), id);
+}
+// 小卡裡點了任何 chip：關小卡、切到那個分類、資料沒載就先載，再跳到那一列展開
+const SUB_OF = { mob: "mobs", item: "items", equip: "equips", quest: "quests", npc: "npcs", map: "maps" };
+async function goto(kind, id) {
+  if (kind === "mob") { gotoMob(id); return; }
+  hideTip();
+  setTab("book");
+  setSub(SUB_OF[kind]);
+  await (kind === "item" || kind === "equip" ? loadItemBook() : loadWorld());
+  const table = { item: renderItems, equip: renderEquips, quest: renderQuests, npc: renderNpcs, map: renderMaps }[kind];
+  const e = { item: ibook.itemById, equip: ibook.equipById, quest: wbook.questById, npc: wbook.npcById, map: wbook.mapById }[kind].get(id);
+  if (table && e) table.open(id, e.name);
 }
 function tipHtml(kind, id) {
   if (kind === "mob") { const m = ibook.mobById.get(id); return m ? mobTip(m) : ""; }
   if (kind === "item") { const e = ibook.itemById.get(id); return e ? itemTip(e) : ""; }
   if (kind === "equip") { const e = ibook.equipById.get(id); return e ? equipTip(e) : ""; }
+  if (kind === "quest") { const q = wbook.questById.get(id); return q ? questTip(q) : ""; }
+  if (kind === "npc") { const n = wbook.npcById.get(id); return n ? npcTip(n) : ""; }
+  if (kind === "map") { const m = wbook.mapById.get(id); return m ? mapTip(m) : ""; }
   return "";
 }
 function hideTip() {
@@ -2462,7 +2811,8 @@ function showTip(anchor) {
   const html = tipHtml(anchor.dataset.tip, Number(anchor.dataset.id));
   if (!html) return;
   hideTip();
-  tip.innerHTML = html + '<button type="button" class="tip-x" aria-label="關閉">✕</button>';
+  const goRow = `<div class="goto-row"><button type="button" data-goto="${anchor.dataset.tip}" data-id="${anchor.dataset.id}">在圖鑑裡展開</button></div>`;
+  tip.innerHTML = html + goRow + '<button type="button" class="tip-x" aria-label="關閉">✕</button>';
   tip.dataset.key = key;
   tip.hidden = false;
   anchor.classList.add("on");
@@ -2482,7 +2832,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   const go = e.target.closest("[data-goto]");
-  if (go) { gotoMob(Number(go.dataset.id)); return; }
+  if (go) { goto(go.dataset.goto, Number(go.dataset.id)); return; }
   const anchor = e.target.closest("[data-tip]");
   if (anchor) { showTip(anchor); return; }
   if (e.target.closest(".tip-x") || !tip.contains(e.target)) hideTip();
@@ -2498,13 +2848,12 @@ function setSub(id) {
   ibook.sub = id;
   for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.setAttribute("aria-selected", String(btn.dataset.sub === id));
   $("tab-book").dataset.sub = id;                       // 標題列右邊只顯示這個分類的計數
-  $("bestiary").hidden = id !== "mobs";
-  $("itembook").hidden = id !== "items";
-  $("equipbook").hidden = id !== "equips";
+  for (const [panel, sub] of [["bestiary", "mobs"], ["itembook", "items"], ["equipbook", "equips"], ["questbook", "quests"], ["npcbook", "npcs"], ["mapbook", "maps"]])
+    $(panel).hidden = id !== sub;
   try { localStorage.setItem(SUB_KEY, id); } catch { /* 存不了就算了 */ }
   if (!$("tab-book").hidden) {
     history.replaceState(null, "", id === "mobs" ? "#book" : `#book/${id}`);   // #book/items 可以直接分享
-    if (id !== "mobs") loadItemBook();
+    if (id !== "mobs") loadWorld();                       // 道具、裝備也要任務圖鑑才有「任務獎勵」
   }
 }
 for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEventListener("click", () => setSub(btn.dataset.sub));
@@ -2525,7 +2874,7 @@ function setTab(id) {
   try { localStorage.setItem(TAB_KEY, id); } catch { /* 存不了就算了 */ }
   history.replaceState(null, "", id === "train" ? location.pathname + location.search : `#${id}`);
   if (id === "train") fitHistoryHeight();     // 藏著的時候量不到列高，切回來再量
-  if (id === "book") { loadItemBook(); setSub(ibook.sub); }   // 連道具資料一起載：怪物的掉落物要縮圖
+  if (id === "book") { loadWorld(); setSub(ibook.sub); }   // 連道具、任務、地圖資料一起載：怪物的掉落物要縮圖、出現地圖要小卡
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
 {
