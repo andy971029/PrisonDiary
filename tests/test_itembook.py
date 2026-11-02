@@ -99,3 +99,13 @@ class Drops(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CleanTextTest(unittest.TestCase):
+    def test_strips_colour_markup_and_normalises_newlines(self):
+        self.assertEqual(itembook.clean_text("#c雙擊#使用後，可獲得#c30分鐘# 的Buff。\r\n\r\n#c無法疊加。"),
+                         "雙擊使用後，可獲得30分鐘 的Buff。\n\n無法疊加。")
+        self.assertEqual(itembook.clean_text("#c網咖專用物品。\r\n#"), "網咖專用物品。")
+        self.assertEqual(itembook.clean_text("一行\n二行 \r三行"), "一行\n二行\n三行")
+        self.assertEqual(itembook.clean_text("龍騎士的箱子。 #c點二下後可以打開。"), "龍騎士的箱子。 點二下後可以打開。")
+        self.assertEqual(itembook.clean_text(None), "")

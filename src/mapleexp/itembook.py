@@ -59,6 +59,25 @@ def _int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def clean_text(text: Any) -> str:
+    """客戶端的說明文字 → 網頁能直接印的純文字。
+
+    客戶端的字串用 ``#c…#`` 把一段字標成強調色（道具說明幾乎只用這一種；NPC 對話還有 ``#r`` 紅、``#b`` 藍、
+    ``#e`` 粗體等，都是一個 ``#`` 收尾），網頁不照客戶端的顏色畫，所以整個拆掉只留字。換行有的是真的
+    CR／LF，有的是寫成兩個字元的 ``\\r``、``\\n``，統一成 LF；三個以上的連續換行縮成一個空行。
+    """
+    text = str(text or "")
+    for raw in ("\\r\\n", "\\r", "\\n"):          # 寫成兩個字元的換行
+        text = text.replace(raw, "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("#c", "").replace("#", "")
+    lines = [line.rstrip() for line in text.split("\n")]
+    text = "\n".join(lines)
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text.strip()
+
+
 def _name(record: dict) -> str:
     """名稱表的名字；只有標點（``..``、``-``）的是佔位用的，當作沒名字。"""
     name = str(record.get("name") or "").strip()
@@ -103,7 +122,7 @@ def build_equips(assets: dict[str, dict], names: dict, drops: dict[int, list[int
             "tuc": _int(info.get("tuc")) or 0,
             "spd": _int(info.get("attackSpeed")),
             "price": _int(info.get("price")),
-            "desc": str(record.get("desc") or "").replace("\\n", "\n").strip(),
+            "desc": clean_text(record.get("desc")),
             "from": drops.get(item_id, []),
         })
     out.sort(key=lambda e: (e["kind"], e["lv"], e["id"]))
@@ -131,7 +150,7 @@ def build_items(groups: dict[str, dict], names: dict, drops: dict[int, list[int]
             kept = {k: v for k, v in spec.items() if k in SPEC_KEYS and (_int(v) is not None or isinstance(v, str))}
             out.append({
                 "id": item_id, "name": name, "kind": raw_id[:4],
-                "desc": str(record.get("desc") or "").replace("\\n", "\n").strip(),
+                "desc": clean_text(record.get("desc")),
                 "price": _int(info.get("price")),
                 "max": _int(info.get("slotMax")),
                 "spec": kept,
