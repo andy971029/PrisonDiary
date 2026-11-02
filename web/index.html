@@ -403,6 +403,10 @@
   .tip dt { color: var(--muted); white-space: nowrap; }
   .tip dd { margin: 0; font: 500 13px var(--body); letter-spacing: 0; line-height: 1.6; font-variant-numeric: tabular-nums; }
   .tip p { margin: 8px 0 0; white-space: pre-line; color: var(--muted); font-size: 12px; }
+  .tip h4 { margin: 10px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
+  .tip p + h4 { margin-top: 12px; }
+  .chips .soon { font-style: normal; padding: 0 4px; font-size: 10px; font-weight: 700; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 2px; }
   .tip .tip-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; line-height: 1;
     font: 700 14px var(--body); background: none; border: 0; color: var(--muted); }
   .tip .tip-x:hover { color: var(--ink); }
@@ -546,7 +550,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2201,7 +2205,8 @@ function iconTag(e, sheet, size) {
   const sized = size ? `width:${size}px;height:${size}px;background-size:${cols * cell * k}px auto;` : "";
   return `<span class="ic" style="${sized}background-image:url(icons/${sheet}.png);background-position:-${(e.ic % cols) * cell * k}px -${Math.floor(e.ic / cols) * cell * k}px"></span>`;
 }
-const mobChip = (m) => `<button type="button" data-tip="mob" data-id="${m.id}"><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small></button>`;
+// 怪物 chip：預設點了彈小卡；小卡裡的用 goto，點了跳到怪物圖鑑那一列並展開
+const mobChip = (m, act = "tip") => `<button type="button" data-${act}="mob" data-id="${m.id}"${act === "goto" ? ' title="到怪物圖鑑看這隻"' : ""}><span class="mob-pic">${picTag(m, 32, 24, ' loading="lazy" decoding="async"')}</span>${esc(m.name)}<small>Lv.${m.level}</small>${m.live ? "" : '<i class="soon">未開放</i>'}</button>`;
 function sourcesHtml(e) {
   const live = e.fromLive.map((id) => mobChip(ibook.mobById.get(id)));
   const hidden = e.from.length - e.fromLive.length;
@@ -2383,10 +2388,11 @@ async function loadItemBook() {
 const tip = $("tip");
 const tipHead = (pic, name, sub) => `<div class="tip-head"><div class="tip-pic">${pic}</div><div><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div></div>`;
 const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
-const someMobs = (ids) => {
-  const names = ids.slice(0, 6).map((id) => ibook.mobById.get(id).name);
-  return names.join("、") + (ids.length > 6 ? `…另 ${ids.length - 6} 隻` : "");
-};
+// 小卡裡的「會掉的怪」：全部列出，已開放的在前，未開放的掛標籤；點了跳到怪物圖鑑
+function tipSources(e) {
+  const mobs = e.from.map((id) => ibook.mobById.get(id)).filter(Boolean).sort((a, b) => (b.live - a.live) || (a.level - b.level) || (a.id - b.id));
+  return `<h4>會掉的怪 ${mobs.length}</h4>${mobs.length ? `<div class="chips">${mobs.map((m) => mobChip(m, "goto")).join("")}</div>` : '<p class="note">怪物圖鑑卡上沒有列會掉這個的怪。</p>'}`;
+}
 function mobTip(m) {
   return tipHead(picTag(m, 96, 72, ' decoding="async"'), m.name, [m.type, m.boss ? "BOSS" : "", m.live ? "" : "還沒開放"].filter(Boolean).join(" · "))
     + tipRows([["等級", m.level], ["HP / MP", `${fmtInt(m.hp)} / ${fmtInt(m.mp)}`], ["EXP", fmtInt(m.exp)],
@@ -2396,20 +2402,43 @@ function mobTip(m) {
     + (m.desc ? `<p>${esc(m.desc)}</p>` : "");
 }
 function itemTip(e) {
-  const hidden = e.from.length - e.fromLive.length;
   return tipHead(iconTag(e, "items"), e.name, itemKind(e))
     + tipRows([["效果", specText(e)], ["等級", e.lv || ""], ["商店價", e.price != null ? fmtInt(e.price) : ""],
-      ["一格最多", e.max ? fmtInt(e.max) : ""], ["會掉的怪", e.fromLive.length ? someMobs(e.fromLive) : hidden ? `只有還沒開放的 ${hidden} 隻` : "圖鑑卡上沒有"]])
-    + (e.desc ? `<p>${esc(e.desc)}</p>` : "");
+      ["一格最多", e.max ? fmtInt(e.max) : ""]])
+    + (e.desc ? `<p>${esc(e.desc)}</p>` : "")
+    + tipSources(e);
 }
 function equipTip(e) {
   const req = ["STR", "DEX", "INT", "LUK"].map((k, i) => e.req[i] ? `${k} ${e.req[i]}` : "").filter(Boolean).join("、");
-  const hidden = e.from.length - e.fromLive.length;
   return tipHead(iconTag(e, "equips"), e.name, `${EQUIP_KINDS[e.kind] || "裝備"} · ${jobText(e.job)} · Lv.${e.lv}`)
     + tipRows([["需求", req], ["攻擊", atk(e)], ["防禦", def(e)], ["其他加成", incText(e.inc, ["PAD", "MAD", "PDD", "MDD"])],
-      ["攻擊速度", e.spd != null ? e.spd : ""], ["可升級", e.tuc ? `${e.tuc} 次` : ""], ["商店價", e.price != null ? fmtInt(e.price) : ""],
-      ["會掉的怪", e.fromLive.length ? someMobs(e.fromLive) : hidden ? `只有還沒開放的 ${hidden} 隻` : "圖鑑卡上沒有"]])
-    + (e.desc ? `<p>${esc(e.desc)}</p>` : "");
+      ["攻擊速度", e.spd != null ? e.spd : ""], ["可升級", e.tuc ? `${e.tuc} 次` : ""], ["商店價", e.price != null ? fmtInt(e.price) : ""]])
+    + (e.desc ? `<p>${esc(e.desc)}</p>` : "")
+    + tipSources(e);
+}
+// 小卡裡點了怪物：關小卡、切到怪物圖鑑，放寬到看得見牠的篩選，展開那一列並捲到眼前
+function gotoMob(id) {
+  const m = ibook.mobById.get(id);
+  if (!m) return;
+  hideTip();
+  setTab("book");
+  setSub("mobs");
+  if (!m.live) $("book-unreleased").checked = true;
+  if (!m.card) $("book-all").checked = true;
+  const visible = () => bookFilter().rows.some((r) => r.id === id);
+  if (!visible()) {
+    $("book-q").value = ""; $("book-lo").value = ""; $("book-hi").value = "";
+    if (book.here) { book.here = false; $("book-here").classList.remove("on"); }
+  }
+  if (bookFilter().rows.length > BOOK_ROW_CAP) $("book-q").value = m.name;   // 太多列只列前幾百隻，用名字縮到牠
+  book.open.add(id);
+  renderBook();
+  const tr = $("book-body").querySelector(`tr.row[data-id="${id}"]`);
+  if (!tr) return;
+  tr.scrollIntoView({ block: "start" });
+  const wrap = tr.closest(".hist-wrap");
+  wrap.scrollTop -= wrap.querySelector("thead").offsetHeight;   // 別被黏在頂上的表頭蓋住
+  tr.focus({ preventScroll: true });
 }
 function tipHtml(kind, id) {
   if (kind === "mob") { const m = ibook.mobById.get(id); return m ? mobTip(m) : ""; }
@@ -2440,6 +2469,8 @@ function showTip(anchor) {
   tip.scrollTop = 0;
 }
 document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-goto]");
+  if (go) { gotoMob(Number(go.dataset.id)); return; }
   const anchor = e.target.closest("[data-tip]");
   if (anchor) { showTip(anchor); return; }
   if (e.target.closest(".tip-x") || !tip.contains(e.target)) hideTip();
