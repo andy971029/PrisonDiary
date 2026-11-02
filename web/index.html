@@ -546,7 +546,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.14.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2028,7 +2028,9 @@ function bookFilter() {
 
 // 職業分組的順序：全職業、初心者、五個職業、再來是多職業的組合
 const JOB_ORDER = (job) => job < 0 ? 1 : !job ? 0 : [1, 2, 4, 8, 16].includes(job) ? 2 + Math.log2(job) : 9;
-// 掉落物：裝備依職業、道具依類別分組，chip 帶縮圖，點了彈小卡。道具資料還沒載到就先列名字。
+// 掉落物：裝備依職業、道具依背包分頁（消耗／設置／其他，即 ID 前兩碼）分組，chip 帶縮圖，點了彈小卡。道具資料還沒載到就先列名字。
+const DROP_TABS = { "02": "消耗", "03": "設置", "04": "其他" };
+const dropTab = (it) => DROP_TABS[it.kind.slice(0, 2)] || "其他";
 function dropGroups(m, q) {
   const groups = new Map();
   const add = (key, order, html) => {
@@ -2040,8 +2042,8 @@ function dropGroups(m, q) {
     const hit = q && name.toLowerCase().includes(q) ? " hit" : "";
     const eq = ibook.equipById.get(id), it = ibook.itemById.get(id);
     if (eq) add(`裝備 · ${jobText(eq.job)}`, JOB_ORDER(eq.job), `<button type="button" class="${hit.trim()}" data-tip="equip" data-id="${id}">${iconTag(eq, "equips", 24)}${esc(name)}</button>`);
-    else if (it) add(itemKind(it), 100 + Number(it.kind), `<button type="button" class="${hit.trim()}" data-tip="item" data-id="${id}">${iconTag(it, "items", 24)}${esc(name)}</button>`);
-    else add(ibook.data ? "其他" : "", 999, `<span class="${hit.trim()}">${esc(name)}</span>`);
+    else if (it) add(dropTab(it), 100 + Number(it.kind.slice(0, 2)), `<button type="button" class="${hit.trim()}" data-tip="item" data-id="${id}">${iconTag(it, "items", 24)}${esc(name)}</button>`);
+    else add(ibook.data ? "未收錄" : "", 999, `<span class="${hit.trim()}">${esc(name)}</span>`);
   }
   return [...groups].sort((a, b) => a[1].order - b[1].order).map(([label, g]) =>
     `<div class="drop-group">${label ? `<h5>${esc(label)}<small>${g.chips.length}</small></h5>` : ""}<div class="chips">${g.chips.join("")}</div></div>`);
