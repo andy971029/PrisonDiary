@@ -81,7 +81,7 @@
     background: none; border: 0; border-radius: 3px; color: var(--muted); }
   .subtabs button:hover { color: var(--ink); background: var(--surface); }
   .subtabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
-  .book-card .sec-head { align-items: center; }
+  .book-card .sec-head { align-items: center; flex-wrap: wrap; }
   .book-card .sec-sub[data-for] { display: none; }
   .book-card[data-sub="mobs"] .sec-sub[data-for="mobs"], .book-card[data-sub="items"] .sec-sub[data-for="items"],
   .book-card[data-sub="equips"] .sec-sub[data-for="equips"], .book-card[data-sub="quests"] .sec-sub[data-for="quests"],
@@ -433,6 +433,49 @@
   .tip .goto-row button { font: 500 12px var(--body); padding: 3px 10px; background: transparent; color: var(--muted);
     border: 1px dashed var(--line); border-radius: 2px; }
   .tip .goto-row button:hover { color: var(--accent); border-color: var(--accent); }
+  /* 世界地圖：底圖 640 寬，節點與亮起來的圖層都用百分比疊上去，縮放時跟著走；手機上太擠就在框裡左右捲 */
+  .wm-layout { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px 20px; align-items: start; }
+  @media (max-width: 1000px) { .wm-layout { grid-template-columns: minmax(0, 1fr); } .wm-main { max-width: 640px; } }
+  .wm-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-height: 26px; margin-bottom: 6px; font-size: 13px; }
+  .wm-crumbs b { font-weight: 700; }
+  .wm-crumbs i { font-style: normal; color: var(--muted); }
+  .wm-crumbs button { padding: 2px 6px; font: 500 13px var(--body); color: var(--accent); background: none; border: 0; cursor: pointer; }
+  .wm-crumbs button:hover { text-decoration: underline; }
+  .wm-scroll { overflow-x: auto; }
+  .wm-stage { position: relative; min-width: 500px; touch-action: manipulation; }
+  .wm-stage.link { cursor: pointer; }
+  .wm-stage > img { display: block; }
+  #wm-base { width: 100%; height: auto; }
+  .wm-glow { position: absolute; pointer-events: none; }
+  .wm-glow[hidden], .wm-cur[hidden], .wm-hover[hidden], .wm-results[hidden] { display: none; }
+  .wm-node { position: absolute; width: 22px; min-width: 0; height: 22px; display: grid; place-items: center; padding: 0;
+    transform: translate(-50%, -50%); background: none; border: 0; border-radius: 50%; box-shadow: none; cursor: pointer; }
+  .wm-node img { display: block; transition: transform .1s; }
+  .wm-node:hover img, .wm-node:focus-visible img { transform: scale(1.35); }
+  .wm-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+  .wm-node.off img { filter: grayscale(1); opacity: .6; }
+  .wm-node.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px #b5600a; }
+  .wm-cur { position: absolute; z-index: 2; transform: translate(-50%, -100%); pointer-events: none; }
+  .wm-hover { position: absolute; z-index: 3; max-width: 240px; padding: 5px 9px; pointer-events: none; font-size: 12px; line-height: 1.5;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: 2px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+  .wm-hover b { display: block; font-size: 13px; }
+  .wm-hover small { display: block; color: var(--muted); }
+  .wm-links { margin-top: 8px; }
+  .wm-links:empty { display: none; }
+  .wm-links::before { content: "進入"; align-self: center; margin-right: 4px; font-size: 12px; color: var(--muted); }
+  .wm-side { min-width: 0; font-size: 13px; line-height: 1.6; }
+  .wm-side h3 { margin: 0 0 2px; font: 700 16px var(--body); }
+  .wm-side h4 { margin: 12px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
+  .wm-side > p { margin: 0 0 6px; white-space: pre-line; }
+  .wm-side .mob-detail { grid-template-columns: minmax(0, 1fr); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .wm-side .note { margin: 6px 0 0; }
+  .wm-results { margin-bottom: 14px; }
+  .wm-results p { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+  .wm-others { margin-top: 16px; }
+  .wm-others summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+  .wm-others h5 { margin: 12px 0 4px; font: 700 12px var(--body); color: var(--muted); }
+  .wm-others h5 small { font-weight: 400; margin-left: 4px; }
   video, canvas#frame { display: none; }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } }
 </style>
@@ -569,7 +612,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.15.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -823,17 +866,29 @@
     <section id="mapbook" class="sub-panel" role="tabpanel" aria-label="地圖圖鑑" hidden>
       <div class="book-tools">
         <input type="search" id="maps-q" placeholder="搜尋地圖、區域、怪物或 NPC" aria-label="搜尋地圖、區域、怪物或 NPC">
-        <select id="maps-street" aria-label="區域"><option value="">全部區域</option></select>
         <button class="secondary" id="maps-here" disabled title="讀到地圖名稱後，跳到目前所在的地圖">目前地圖</button>
-        <label class="switch" title="只列有怪會生成的地圖"><input type="checkbox" id="maps-mob"><i></i>只看有怪的</label>
-        <label class="switch" title="只列城鎮"><input type="checkbox" id="maps-town"><i></i>只看城鎮</label>
       </div>
-      <div class="hist-wrap">
-        <table class="hist book">
-          <thead><tr id="maps-head"></tr></thead>
-          <tbody id="maps-body"></tbody>
-        </table>
+      <div id="wm-results" class="wm-results" hidden></div>
+      <div class="wm-layout">
+        <div class="wm-main">
+          <nav id="wm-crumbs" class="wm-crumbs" aria-label="世界地圖的層級"></nav>
+          <div class="wm-scroll">
+            <div id="wm-stage" class="wm-stage">
+              <img id="wm-base" alt="" decoding="async">
+              <img id="wm-glow" class="wm-glow" alt="" hidden>
+              <div id="wm-nodes"></div>
+              <img id="wm-cur" class="wm-cur" src="worldmap/cur.png" alt="目前地圖" hidden>
+              <div id="wm-hover" class="wm-hover" hidden></div>
+            </div>
+          </div>
+          <div id="wm-links" class="chips wm-links"></div>
+        </div>
+        <div id="wm-side" class="wm-side" aria-live="polite"></div>
       </div>
+      <details id="wm-others" class="wm-others">
+        <summary id="wm-others-sum">不在世界地圖上的地圖</summary>
+        <div id="wm-others-body"></div>
+      </details>
       <p class="note" id="maps-note"></p>
     </section>
   </div>
@@ -2505,7 +2560,8 @@ async function loadItemBookNow() {
 }
 
 // ---------------------------------------------------------------- 任務、NPC、地圖圖鑑
-// questbook.json、npcbook.json、mapbook.json 是客戶端資料的快照（scripts/export_worldbook.py），三份一起載（約 850 KB）。
+// questbook.json、npcbook.json、mapbook.json 是客戶端資料的快照（scripts/export_worldbook.py），worldmap.json 是世界地圖
+// （scripts/export_worldmap.py），四份一起載（約 900 KB）。
 // 要先有怪物與道具圖鑑才對得到名字；道具與裝備的「任務獎勵」、怪物的出現地圖小卡也靠這些。
 const wbook = { data: null, promise: null, questById: new Map(), npcById: new Map(), mapById: new Map(),
   questsByItem: new Map(), questsByNpc: new Map(), questsByMob: new Map(), questsByNext: new Map() };
@@ -2555,7 +2611,7 @@ async function loadWorldNow() {
   try {
     await loadItemBook();
     if (!ibook.data) throw new Error("道具圖鑑沒載入");
-    const [quests, npcs, maps] = await Promise.all(["questbook.json", "npcbook.json", "mapbook.json"].map(async (file) => {
+    const [quests, npcs, maps, world] = await Promise.all(["questbook.json", "npcbook.json", "mapbook.json", "worldmap.json"].map(async (file) => {
       const res = await fetch(file, { cache: "no-store" });
       if (!res.ok) throw new Error(`${file}：HTTP ${res.status}`);
       return res.json();
@@ -2591,7 +2647,7 @@ async function loadWorldNow() {
     wbook.data = { quests, npcs, maps };
     fillKinds($("quests-area"), [...Object.entries(quests.cats), ["none", "其他"]]);
     fillKinds($("npcs-func"), [...new Set(npcs.npcs.map((n) => n.func).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant")).map((f) => [f, f]));
-    fillKinds($("maps-street"), [...new Set(maps.maps.map((m) => m.street))].map((s) => [s, s]));
+    wmInit(world.worlds);
     renderQuests(); renderNpcs(); renderMaps();
     renderItems(); renderEquips(); renderBook();          // 道具、裝備補上任務獎勵；怪物的出現地圖變成能點的 chip
   } catch (err) {
@@ -2674,14 +2730,6 @@ const NPC_COLS = [
   { label: "所在地圖", sort: (n) => n.maps.length ? mapLabelW(n.maps[0]) : null, html: (n) => fewNames(n.maps.map(mapLabelW), "張") },
   { label: "任務", num: true, sort: (n) => n.quests.length || null, text: (n) => n.quests.length || "" },
 ];
-const MAP_COLS = [
-  { label: "地圖", sort: (m) => m.name, html: (m) => `<span class="mob-name">${esc(m.name)}</span>${m.town ? '<span class="mob-kind">城鎮</span>' : ""}` },
-  { label: "區域", sort: (m) => m.street, text: (m) => m.street },
-  { label: "怪物", sort: (m) => m.mobs.length || null, html: (m) => fewNames(m.mobs.map(([id]) => mobName(id)), "種") },
-  { label: "等級", num: true, title: "這張圖的怪的等級範圍", sort: (m) => m.lvLo, text: (m) => m.lvLo ? (m.lvLo === m.lvHi ? String(m.lvLo) : `${m.lvLo}–${m.lvHi}`) : "" },
-  { label: "NPC", num: true, sort: (m) => m.npcs.length || null, text: (m) => m.npcs.length || "" },
-  { label: "通往", num: true, sort: (m) => m.to.length || null, text: (m) => m.to.length || "" },
-];
 const worldReady = () => !!wbook.data;
 const renderQuests = makeTable("quests", QUEST_COLS, questDetail, () => {
   const q = $("quests-q").value.trim().toLowerCase(), area = $("quests-area").value, job = Number($("quests-job").value);
@@ -2698,15 +2746,290 @@ const renderNpcs = makeTable("npcs", NPC_COLS, npcDetail, () => {
   return { rows: pool.filter((n) => (!func || n.func === func) && (!quest || n.quests.length) && (!q || n.hay.includes(q))), total: pool.length };
 }, "名字、職稱、對話與站的位置來自遊戲客戶端的資料檔。預設只列站在已開放地圖上的 NPC。點一列展開所在地圖與任務。", { col: 2, dir: 1 }, "個",
   { ready: worldReady, reset: (q) => { resetTools(["npcs-func", "npcs-quest"], "npcs-q", q); $("npcs-all").checked = true; } });
-const renderMaps = makeTable("maps", MAP_COLS, mapDetail, () => {
-  const q = $("maps-q").value.trim().toLowerCase(), street = $("maps-street").value, mob = $("maps-mob").checked, town = $("maps-town").checked;
-  const pool = wbook.data.maps.maps;
-  return { rows: pool.filter((m) => (!street || m.street === street) && (!mob || m.mobs.length) && (!town || m.town) && (!q || m.hay.includes(q))), total: pool.length };
-}, "只有客戶端有資料的地圖，也就是已開放的區域。怪物是生成清單上的（召喚出來的王不在上面）。點一列展開怪物、NPC 與相鄰地圖。", { col: 1, dir: 1 }, "張",
-  { ready: worldReady, cap: 600, reset: (q) => resetTools(["maps-street", "maps-mob", "maps-town"], "maps-q", q) });
 for (const id of ["quests-q", "quests-lo", "quests-hi", "npcs-q", "maps-q"]) $(id).addEventListener("input", () => renderSub());
-for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all", "maps-street", "maps-mob", "maps-town"]) $(id).addEventListener("change", () => renderSub());
-$("maps-here").addEventListener("click", () => { resetTools(["maps-street", "maps-mob", "maps-town"], "maps-q", $("map-name").textContent); renderMaps(); });
+for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all"]) $(id).addEventListener("change", () => renderSub());
+
+// ---------------------------------------------------------------- 世界地圖（圖鑑的地圖分頁）
+// 客戶端的地圖插畫：節點是按鈕，區域（總圖上的島、維多利亞島上的奇幻村）是不規則的形狀，靠區域貼圖的透明度判斷滑鼠在不在上面，
+// 不能看外框：總圖的外框幾乎全部互相重疊。一個節點可以有很多張地圖；客戶端沒有未開放地圖的名字，只能標「未開放」。
+// 沒有節點的地圖（副本、隱藏地圖、市場…）收在地圖下面，也搜得到。
+const WM_ROOT = "WorldMap";
+const WM_ALPHA = 32;
+const WM_RESULT_CAP = 80;
+const wm = { worlds: new Map(), where: new Map(), off: [], near: new Map(), masks: new Map(), world: WM_ROOT, node: null, map: null, here: null };
+const wmWorld = () => wm.worlds.get(wm.world);
+const wmOpenMaps = (node) => node.maps.filter((id) => wbook.mapById.has(id));
+
+function wmInit(worlds) {
+  wm.worlds = new Map(worlds.map((w) => [w.id, w]));
+  for (const w of worlds) w.nodes.forEach((node, index) => {
+    for (const id of node.maps) {
+      if (!wm.where.has(id)) wm.where.set(id, []);
+      wm.where.get(id).push({ world: w.id, index, size: node.maps.length });
+    }
+  });
+  const all = wbook.data.maps.maps;
+  wm.off = all.filter((m) => !wm.where.has(m.id));
+  // 沒有節點的地圖靠傳送點掛回有節點的地圖：哪一邊通往另一邊都算
+  const offIds = new Set(wm.off.map((m) => m.id));
+  const link = (a, b) => { if (!wm.near.has(a)) wm.near.set(a, new Set()); wm.near.get(a).add(b); };
+  for (const m of all) for (const to of m.to) if (offIds.has(m.id) !== offIds.has(to)) { link(m.id, to); link(to, m.id); }
+  const groups = new Map();
+  for (const m of wm.off) { if (!groups.has(m.street)) groups.set(m.street, []); groups.get(m.street).push(m); }
+  $("wm-others-sum").textContent = `不在世界地圖上的地圖 ${wm.off.length} 張（副本、隱藏地圖、市場等）`;
+  $("wm-others-body").innerHTML = [...groups].sort((a, b) => b[1].length - a[1].length).map(([street, maps]) =>
+    `<h5>${esc(street)}<small>${maps.length}</small></h5><div class="chips">${maps.map((m) => `<button type="button" data-goto="map" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>`).join("");
+  $("maps-count").textContent = `${all.length} 張`;
+  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。怪物是生成清單上的（召喚出來的王不在上面）。";
+}
+
+// 節點的名字：客戶端有標題就用；沒有就用第一張開放的地圖；全部沒開放的，總圖上看得出是哪個區域
+function wmNodeTitle(world, node) {
+  if (node.title) return node.title;
+  const open = wmOpenMaps(node);
+  if (open.length) return wbook.mapById.get(open[0]).name;
+  if (world.id === WM_ROOT) {
+    const sub = (wm.where.get(node.maps[0]) || []).find((e) => e.world !== WM_ROOT);
+    if (sub) return wm.worlds.get(sub.world).title;
+  }
+  return "未開放的地圖";
+}
+function wmLevelText(ids) {
+  const maps = ids.map((id) => wbook.mapById.get(id)).filter((m) => m.lvLo);
+  if (!maps.length) return "";
+  const lo = Math.min(...maps.map((m) => m.lvLo)), hi = Math.max(...maps.map((m) => m.lvHi));
+  return `怪物 Lv.${lo === hi ? lo : `${lo}–${hi}`}`;
+}
+function wmNodeHover(world, node) {
+  const open = wmOpenMaps(node);
+  const single = open.length === 1 && node.maps.length === 1 ? wbook.mapById.get(open[0]) : null;
+  const count = node.maps.length > 1 ? `${node.maps.length} 張地圖${open.length < node.maps.length ? `，${open.length ? `${node.maps.length - open.length} 張` : "全部"}未開放` : ""}`
+    : open.length ? "" : "未開放";
+  const lines = [single?.town ? "城鎮" : "", count, wmLevelText(open)].filter(Boolean);
+  return `<b>${esc(wmNodeTitle(world, node))}</b>${lines.map((t) => `<small>${esc(t)}</small>`).join("")}`;
+}
+function wmLinkHover(link) {
+  const ids = new Set(wm.worlds.get(link.to).nodes.flatMap((n) => wmOpenMaps(n)));
+  return `<b>${esc(link.tip)}</b><small>${ids.size ? `${ids.size} 張已開放的地圖，點一下進入` : "還沒開放，點一下看插畫"}</small>`;
+}
+
+function wmHoverShow(html, x, y) {
+  const box = $("wm-hover"), stage = $("wm-stage");
+  box.innerHTML = html;
+  box.hidden = false;
+  const k = stage.offsetWidth / wmWorld().w, w = box.offsetWidth, h = box.offsetHeight;
+  const px = x * k, py = y * k;
+  box.style.left = `${Math.max(2, Math.min(px - w / 2, stage.offsetWidth - w - 2))}px`;
+  box.style.top = `${py - h - 14 >= 2 ? py - h - 14 : py + 14}px`;
+}
+function wmGlowShow(file, box) {
+  const glow = $("wm-glow"), world = wmWorld();
+  const src = `worldmap/${file}.png`;
+  if (glow.getAttribute("src") !== src) glow.src = src;
+  glow.style.left = `${box[0] / world.w * 100}%`;
+  glow.style.top = `${box[1] / world.h * 100}%`;
+  glow.style.width = `${box[2] / world.w * 100}%`;
+  glow.hidden = false;
+}
+function wmHoverClear() {
+  $("wm-hover").hidden = true;
+  $("wm-glow").hidden = true;
+  $("wm-stage").classList.remove("link");
+}
+function wmHoverNode(btn) {
+  const world = wmWorld(), index = Number(btn.dataset.node), node = world.nodes[index];
+  wmHoverClear();
+  wmHoverShow(wmNodeHover(world, node), node.x, node.y);
+  if (node.path) wmGlowShow(`${world.id}_path${index}`, node.path);
+}
+function wmHoverLink(link, x, y) {
+  wmHoverClear();
+  $("wm-stage").classList.add("link");
+  wmGlowShow(`${wmWorld().id}_link${link.i}`, link.box);
+  wmHoverShow(wmLinkHover(link), x, y);
+}
+
+// 區域貼圖的透明度，一張世界地圖第一次碰到才載；讀不到像素（例如直接開檔案）就退回外框
+function wmMasks(world) {
+  if (!wm.masks.has(world.id)) wm.masks.set(world.id, Promise.all(world.links.map((link) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        link.mask = ctx.getImageData(0, 0, img.width, img.height).data;
+      } catch { link.mask = null; }
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = `worldmap/${world.id}_link${link.i}.png`;
+  }))));
+  return wm.masks.get(world.id);
+}
+function wmLinkAt(world, x, y) {
+  for (let i = world.links.length - 1; i >= 0; i--) {
+    const link = world.links[i], [left, top, w, h] = link.box;
+    const px = Math.floor(x - left), py = Math.floor(y - top);
+    if (px < 0 || py < 0 || px >= w || py >= h) continue;
+    if (!link.mask || link.mask[(py * w + px) * 4 + 3] >= WM_ALPHA) return link;
+  }
+  return null;
+}
+function wmStagePoint(e) {
+  const rect = $("wm-stage").getBoundingClientRect(), world = wmWorld();
+  return [(e.clientX - rect.left) / rect.width * world.w, (e.clientY - rect.top) / rect.height * world.h];
+}
+
+function wmEnter(id) {
+  wm.world = id; wm.node = null; wm.map = null;
+  wmHoverClear();
+  wmRender();
+}
+function wmPickNode(index) {
+  const node = wmWorld().nodes[index];
+  wm.node = index;
+  wm.map = wmOpenMaps(node)[0] ?? null;
+  wmRender();
+}
+// 跳到某張地圖：走到涵蓋它的節點裡地圖最少的那個（奇幻村的 44 張節點跟奇幻村地圖上自己的節點都有，要後者）；總圖的節點是一整區的
+// 總和，只要別層有就不選它（奇幻村旅館在總圖的節點 43 張，比維多利亞島的 44 張還少）。沒有節點的就只換右邊的內容
+function wmSelectMap(id) {
+  const spots = wm.where.get(id);
+  if (spots) {
+    const rank = (s) => (s.world === WM_ROOT ? Infinity : s.size);
+    const best = spots.reduce((a, b) => (rank(b) < rank(a) ? b : a));
+    wm.world = best.world; wm.node = best.index;
+  } else wm.node = null;
+  wm.map = id;
+  wmHoverClear();
+  wmRender();
+}
+
+function wmNearChips(ids) {
+  const near = [...new Set(ids.flatMap((id) => [...(wm.near.get(id) || [])]))].filter((id) => !ids.includes(id));
+  return near.length ? `<h4>傳送點相連的地圖 ${near.length}</h4><div class="chips">${near.map((id) => mapChip(id, "goto")).join("")}</div>` : "";
+}
+function wmSideHtml() {
+  const world = wmWorld();
+  const picked = wm.map != null ? wbook.mapById.get(wm.map) : null;
+  const detail = picked ? mapDetail(picked) : "";
+  if (wm.node != null) {
+    const node = world.nodes[wm.node], open = wmOpenMaps(node), closed = node.maps.length - open.length;
+    const chips = open.length > 1 ? `<h4>地圖 ${open.length}</h4><div class="chips">${open.map((id) => mapChip(id, "goto", id === wm.map)).join("")}</div>` : "";
+    const closedNote = closed ? `<p class="note">${open.length ? `另有 ${closed} 張還沒開放的地圖。` : node.maps.length > 1 ? `這 ${closed} 張地圖都還沒開放，客戶端沒有資料。` : `這張地圖還沒開放，客戶端沒有資料（地圖 ID ${node.maps[0]}）。`}</p>` : "";
+    const street = open.length === 1 && !node.title ? wbook.mapById.get(open[0]).street : "";
+    return `<h3>${esc(wmNodeTitle(world, node))}</h3>${street ? `<p class="note">${esc(street)}</p>` : ""}${node.desc ? `<p>${esc(node.desc)}</p>` : ""}${chips}${closedNote}${wmNearChips(open)}${detail}`;
+  }
+  if (picked) return `<h3>${esc(picked.name)}</h3><p class="note">${esc(picked.street)} · 這張地圖不在世界地圖上。</p>${wmNearChips([picked.id])}${detail}`;
+  const open = new Set(world.nodes.flatMap(wmOpenMaps));
+  const extra = wmParentOnly(world);
+  return `<h3>${esc(world.title)}</h3><p class="note">${world.nodes.length} 個節點，${open.size} 張已開放的地圖。</p>
+    <p>滑鼠移到節點看是哪張地圖，點一下看內容。${world.links.length ? "亮起來的區域可以點進去。" : ""}</p>
+    ${extra.length ? `<h4>這一區沒有節點的地圖 ${extra.length}</h4><div class="chips">${extra.map((id) => mapChip(id, "goto")).join("")}</div>` : ""}`;
+}
+// 子地圖的節點比上一層涵蓋整區的節點少一些（奇幻村的旅館、桑那房）：那些地圖列在這一區，免得進來就找不到
+function wmParentOnly(world) {
+  const parent = wm.worlds.get(world.parent);
+  if (!parent || !world.parent || world.parent === WM_ROOT) return [];
+  const here = new Set(world.nodes.flatMap((n) => n.maps));
+  const overlap = (n) => n.maps.filter((id) => here.has(id)).length;
+  const best = parent.nodes.reduce((a, b) => (overlap(b) > overlap(a) ? b : a), parent.nodes[0]);
+  return best && overlap(best) ? wmOpenMaps(best).filter((id) => !here.has(id)) : [];
+}
+function wmRenderStage() {
+  const world = wmWorld(), stage = $("wm-stage");
+  const base = $("wm-base"), src = `worldmap/${world.id}.webp`;
+  if (base.getAttribute("src") !== src) {
+    base.width = world.w; base.height = world.h;
+    base.src = src;
+    base.alt = world.title;
+  }
+  stage.style.aspectRatio = `${world.w} / ${world.h}`;
+  $("wm-nodes").innerHTML = world.nodes.map((node, index) => {
+    const on = index === wm.node, off = !wmOpenMaps(node).length;
+    return `<button type="button" class="wm-node${off ? " off" : ""}${on ? " on" : ""}" data-node="${index}" aria-label="${esc(wmNodeTitle(world, node))}" style="left:${node.x / world.w * 100}%;top:${node.y / world.h * 100}%"><img src="worldmap/node${node.type}.png" alt=""></button>`;
+  }).join("");
+  const here = wm.here != null ? world.nodes.find((n) => n.maps.includes(wm.here)) : null;
+  const cur = $("wm-cur");
+  cur.hidden = !here;
+  if (here) { cur.style.left = `${here.x / world.w * 100}%`; cur.style.top = `${here.y / world.h * 100}%`; }
+  const crumbs = [];
+  for (let w = world; w; w = wm.worlds.get(w.parent)) crumbs.unshift(w);
+  $("wm-crumbs").innerHTML = crumbs.map((w, i) => i === crumbs.length - 1 ? `<b>${esc(w.title)}</b>` : `<button type="button" data-wm-world="${w.id}">${esc(w.title)}</button><i>›</i>`).join("");
+  $("wm-links").innerHTML = world.links.map((link) => `<button type="button" data-wm-world="${link.to}" data-wm-link="${link.i}">${esc(link.tip)}</button>`).join("");
+}
+function wmRender() {
+  if (!wbook.data || !wm.worlds.size) return;
+  wmRenderStage();
+  $("wm-side").innerHTML = wmSideHtml();
+}
+// 搜尋不列表格，符合的變成 chip，點了走到地圖上那個節點；節點標題與區域名稱也搜得到（愛奧斯塔這種只有標題的）
+function renderMaps() {
+  if (!wbook.data || !wm.worlds.size) return;
+  wmRender();
+  const q = $("maps-q").value.trim().toLowerCase(), box = $("wm-results");
+  box.hidden = !q;
+  if (!q) { box.textContent = ""; return; }
+  const maps = wbook.data.maps.maps.filter((m) => m.hay.includes(q));
+  const places = [];
+  for (const w of wm.worlds.values()) {
+    if (w.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}"><small class="pre">區域</small>${esc(w.title)}</button>`);
+    w.nodes.forEach((n, i) => { if (n.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}" data-wm-node="${i}"><small class="pre">${esc(w.title)}</small>${esc(n.title)}</button>`); });
+  }
+  const total = places.length + maps.length;
+  const chips = [...places, ...maps.slice(0, WM_RESULT_CAP).map((m) => `<button type="button" data-goto="map" data-id="${m.id}"><small class="pre">${esc(m.street)}</small>${esc(m.name)}</button>`)];
+  box.innerHTML = `<p>${total ? `符合 ${total} 個${maps.length > WM_RESULT_CAP ? `，只列前 ${WM_RESULT_CAP} 張地圖，請縮小範圍` : ""}` : "找不到符合的地圖。"}</p>${total ? `<div class="chips">${chips.join("")}</div>` : ""}`;
+}
+$("wm-stage").addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch" || !wbook.data) return;
+  const btn = e.target.closest(".wm-node");
+  if (btn) { if (btn !== wm.hoverBtn) { wm.hoverBtn = btn; wm.hoverLink = null; wmHoverNode(btn); } return; }
+  wm.hoverBtn = null;
+  const world = wmWorld();
+  wmMasks(world);
+  const [x, y] = wmStagePoint(e), link = wmLinkAt(world, x, y);
+  if (link) { wm.hoverLink = link; wmHoverLink(link, x, y); }
+  else if (wm.hoverLink || !$("wm-hover").hidden) { wm.hoverLink = null; wmHoverClear(); }
+});
+$("wm-stage").addEventListener("pointerleave", () => { wm.hoverBtn = wm.hoverLink = null; wmHoverClear(); });
+$("wm-stage").addEventListener("focusin", (e) => { if (e.target.matches(".wm-node:focus-visible")) wmHoverNode(e.target); });
+$("wm-stage").addEventListener("focusout", () => { wm.hoverBtn = null; wmHoverClear(); });
+$("wm-stage").addEventListener("click", async (e) => {
+  if (!wbook.data) return;
+  const btn = e.target.closest(".wm-node");
+  if (btn) { wm.hoverBtn = null; wmPickNode(Number(btn.dataset.node)); return; }
+  const world = wmWorld(), [x, y] = wmStagePoint(e);
+  await wmMasks(world);
+  const link = wmLinkAt(world, x, y);
+  if (link && wmWorld() === world) wmEnter(link.to);
+});
+$("mapbook").addEventListener("click", (e) => {
+  const place = e.target.closest("[data-wm-world]");
+  if (!place) return;
+  wmEnter(place.dataset.wmWorld);
+  if (place.dataset.wmNode !== undefined) wmPickNode(Number(place.dataset.wmNode));
+});
+for (const [event, on] of [["pointerover", true], ["pointerout", false], ["focusin", true], ["focusout", false]])
+  $("wm-links").addEventListener(event, (e) => {
+    const chip = e.target.closest("[data-wm-link]");
+    if (!chip) return;
+    const link = wmWorld().links.find((l) => l.i === Number(chip.dataset.wmLink));
+    if (!on || !link) { wmHoverClear(); return; }
+    wmHoverLink(link, link.box[0] + link.box[2] / 2, link.box[1] + link.box[3] / 2);
+  });
+// 目前地圖：名字對得上就走到那張圖、標上位置；對不上（辨識差一兩個字）就拿去搜尋
+$("maps-here").addEventListener("click", () => {
+  const name = $("map-name").textContent;
+  const hits = wbook.data ? wbook.data.maps.maps.filter((m) => m.name === name || `${m.street} ${m.name}` === name) : [];
+  if (!hits.length) { $("maps-q").value = name; renderMaps(); return; }
+  const m = hits.find((h) => wm.where.has(h.id)) || hits[0];
+  $("maps-q").value = "";
+  wm.here = m.id;
+  renderMaps();
+  wmSelectMap(m.id);
+});
 
 // ---------------------------------------------------------------- 點 chip 彈出的小卡：怪物、道具、裝備各一種內容
 const tip = $("tip");
@@ -2787,8 +3110,12 @@ async function goto(kind, id) {
   setTab("book");
   setSub(SUB_OF[kind]);
   await (kind === "item" || kind === "equip" ? loadItemBook() : loadWorld());
-  const table = { item: renderItems, equip: renderEquips, quest: renderQuests, npc: renderNpcs, map: renderMaps }[kind];
-  const e = { item: ibook.itemById, equip: ibook.equipById, quest: wbook.questById, npc: wbook.npcById, map: wbook.mapById }[kind].get(id);
+  if (kind === "map") {                                  // 地圖沒有列可以跳：走到世界地圖上那個節點
+    if (wbook.mapById.has(id)) { wmSelectMap(id); $("mapbook").scrollIntoView({ block: "nearest" }); }
+    return;
+  }
+  const table = { item: renderItems, equip: renderEquips, quest: renderQuests, npc: renderNpcs }[kind];
+  const e = { item: ibook.itemById, equip: ibook.equipById, quest: wbook.questById, npc: wbook.npcById }[kind].get(id);
   if (table && e) table.open(id, e.name);
 }
 function tipHtml(kind, id) {

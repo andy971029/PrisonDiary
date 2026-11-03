@@ -38,12 +38,13 @@ jobs:
         run: |
           python scripts/build_web.py
           mkdir _site
-          cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/itembook.json web/questbook.json web/npcbook.json web/mapbook.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
+          cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/itembook.json web/questbook.json web/npcbook.json web/mapbook.json web/worldmap.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
           cp -r web/sounds _site/
           cp -r web/goddess _site/
           cp -r web/mobs _site/
           cp -r web/icons _site/
           cp -r web/npcs _site/
+          cp -r web/worldmap _site/
 
       - uses: actions/configure-pages@v5
 
