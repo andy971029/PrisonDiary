@@ -106,5 +106,58 @@ class Tables(unittest.TestCase):
         self.assertEqual(extract.call_count, 4)
 
 
+class Inferred(unittest.TestCase):
+    @staticmethod
+    def world():
+        return {"worlds": [
+            {"id": "WorldMap", "w": 640, "h": 470, "nodes": [{"x": 100, "y": 100, "maps": [1, 2, 9]}]},
+            {"id": "WorldMap010", "w": 640, "h": 470, "nodes": [{"x": 300, "y": 200, "maps": [1]}, {"x": 330, "y": 200, "maps": [2]}]},
+        ]}
+
+    @staticmethod
+    def maps(*rows):
+        return [{"id": i, "name": name, "to": to} for i, name, to in rows]
+
+    def made(self, data):
+        return [(w["id"], n) for w in data["worlds"] for n in w["nodes"] if "via" in n]
+
+    def test_chain_either_direction_is_one_node_beside_the_smallest_node(self):
+        data = self.world()
+        added = worldmap.add_inferred(data, self.maps((1, "村", [10]), (2, "路", []), (10, "洞一", [11]), (11, "洞二", []), (12, "洞三", [11])))
+        self.assertEqual(added, 1)
+        [(world, node)] = self.made(data)
+        self.assertEqual(world, "WorldMap010")                      # 不放總圖
+        self.assertEqual((node["maps"], node["via"], node["type"]), ([10, 11, 12], 0, worldmap.INFERRED_TYPE))
+        self.assertEqual(data["worlds"][1]["nodes"][:2], self.world()["worlds"][1]["nodes"])    # 客戶端的節點不動、位置不變
+
+    def test_portal_in_from_the_node_side_counts_and_unconnected_stay_off(self):
+        data = self.world()
+        added = worldmap.add_inferred(data, self.maps((1, "村", []), (20, "暗門", [1]), (30, "副本一", [31]), (31, "副本二", [])))
+        self.assertEqual(added, 1)
+        self.assertEqual(self.made(data)[0][1]["maps"], [20])
+
+    def test_group_goes_to_the_map_with_most_portals(self):
+        data = self.world()
+        worldmap.add_inferred(data, self.maps((1, "村", [10]), (2, "路", [10, 11]), (10, "洞", [11]), (11, "洞內", [2])))
+        self.assertEqual(self.made(data)[0][1]["via"], 1)
+
+    def test_same_name_copies_under_one_node_merge(self):
+        data = self.world()
+        added = worldmap.add_inferred(data, self.maps((1, "村", [10, 11, 12]), (10, "研究室", []), (11, "研究室", []), (12, "別的", [])))
+        self.assertEqual(added, 2)
+        self.assertEqual(sorted(n["maps"] for _, n in self.made(data)), [[10, 11], [12]])
+
+    def test_spots_keep_clear_of_nodes_and_edges(self):
+        data = {"worlds": [{"id": "W", "w": 100, "h": 100, "nodes": [{"x": 5, "y": 5, "maps": [1]}]}]}
+        rows = [(1, "村", [10 + i for i in range(6)])] + [(10 + i, f"洞{i}", []) for i in range(6)]
+        worldmap.add_inferred(data, self.maps(*rows))
+        nodes = data["worlds"][0]["nodes"]
+        self.assertEqual(len(nodes), 7)
+        for i, a in enumerate(nodes[1:], 1):
+            self.assertTrue(12 <= a["x"] <= 88 and 12 <= a["y"] <= 88)
+            for b in nodes[:i]:
+                self.assertGreaterEqual(((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2) ** 0.5, worldmap.SPOT_GAP)
+
+
 if __name__ == "__main__":
     unittest.main()

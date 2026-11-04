@@ -23,12 +23,17 @@
 ``x``／``y`` 與 ``box``、``path``（``[左, 上, 寬, 高]``）都是底圖左上角起算的像素。``maps`` 含還沒開放、客戶端
 沒有名字的地圖。圖檔（``web/worldmap/``）由 ``scripts/export_worldmap.py`` 輸出：``<id>.webp`` 底圖、
 ``<id>_link<i>.png`` 區域、``<id>_path<節點位置>.png`` 路線、``node<type>.png`` 節點圖示、``cur.png`` 目前位置。
+
+客戶端的節點只涵蓋約一半的地圖。:func:`add_inferred` 用地圖圖鑑的傳送點關係替其他地圖補節點，接在 ``nodes`` 後面，
+多一個 ``via``：它接的是同一張世界地圖的第幾個節點（客戶端的節點沒有這個欄位）。
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
+from collections import Counter
 from typing import Any
 
 from . import gamedata
@@ -38,6 +43,11 @@ TABLE = "WorldMap"
 ROOT = "WorldMap"
 ROOT_TITLE = "楓之谷世界"
 BASE_FRAME = "BaseImg/0"
+INFERRED_TYPE = 3
+SPOT_GAP = 16                                       # 補的節點離其他節點至少這麼遠（底圖像素）
+SPOT_RADII = range(20, 86, 6)
+SPOT_ANGLES = 16
+SPOT_MARGIN = 12
 
 
 def link_frame(index: int) -> str:
@@ -80,6 +90,75 @@ def load_tables(directory: str | os.PathLike[str]) -> tuple[dict, dict]:
             if len(tables) == 2:
                 break
     return split_tables(tables)
+
+
+def _spot(world: dict, anchor: dict) -> tuple[int, int]:
+    """替 *anchor* 旁邊補的節點找位置：由近到遠繞圈，取第一圈裡離其他節點夠遠、又最空的一點；都太擠就取最空的。"""
+    best, best_room = (anchor["x"], anchor["y"]), -1.0
+    for radius in SPOT_RADII:
+        for step in range(SPOT_ANGLES):
+            angle = 2 * math.pi * step / SPOT_ANGLES
+            x, y = round(anchor["x"] + radius * math.cos(angle)), round(anchor["y"] + radius * math.sin(angle))
+            if not (SPOT_MARGIN <= x <= world["w"] - SPOT_MARGIN and SPOT_MARGIN <= y <= world["h"] - SPOT_MARGIN):
+                continue
+            room = min(math.hypot(x - n["x"], y - n["y"]) for n in world["nodes"])
+            if room > best_room:
+                best, best_room = (x, y), room
+        if best_room >= SPOT_GAP:
+            break
+    return best
+
+
+def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
+    """替不在任何節點上、但有傳送點連回節點地圖的地圖補節點，回傳補了幾個節點。
+
+    傳送點不分方向。沒有節點的地圖彼此連通的算一組，接到傳送點最多的那張節點地圖，放在它最小的節點旁邊（總圖的
+    節點是整區的總和，別層有就不用）；同一個節點底下同名的組（隱藏研究室這種副本的很多份）併成一個點。
+    連不回節點的不補，留給網頁列在地圖下面。
+    """
+    by_id = {m["id"]: m for m in maps}
+    worlds = data["worlds"]
+    spots: dict[int, list[tuple[int, int, int]]] = {}
+    for w_index, world in enumerate(worlds):
+        for n_index, node in enumerate(world["nodes"]):
+            for map_id in node["maps"]:
+                spots.setdefault(map_id, []).append((w_index, n_index, len(node["maps"])))
+    loose = {map_id for map_id in by_id if map_id not in spots}
+    near: dict[int, list[int]] = {map_id: [] for map_id in by_id}
+    for m in maps:
+        for target in m["to"]:
+            if target in by_id:
+                near[m["id"]].append(target)
+                near[target].append(m["id"])
+
+    groups: dict[tuple[int, int, str], list[int]] = {}
+    seen: set[int] = set()
+    for start in sorted(loose):
+        if start in seen:
+            continue
+        seen.add(start)
+        stack, members, anchors = [start], [], Counter()
+        while stack:
+            here = stack.pop()
+            members.append(here)
+            for other in near[here]:
+                if other not in loose:
+                    anchors[other] += 1
+                elif other not in seen:
+                    seen.add(other)
+                    stack.append(other)
+        if not anchors:
+            continue
+        anchor = min(anchors, key=lambda a: (-anchors[a], a))
+        w_index, n_index, _ = min(spots[anchor], key=lambda s: (worlds[s[0]]["id"] == ROOT, s[2]))
+        members.sort()
+        groups.setdefault((w_index, n_index, by_id[members[0]]["name"]), []).extend(members)
+
+    for (w_index, n_index, _), members in groups.items():
+        world = worlds[w_index]
+        x, y = _spot(world, world["nodes"][n_index])
+        world["nodes"].append({"x": x, "y": y, "type": INFERRED_TYPE, "maps": sorted(members), "title": "", "desc": "", "via": n_index})
+    return len(groups)
 
 
 def _text(values: dict, key: Any) -> str:

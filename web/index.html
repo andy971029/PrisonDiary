@@ -450,6 +450,10 @@
   .wm-node img { display: block; transition: transform .1s; }
   .wm-node:hover img, .wm-node:focus-visible img { transform: scale(1.35); }
   .wm-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+  .wm-node i { display: block; width: 9px; height: 9px; background: #8b5cf6; border: 2px solid #fff; box-shadow: 0 0 0 1px #2e1065; transform: rotate(45deg); transition: transform .1s; }
+  .wm-node:hover i, .wm-node:focus-visible i { transform: rotate(45deg) scale(1.35); }
+  .wm-via { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .wm-via line { stroke: #8b5cf6; stroke-width: 1.5; stroke-dasharray: 3 2; }
   .wm-node.off img { filter: grayscale(1); opacity: .6; }
   .wm-node.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px #b5600a; }
   .wm-cur { position: absolute; z-index: 2; transform: translate(-50%, -100%); pointer-events: none; }
@@ -629,7 +633,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.17.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.18.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2789,7 +2793,8 @@ for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npc
 // ---------------------------------------------------------------- 世界地圖（圖鑑的地圖分頁）
 // 客戶端的地圖插畫：節點是按鈕，區域（總圖上的島、維多利亞島上的奇幻村）是不規則的形狀，靠區域貼圖的透明度判斷滑鼠在不在上面，
 // 不能看外框：總圖的外框幾乎全部互相重疊。一個節點可以有很多張地圖；客戶端沒有未開放地圖的名字，只能標「未開放」。
-// 沒有節點的地圖（副本、隱藏地圖、市場…）收在地圖下面，也搜得到。
+// 紫色菱形是客戶端沒有、依傳送點關係補的節點（worldmap.py 的 add_inferred，有 via），位置只是示意。
+// 傳送點也連不回節點的地圖（靠 NPC 或腳本進去的副本、市場…）收在地圖下面，也搜得到。
 const WM_ROOT = "WorldMap";
 const WM_ALPHA = 32;
 const WM_RESULT_CAP = 80;
@@ -2807,17 +2812,17 @@ function wmInit(worlds) {
   });
   const all = wbook.data.maps.maps;
   wm.off = all.filter((m) => !wm.where.has(m.id));
-  // 沒有節點的地圖靠傳送點掛回有節點的地圖：哪一邊通往另一邊都算
-  const offIds = new Set(wm.off.map((m) => m.id));
+  // 沒有節點或節點是補的地圖靠傳送點掛回客戶端有節點的地圖：哪一邊通往另一邊都算
+  const offIds = new Set([...wm.off.map((m) => m.id), ...worlds.flatMap((w) => w.nodes.filter((n) => n.via != null).flatMap((n) => n.maps))]);
   const link = (a, b) => { if (!wm.near.has(a)) wm.near.set(a, new Set()); wm.near.get(a).add(b); };
   for (const m of all) for (const to of m.to) if (offIds.has(m.id) !== offIds.has(to)) { link(m.id, to); link(to, m.id); }
   const groups = new Map();
   for (const m of wm.off) { if (!groups.has(m.street)) groups.set(m.street, []); groups.get(m.street).push(m); }
-  $("wm-others-sum").textContent = `不在世界地圖上的地圖 ${wm.off.length} 張（副本、隱藏地圖、市場等）`;
+  $("wm-others-sum").textContent = `傳送點連不回世界地圖的地圖 ${wm.off.length} 張（靠 NPC 或腳本進去的副本、隱藏地圖、市場等）`;
   $("wm-others-body").innerHTML = [...groups].sort((a, b) => b[1].length - a[1].length).map(([street, maps]) =>
     `<h5>${esc(street)}<small>${maps.length}</small></h5><div class="chips">${maps.map((m) => `<button type="button" data-goto="map" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>`).join("");
   $("maps-count").textContent = `${all.length} 張`;
-  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。怪物是生成清單上的（召喚出來的王不在上面）。";
+  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。紫色菱形是客戶端世界地圖上沒有、依傳送點關係補上的地圖，虛線連到它接的節點，位置只是示意。怪物是生成清單上的（召喚出來的王不在上面）。";
 }
 
 // 節點的名字：客戶端有標題就用；沒有就用第一張開放的地圖；全部沒開放的，總圖上看得出是哪個區域
@@ -2842,7 +2847,7 @@ function wmNodeHover(world, node) {
   const single = open.length === 1 && node.maps.length === 1 ? wbook.mapById.get(open[0]) : null;
   const count = node.maps.length > 1 ? `${node.maps.length} 張地圖${open.length < node.maps.length ? `，${open.length ? `${node.maps.length - open.length} 張` : "全部"}未開放` : ""}`
     : open.length ? "" : "未開放";
-  const lines = [single?.town ? "城鎮" : "", count, wmLevelText(open)].filter(Boolean);
+  const lines = [single?.town ? "城鎮" : "", count, wmLevelText(open), node.via != null ? `依傳送點補的點，接「${wmNodeTitle(world, world.nodes[node.via])}」` : ""].filter(Boolean);
   return `<b>${esc(wmNodeTitle(world, node))}</b>${lines.map((t) => `<small>${esc(t)}</small>`).join("")}`;
 }
 function wmLinkHover(link) {
@@ -2957,12 +2962,13 @@ function wmSideHtml() {
     const chips = open.length > 1 ? `<h4>地圖 ${open.length}</h4><div class="chips">${open.map((id) => mapChip(id, "goto", id === wm.map)).join("")}</div>` : "";
     const closedNote = closed ? `<p class="note">${open.length ? `另有 ${closed} 張還沒開放的地圖。` : node.maps.length > 1 ? `這 ${closed} 張地圖都還沒開放，客戶端沒有資料。` : `這張地圖還沒開放，客戶端沒有資料（地圖 ID ${node.maps[0]}）。`}</p>` : "";
     const street = open.length === 1 && !node.title ? wbook.mapById.get(open[0]).street : "";
-    return `<h3>${esc(wmNodeTitle(world, node))}</h3>${street ? `<p class="note">${esc(street)}</p>` : ""}${node.desc ? `<p>${esc(node.desc)}</p>` : ""}${chips}${closedNote}${wmNearChips(open)}${detail}`;
+    return `<h3>${esc(wmNodeTitle(world, node))}</h3>${street ? `<p class="note">${esc(street)}</p>` : ""}${node.desc ? `<p>${esc(node.desc)}</p>` : ""}${chips}${closedNote}${node.via != null ? `<p class="note">客戶端的世界地圖上沒有這個點，依傳送點關係接在「${esc(wmNodeTitle(world, world.nodes[node.via]))}」旁邊，位置只是示意。</p>` : ""}${wmNearChips(open)}${detail}`;
   }
   if (picked) return `<h3>${esc(picked.name)}</h3><p class="note">${esc(picked.street)} · 這張地圖不在世界地圖上。</p>${wmNearChips([picked.id])}${detail}`;
   const open = new Set(world.nodes.flatMap(wmOpenMaps));
   const extra = wmParentOnly(world);
-  return `<h3>${esc(world.title)}</h3><p class="note">${world.nodes.length} 個節點，${open.size} 張已開放的地圖。</p>
+  const made = world.nodes.filter((n) => n.via != null).length;
+  return `<h3>${esc(world.title)}</h3><p class="note">${world.nodes.length - made} 個節點${made ? `，另補 ${made} 個` : ""}，${open.size} 張已開放的地圖。</p>
     <p>滑鼠移到節點看是哪張地圖，點一下看內容。${world.links.length ? "亮起來的區域可以點進去。" : ""}</p>
     ${extra.length ? `<h4>這一區沒有節點的地圖 ${extra.length}</h4><div class="chips">${extra.map((id) => mapChip(id, "goto")).join("")}</div>` : ""}`;
 }
@@ -2984,9 +2990,10 @@ function wmRenderStage() {
     base.alt = world.title;
   }
   stage.style.aspectRatio = `${world.w} / ${world.h}`;
-  $("wm-nodes").innerHTML = world.nodes.map((node, index) => {
+  const vias = world.nodes.filter((n) => n.via != null).map((n) => { const to = world.nodes[n.via]; return `<line x1="${n.x}" y1="${n.y}" x2="${to.x}" y2="${to.y}"/>`; }).join("");
+  $("wm-nodes").innerHTML = (vias ? `<svg class="wm-via" viewBox="0 0 ${world.w} ${world.h}" aria-hidden="true">${vias}</svg>` : "") + world.nodes.map((node, index) => {
     const on = index === wm.node, off = !wmOpenMaps(node).length;
-    return `<button type="button" class="wm-node${off ? " off" : ""}${on ? " on" : ""}" data-node="${index}" aria-label="${esc(wmNodeTitle(world, node))}" style="left:${node.x / world.w * 100}%;top:${node.y / world.h * 100}%"><img src="worldmap/node${node.type}.png" alt=""></button>`;
+    return `<button type="button" class="wm-node${off ? " off" : ""}${on ? " on" : ""}" data-node="${index}" aria-label="${esc(wmNodeTitle(world, node))}" style="left:${node.x / world.w * 100}%;top:${node.y / world.h * 100}%">${node.via != null ? "<i></i>" : `<img src="worldmap/node${node.type}.png" alt="">`}</button>`;
   }).join("");
   const here = wm.here != null ? world.nodes.find((n) => n.maps.includes(wm.here)) : null;
   const cur = $("wm-cur");

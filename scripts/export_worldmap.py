@@ -3,10 +3,13 @@
 網頁「圖鑑」的地圖分頁讀這些。格式見 ``mapleexp/worldmap.py``。地圖圖集在 ``spritesheet_*.bundle``，
 節點圖示與目前位置在 ``spriteset_*.bundle``，都用 UnityPy 讀。底圖存 WebP（只有 PNG 的四成大），
 區域與路線是小圖，要逐像素判斷滑鼠在不在形狀上，存 PNG。客戶端改版就重跑一次。
+
+節點沒涵蓋的地圖依傳送點關係補節點，要讀 ``web/mapbook.json``，所以先跑 ``scripts/export_worldbook.py``。
 """
 
 from __future__ import annotations
 
+import json
 import struct
 import sys
 from pathlib import Path
@@ -17,6 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mapleexp import gamedata, spritesheet, worldbook, worldmap  # noqa: E402
 
 OUT = ROOT / "web" / "worldmap.json"
+MAPBOOK = ROOT / "web" / "mapbook.json"
 PIC_DIR = ROOT / "web" / "worldmap"
 SHEET_PREFIX = "Assets/WzAssets/SpriteSheet/TW/Map/WorldMap/"
 ICON_PREFIX = "Assets/WzAssets/SpriteSet/Common/Map/MapHelper/worldMap/"
@@ -93,6 +97,9 @@ def main() -> int:
     except ImportError:
         print("匯出世界地圖要 UnityPy：pip install UnityPy", file=sys.stderr)
         return 1
+    if not MAPBOOK.exists():
+        print("補節點要 web/mapbook.json：先跑 scripts/export_worldbook.py", file=sys.stderr)
+        return 1
     worlds, strings = worldmap.load_tables(directory)
     if not worlds or not strings:
         print("讀不到客戶端的世界地圖表（沒有安裝 lz4，或客戶端格式變了）", file=sys.stderr)
@@ -110,11 +117,12 @@ def main() -> int:
     if not icons:
         print("找不到世界地圖的節點圖示", file=sys.stderr)
         return 1
-    worldbook.dump(data, OUT)
     nodes = sum(len(w["nodes"]) for w in data["worlds"])
+    inferred = worldmap.add_inferred(data, json.loads(MAPBOOK.read_text(encoding="utf-8"))["maps"])
+    worldbook.dump(data, OUT)
     links = sum(len(w["links"]) for w in data["worlds"])
     size = sum(p.stat().st_size for p in PIC_DIR.iterdir())
-    print(f"{OUT.relative_to(ROOT)}: {len(data['worlds'])} 張世界地圖、{nodes} 個節點、{links} 個區域連結，{OUT.stat().st_size / 1024:.0f} KB\n"
+    print(f"{OUT.relative_to(ROOT)}: {len(data['worlds'])} 張世界地圖、{nodes} 個節點（另補 {inferred} 個）、{links} 個區域連結，{OUT.stat().st_size / 1024:.0f} KB\n"
           f"{PIC_DIR.relative_to(ROOT)}/: {sum(1 for _ in PIC_DIR.iterdir())} 張圖（含 {icons} 個圖示），{size / 1024:.0f} KB")
     return 0
 
