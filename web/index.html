@@ -609,7 +609,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2636,6 +2636,8 @@ async function loadWorldNow() {
       n.hay = [n.name, n.func, ...n.maps.map(mapLabelW), ...n.quests.map((q) => q.name)].join("\n").toLowerCase();
     }
     for (const m of maps.maps) {
+      // 地圖的生成清單留著一些客戶端沒有名字也沒有資料的 NPC，不列
+      m.npcs = m.npcs.filter((id) => wbook.npcById.has(id));
       const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
       m.lvLo = levels.length ? Math.min(...levels) : null;
       m.lvHi = levels.length ? Math.max(...levels) : null;
