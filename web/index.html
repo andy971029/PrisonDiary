@@ -417,9 +417,6 @@
   .mob-detail .pair > small { flex: none; color: var(--muted); font-size: 12px; }
   .mob-detail .pair .chips { display: inline-flex; }
   .mob-detail .quest-text p + h4 { margin-top: 10px; }
-  .mob-detail .talk { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--muted); }
-  .mob-detail .talk li { margin: 0 0 2px; }
-  .mob-detail .npc-portrait { flex: none; display: flex; align-items: flex-end; justify-content: center; min-width: 80px; }
   .chips .reveal { border-style: dashed; color: var(--muted); }
   .chips .reveal:hover { color: var(--accent); }
   .chips .soon { font-style: normal; padding: 0 4px; font-size: 10px; font-weight: 700; color: var(--muted);
@@ -612,7 +609,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2695,7 +2692,7 @@ function npcDetail(n) {
   const starts = n.quests.filter((q) => q.start === n.id), ends = n.quests.filter((q) => q.end === n.id && q.start !== n.id);
   const crafts = /^(refine|make)/.test(n.script);
   return `<div class="mob-detail">
-    <div class="portrait"><div class="npc-portrait">${npcPicTag(n, 160, 160, ' decoding="async"')}</div><div class="desc">${n.func ? `<p class="facts-line">${esc(n.func)}</p>` : ""}${crafts ? '<p class="note">會幫玩家製作或精煉東西的 NPC；配方在伺服器端，客戶端沒有。</p>' : ""}${n.talk.length ? `<h4>對話</h4><ul class="talk">${n.talk.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div></div>
+    ${n.func || crafts ? `<div class="portrait"><div class="desc">${n.func ? `<p class="facts-line">${esc(n.func)}</p>` : ""}${crafts ? '<p class="note">會幫玩家製作或精煉東西的 NPC；配方在伺服器端，客戶端沒有。</p>' : ""}</div></div>` : ""}
     <div><h4>所在地圖 ${n.maps.length}</h4>${n.maps.length ? `<div class="chips">${n.maps.map((id) => mapChip(id)).join("")}</div>` : '<p class="note">不在任何一張已開放的地圖上。</p>'}${n.away ? `<p class="note">另在 ${n.away} 張還沒開放的地圖上。</p>` : ""}</div>
     <div><h4>任務 ${n.quests.length}</h4>${starts.length ? `<h5>接</h5><div class="chips">${starts.map((q) => questChip(q)).join("")}</div>` : ""}${ends.length ? `<h5>交</h5><div class="chips">${ends.map((q) => questChip(q)).join("")}</div>` : ""}${n.quests.length ? "" : '<p class="note">沒有任務。</p>'}</div>
     <p class="note">NPC ID ${n.id}${n.script ? ` · 腳本 ${esc(n.script)}` : ""}</p>
@@ -2744,7 +2741,7 @@ const renderNpcs = makeTable("npcs", NPC_COLS, npcDetail, () => {
   const q = $("npcs-q").value.trim().toLowerCase(), func = $("npcs-func").value, quest = $("npcs-quest").checked, all = $("npcs-all").checked;
   const pool = wbook.data.npcs.npcs.filter((n) => all || n.maps.length);
   return { rows: pool.filter((n) => (!func || n.func === func) && (!quest || n.quests.length) && (!q || n.hay.includes(q))), total: pool.length };
-}, "名字、職稱、對話與站的位置來自遊戲客戶端的資料檔。預設只列站在已開放地圖上的 NPC。點一列展開所在地圖與任務。", { col: 2, dir: 1 }, "個",
+}, "名字、職稱與站的位置來自遊戲客戶端的資料檔。預設只列站在已開放地圖上的 NPC。點一列展開所在地圖與任務。", { col: 2, dir: 1 }, "個",
   { ready: worldReady, reset: (q) => { resetTools(["npcs-func", "npcs-quest"], "npcs-q", q); $("npcs-all").checked = true; } });
 for (const id of ["quests-q", "quests-lo", "quests-hi", "npcs-q", "maps-q"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all"]) $(id).addEventListener("change", () => renderSub());
@@ -3072,7 +3069,7 @@ function questTip(q) {
 }
 function npcTip(n) {
   return tipHead(npcPicTag(n, 72, 72, ' decoding="async"'), n.name, n.func)
-    + tipRows([["任務", n.quests.length || ""], ["對話", n.talk[0] || ""]])
+    + tipRows([["任務", n.quests.length || ""]])
     + (n.maps.length ? `<h5>所在地圖</h5><div class="chips">${n.maps.map((id) => mapChip(id, "goto")).join("")}</div>`
       : `<p>${n.away ? `只在 ${n.away} 張還沒開放的地圖上。` : "不在任何一張已開放的地圖上。"}</p>`);
 }
