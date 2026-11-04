@@ -25,7 +25,7 @@
 ``<id>_link<i>.png`` 區域、``<id>_path<節點位置>.png`` 路線、``node<type>.png`` 節點圖示、``cur.png`` 目前位置。
 
 客戶端的節點只涵蓋約一半的地圖。:func:`add_inferred` 用地圖圖鑑的傳送點關係替其他地圖補節點，接在 ``nodes`` 後面，
-多一個 ``via``：它接的是同一張世界地圖的第幾個節點（客戶端的節點沒有這個欄位）。
+多一個 ``via``：傳送點連到同一張世界地圖的哪幾個節點（客戶端的節點沒有這個欄位）。
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from collections import Counter
+from collections import Counter, deque
 from typing import Any
 
 from . import gamedata
@@ -92,29 +92,39 @@ def load_tables(directory: str | os.PathLike[str]) -> tuple[dict, dict]:
     return split_tables(tables)
 
 
-def _spot(world: dict, anchor: dict) -> tuple[int, int]:
-    """替 *anchor* 旁邊補的節點找位置：由近到遠繞圈，取第一圈裡離其他節點夠遠、又最空的一點；都太擠就取最空的。"""
-    best, best_room = (anchor["x"], anchor["y"]), -1.0
+def _spot(world: dict, parent: dict, back: dict | None) -> tuple[int, int]:
+    """替接在 *parent* 的節點找位置：由近到遠繞圈，第一個有空位的圈裡，順著 *back* → *parent* 的方向走（一條鏈才拉得直），
+    沒方向就取最空的一點；每圈都太擠就取最空的。"""
+    fallback, fallback_room = (parent["x"], parent["y"]), -1.0
     for radius in SPOT_RADII:
+        picks = []
         for step in range(SPOT_ANGLES):
             angle = 2 * math.pi * step / SPOT_ANGLES
-            x, y = round(anchor["x"] + radius * math.cos(angle)), round(anchor["y"] + radius * math.sin(angle))
+            dx, dy = radius * math.cos(angle), radius * math.sin(angle)
+            x, y = round(parent["x"] + dx), round(parent["y"] + dy)
             if not (SPOT_MARGIN <= x <= world["w"] - SPOT_MARGIN and SPOT_MARGIN <= y <= world["h"] - SPOT_MARGIN):
                 continue
             room = min(math.hypot(x - n["x"], y - n["y"]) for n in world["nodes"])
-            if room > best_room:
-                best, best_room = (x, y), room
-        if best_room >= SPOT_GAP:
-            break
-    return best
+            if room > fallback_room:
+                fallback, fallback_room = (x, y), room
+            if room >= SPOT_GAP:
+                ahead = 0.0
+                if back is not None:
+                    bx, by = parent["x"] - back["x"], parent["y"] - back["y"]
+                    ahead = round((bx * dx + by * dy) / ((math.hypot(bx, by) or 1) * radius), 3)
+                picks.append((ahead, room, x, y))
+        if picks:
+            _, _, x, y = max(picks)
+            return x, y
+    return fallback
 
 
 def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
     """替不在任何節點上、但有傳送點連回節點地圖的地圖補節點，回傳補了幾個節點。
 
-    傳送點不分方向。沒有節點的地圖彼此連通的算一組，接到傳送點最多的那張節點地圖，放在它最小的節點旁邊（總圖的
-    節點是整區的總和，別層有就不用）；同一個節點底下同名的組（隱藏研究室這種副本的很多份）併成一個點。
-    連不回節點的不補，留給網頁列在地圖下面。
+    傳送點不分方向。沒有節點的地圖彼此連通的算一組，接到傳送點最多的那張節點地圖，放在它最小的節點旁邊（總圖的節點是
+    整區的總和，別層有就不用），從那裡沿傳送點一張一張往外放；``via`` 列這個節點用傳送點連到的所有節點。同一個節點底下
+    同名、連到的地圖也一樣的（隱藏研究室這種副本的很多份）併成一個點。連不回節點的不補，留給網頁列在地圖下面。
     """
     by_id = {m["id"]: m for m in maps}
     worlds = data["worlds"]
@@ -131,7 +141,8 @@ def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
                 near[m["id"]].append(target)
                 near[target].append(m["id"])
 
-    groups: dict[tuple[int, int, str], list[int]] = {}
+    made: dict[int, tuple[int, int]] = {}           # 補了節點的地圖 → (世界地圖, 節點)
+    slots: dict[tuple, int] = {}                    # 併成同一點的鍵 → 節點
     seen: set[int] = set()
     for start in sorted(loose):
         if start in seen:
@@ -151,14 +162,42 @@ def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
             continue
         anchor = min(anchors, key=lambda a: (-anchors[a], a))
         w_index, n_index, _ = min(spots[anchor], key=lambda s: (worlds[s[0]]["id"] == ROOT, s[2]))
-        members.sort()
-        groups.setdefault((w_index, n_index, by_id[members[0]]["name"]), []).extend(members)
-
-    for (w_index, n_index, _), members in groups.items():
         world = worlds[w_index]
-        x, y = _spot(world, world["nodes"][n_index])
-        world["nodes"].append({"x": x, "y": y, "type": INFERRED_TYPE, "maps": sorted(members), "title": "", "desc": "", "via": n_index})
-    return len(groups)
+        # 由近到遠：每張圖放在第一張連到它的圖旁邊，再往前一張決定方向
+        queue = deque((m, n_index, None) for m in sorted(set(near[anchor]) & set(members)))
+        placed: set[int] = set()
+        while queue:
+            map_id, parent, back = queue.popleft()
+            if map_id in placed:
+                continue
+            placed.add(map_id)
+            key = (w_index, n_index, by_id[map_id]["name"], frozenset(near[map_id]))
+            if key in slots:
+                index = slots[key]
+                world["nodes"][index]["maps"].append(map_id)
+                world["nodes"][index]["maps"].sort()
+            else:
+                x, y = _spot(world, world["nodes"][parent], world["nodes"][back] if back is not None else None)
+                index = len(world["nodes"])
+                world["nodes"].append({"x": x, "y": y, "type": INFERRED_TYPE, "maps": [map_id], "title": "", "desc": "", "via": []})
+                slots[key] = index
+            made[map_id] = (w_index, index)
+            for other in sorted(set(near[map_id])):
+                if other in loose and other not in placed:
+                    queue.append((other, index, parent))
+
+    for map_id, (w_index, index) in made.items():
+        node = worlds[w_index]["nodes"][index]
+        for other in near[map_id]:
+            if other in made:
+                target = made[other][1] if made[other][0] == w_index else None
+            else:
+                here = [s for s in spots.get(other, []) if s[0] == w_index]
+                target = min(here, key=lambda s: s[2])[1] if here else None
+            if target is not None and target != index and target not in node["via"]:
+                node["via"].append(target)
+        node["via"].sort()
+    return len(slots)
 
 
 def _text(values: dict, key: Any) -> str:
