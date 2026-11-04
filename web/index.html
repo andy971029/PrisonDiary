@@ -467,6 +467,26 @@
   .wm-side > p { margin: 0 0 6px; white-space: pre-line; }
   .wm-side .mob-detail { grid-template-columns: minmax(0, 1fr); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   .wm-side .note { margin: 6px 0 0; }
+  .mm { grid-column: 1 / -1; }
+  .mm-stage { position: relative; max-width: 100%; background: #1c2226; border-radius: 2px; }
+  .mm-stage > img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  .mm-dot { position: absolute; width: 16px; min-width: 0; height: 16px; display: grid; place-items: center; padding: 0;
+    transform: translate(-50%, -50%); background: none; border: 0; box-shadow: none; cursor: pointer; }
+  .mm-dot::before { content: ""; width: 9px; height: 9px; background: #3ddc6b; border: 1px solid #06140b; border-radius: 50%; }
+  .mm-dot.portal::before { width: 8px; height: 8px; background: #59b7ff; border-color: #04121d; border-radius: 1px; }
+  .mm-dot.off { cursor: default; }
+  .mm-dot.off::before { background: #8a949a; border-color: #15191c; }
+  .mm-dot:hover, .mm-dot:focus-visible, .mm-dot.on { z-index: 2; }
+  .mm-dot:hover::before, .mm-dot:focus-visible::before, .mm-dot.on::before { transform: scale(1.4); box-shadow: 0 0 0 2px #fff; }
+  .mm-dot:focus-visible { outline: none; }
+  .mm-dot::after { content: attr(data-label); position: absolute; bottom: 100%; left: 0; display: none; margin-bottom: 2px; padding: 2px 7px;
+    font: 500 12px/1.5 var(--body); white-space: nowrap; pointer-events: none; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 2px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+  .mm-dot.flip::after { left: auto; right: 0; }
+  .mm-dot:hover::after, .mm-dot:focus-visible::after { display: block; }
+  .mm-key { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .mm-key i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; background: #3ddc6b; border-radius: 50%; }
+  .mm-key i.portal { background: #59b7ff; border-radius: 1px; }
   .wm-results { margin-bottom: 14px; }
   .wm-results p { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
   .wm-others { margin-top: 16px; }
@@ -609,7 +629,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.16.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.17.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2638,6 +2658,7 @@ async function loadWorldNow() {
     for (const m of maps.maps) {
       // 地圖的生成清單留著一些客戶端沒有名字也沒有資料的 NPC，不列
       m.npcs = m.npcs.filter((id) => wbook.npcById.has(id));
+      if (m.mini) m.mini.npcs = m.mini.npcs.filter(([id]) => wbook.npcById.has(id));
       const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
       m.lvLo = levels.length ? Math.min(...levels) : null;
       m.lvHi = levels.length ? Math.max(...levels) : null;
@@ -2700,10 +2721,27 @@ function npcDetail(n) {
     <p class="note">NPC ID ${n.id}${n.script ? ` · 腳本 ${esc(n.script)}` : ""}</p>
   </div>`;
 }
+// 小地圖與上面的標記；座標用百分比，圖被欄寬縮小時標記跟著走。點標記和點 chip 一樣彈小卡
+function miniMapHtml(m) {
+  const { w, h, npcs, portals } = m.mini;
+  const pos = (x, y, cls = "") => `class="mm-dot${cls}${x > w / 2 ? " flip" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%"`;
+  const dot = (attrs, label) => `<button type="button" ${attrs} data-label="${esc(label)}" aria-label="${esc(label)}"></button>`;
+  const portalDots = portals.map(([id, x, y]) => {
+    const to = id && wbook.mapById.get(id);
+    return to ? dot(`${pos(x, y, " portal")} data-tip="map" data-id="${id}"`, `往 ${to.name}`)
+      : `<span ${pos(x, y, " portal off")} data-label="通往還沒開放的地圖"></span>`;
+  }).join("");
+  const npcDots = npcs.map(([id, x, y]) => dot(`${pos(x, y)} data-tip="npc" data-id="${id}"`, npcName(id))).join("");
+  return `<div class="mm">
+      <div class="mm-stage" style="width:${w * 2}px"><img src="minimaps/${m.id}.png" width="${w}" height="${h}" alt="${esc(m.name)}的小地圖" decoding="async">${portalDots}${npcDots}</div>
+      <div class="mm-key"><span><i></i>NPC</span>${portals.length ? '<span><i class="portal"></i>傳送點</span>' : ""}</div>
+    </div>`;
+}
 function mapDetail(m) {
   const facts = [m.town ? "城鎮" : "", m.lvLo ? `怪物等級 ${m.lvLo === m.lvHi ? m.lvLo : `${m.lvLo}–${m.lvHi}`}` : "", m.bgm ? `BGM ${m.bgm}` : ""].filter(Boolean).join(" · ");
   return `<div class="mob-detail">
     <div class="portrait"><div class="desc">${facts ? `<p class="facts-line">${esc(facts)}</p>` : ""}${m.desc ? `<p>${esc(m.desc)}</p>` : ""}${pair("回程地圖", m.ret && m.ret !== m.id ? mapChip(m.ret) : "")}</div></div>
+    ${m.mini ? miniMapHtml(m) : ""}
     <div><h4>怪物 ${m.mobs.length}</h4>${m.mobs.length ? `<div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "tip", "生成點數")).join("")}</div>` : '<p class="note">沒有怪會生成。</p>'}</div>
     <div><h4>NPC ${m.npcs.length}</h4>${m.npcs.length ? `<div class="chips">${m.npcs.map((id) => npcChipById(id)).join("")}</div>` : '<p class="note">沒有 NPC。</p>'}</div>
     <div><h4>通往 ${m.to.length}</h4>${m.to.length ? `<div class="chips">${m.to.map((id) => mapChip(id)).join("")}</div>` : '<p class="note">沒有通往別張圖的傳送點。</p>'}${m.away ? `<p class="note">另有 ${m.away} 個傳送點通往還沒開放的地圖。</p>` : ""}</div>

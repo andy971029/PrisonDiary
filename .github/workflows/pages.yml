@@ -44,6 +44,7 @@ jobs:
           cp -r web/mobs _site/
           cp -r web/icons _site/
           cp -r web/npcs _site/
+          cp -r web/minimaps _site/
           cp -r web/worldmap _site/
 
       - uses: actions/configure-pages@v5

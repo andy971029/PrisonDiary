@@ -44,10 +44,13 @@
 
     {"maps": [{"id": 100000000, "street": "維多利亞", "name": "弓箭手村", "mark": "Henesys", "town": true,
                "ret": 100000000, "limit": 0, "bgm": "FloralLife", "desc": "…",
-               "mobs": [[100100, 3]], "npcs": [1012000], "to": [100000001], "away": 0}, …]}
+               "mobs": [[100100, 3]], "npcs": [1012000], "to": [100000001], "away": 0,
+               "mini": {"w": 211, "h": 196, "npcs": [[1012000, 120, 80]], "portals": [[100000001, 30, 90]]}}, …]}
 
 ``mobs`` 每筆是 ``[怪物, 生成點數]``；``to`` 是傳送點通往的、客戶端有資料的地圖；``away`` 是通往沒資料
-（還沒開放）地圖的傳送點數。
+（還沒開放）地圖的傳送點數。``mini`` 是小地圖（``web/minimaps/<id>.png``，匯出腳本裁的）的像素尺寸與上面的
+標記，座標是小地圖像素：``npcs`` 每筆 ``[NPC, x, y]``，``portals`` 每筆 ``[目標地圖, x, y]``，目標沒資料（還沒開放）
+是 0；沒小地圖的沒有這個欄位。
 """
 
 from __future__ import annotations
@@ -327,6 +330,7 @@ def build_maps(
             else:
                 away += 1
         bgm = str(info.get("bgm") or "")
+        mini = build_minimap(tree, map_id, shipped)
         out.append({
             "id": map_id, "street": str(rec.get("streetName") or "").strip(), "name": name,
             "mark": str(info.get("mapMark") or ""), "town": bool(info.get("town")),
@@ -337,9 +341,46 @@ def build_maps(
             "mobs": sorted([[mob, count] for mob, count in mobs.items()]),
             "npcs": by_map.get(map_id, []),
             "to": sorted(to), "away": away,
+            **({"mini": mini} if mini else {}),
         })
     out.sort(key=lambda m: m["id"])
     return out
+
+
+def build_minimap(tree: dict, map_id: int, shipped: set[int]) -> dict[str, Any] | None:
+    """地圖的 ``miniMap``、``life``、``portal`` → 小地圖尺寸與標記。
+
+    世界座標加上 ``centerX``／``centerY``、除以 ``2 ** mag`` 就是小地圖像素。NPC 用 ``cy``（踩的地面），沒有才用 ``y``。
+    """
+    meta = tree.get("miniMap")
+    if not isinstance(meta, dict):
+        return None
+    width, height, center_x, center_y, mag = (_int(meta.get(k)) for k in ("width", "height", "centerX", "centerY", "mag"))
+    if not width or not height or center_x is None or center_y is None or mag is None or mag < 0:
+        return None
+    scale = 1 << mag
+    w, h = round(width / scale), round(height / scale)
+
+    def at(x: int, y: int) -> list[int]:
+        return [min(max(round((x + center_x) / scale), 0), w), min(max(round((y + center_y) / scale), 0), h)]
+
+    npcs = []
+    for entry in _values(tree.get("life")):
+        if not isinstance(entry, dict) or entry.get("type") != "n" or entry.get("hide"):
+            continue
+        npc, x, y = entry.get("id"), _int(entry.get("x")), _int(entry.get("cy"))
+        y = y if y is not None else _int(entry.get("y"))
+        if isinstance(npc, str) and npc.isdigit() and x is not None and y is not None:
+            npcs.append([int(npc), *at(x, y)])
+    portals = []
+    for portal in _values(tree.get("portal")):
+        if not isinstance(portal, dict):
+            continue
+        target, x, y = _int(portal.get("tm")), _int(portal.get("x")), _int(portal.get("y"))
+        if target is None or target in (NO_MAP, map_id) or x is None or y is None:
+            continue
+        portals.append([target if target in shipped else 0, *at(x, y)])
+    return {"w": w, "h": h, "npcs": npcs, "portals": portals}
 
 
 def _table(directory: str | os.PathLike[str], name: str) -> dict:

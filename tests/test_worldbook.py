@@ -158,6 +158,24 @@ class NpcsAndMaps(unittest.TestCase):
         self.assertEqual(town["desc"], "可以轉職成為弓箭手。")
         self.assertEqual(maps[100000001]["ret"], 100000000)
         self.assertFalse(maps[100000001]["town"])
+        self.assertNotIn("mini", town)                                    # 沒有 miniMap 就沒有這個欄位
+
+    def test_minimap(self):
+        tree = {"miniMap": {"width": 1600, "height": 800, "centerX": 800, "centerY": 400, "mag": 4},
+                "life": {"0": {"type": "n", "id": "1012000", "x": 0, "y": -5, "cy": 0},    # 用踩的地面 cy
+                         "1": {"type": "n", "id": "1012002", "x": 160, "y": 80},            # 沒 cy 才用 y
+                         "2": {"type": "n", "id": "9999999", "x": 0, "cy": 0, "hide": 1},
+                         "3": {"type": "m", "id": "0100100", "x": 0, "cy": 0},
+                         "4": {"type": "n", "id": "1012003", "x": 99999, "cy": -99999}},    # 超出範圍夾回圖內
+                "portal": {"0": {"tm": 999999999, "x": 0, "y": 0}, "1": {"tm": 100000001, "x": -800, "y": -400},
+                           "2": {"tm": 200000000, "x": 800, "y": 400}, "3": {"tm": 100000000, "x": 0, "y": 0}}}
+        self.assertEqual(worldbook.build_minimap(tree, 100000000, self.shipped), {
+            "w": 100, "h": 50,
+            "npcs": [[1012000, 50, 25], [1012002, 60, 30], [1012003, 100, 0]],
+            "portals": [[100000001, 0, 0], [0, 100, 50]],
+        })
+        self.assertIsNone(worldbook.build_minimap({"miniMap": {"canvas": None}}, 1, self.shipped))
+        self.assertIsNone(worldbook.build_minimap({}, 1, self.shipped))
 
 
 if __name__ == "__main__":
