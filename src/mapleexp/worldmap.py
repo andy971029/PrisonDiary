@@ -122,6 +122,8 @@ def _spot(world: dict, parent: dict, back: dict | None) -> tuple[int, int]:
 def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
     """替不在任何節點上、但有傳送點連回節點地圖的地圖補節點，回傳補了幾個節點。
 
+    上一層涵蓋整區的總節點不算：巨人之林只在維多利亞島的粉色節點上，奇幻村這層卻沒有它，一樣要補，才接得到森林迷宮V。
+
     傳送點不分方向。沒有節點的地圖彼此連通的算一組，接到傳送點最多的那張節點地圖，放在它最小的節點旁邊（總圖的節點是
     整區的總和，別層有就不用），從那裡沿傳送點一張一張往外放；``via`` 列這個節點用傳送點連到的所有節點。同一個節點底下
     同名、連到的地圖也一樣的（隱藏研究室這種副本的很多份）併成一個點。連不回節點的不補，留給網頁列在地圖下面。
@@ -129,11 +131,15 @@ def add_inferred(data: dict[str, Any], maps: list[dict]) -> int:
     by_id = {m["id"]: m for m in maps}
     worlds = data["worlds"]
     spots: dict[int, list[tuple[int, int, int]]] = {}
+    by_world = {w["id"]: w for w in worlds}
+    rolled_up: set[tuple[int, int]] = set()         # 跟下一層的節點有重疊的節點，是整區的總和
     for w_index, world in enumerate(worlds):
+        below = {m for link in world.get("links", []) for n in by_world[link["to"]]["nodes"] for m in n["maps"]}
+        rolled_up.update((w_index, n_index) for n_index, node in enumerate(world["nodes"]) if below.intersection(node["maps"]))
         for n_index, node in enumerate(world["nodes"]):
             for map_id in node["maps"]:
                 spots.setdefault(map_id, []).append((w_index, n_index, len(node["maps"])))
-    loose = {map_id for map_id in by_id if map_id not in spots}
+    loose = {map_id for map_id in by_id if all(s[:2] in rolled_up for s in spots.get(map_id, []))}
     near: dict[int, list[int]] = {map_id: [] for map_id in by_id}
     for m in maps:
         for target in m["to"]:

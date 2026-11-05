@@ -153,6 +153,18 @@ class Inferred(unittest.TestCase):
         self.assertEqual(added, 3)                                               # 第三份研究室連到的地圖不同，不併
         self.assertEqual(sorted(n["maps"] for _, _, n in self.made(data).values()), [[10, 11], [12], [13]])
 
+    def test_map_only_on_a_rolled_up_node_still_gets_a_node_in_the_area(self):
+        data = {"worlds": [
+            {"id": "W1", "w": 640, "h": 470, "links": [{"to": "W2"}], "nodes": [{"x": 100, "y": 100, "maps": [1, 2]}, {"x": 400, "y": 100, "maps": [3]}]},
+            {"id": "W2", "w": 640, "h": 470, "links": [], "nodes": [{"x": 300, "y": 200, "maps": [1]}]},
+        ]}
+        added = worldmap.add_inferred(data, self.maps((1, "森林迷宮V", [2]), (2, "巨人之林", [1]), (3, "別區", [])))
+        self.assertEqual(added, 1)
+        world, _, node = self.made(data)[2]
+        self.assertEqual(world, "W2")                                            # 放進下一層，接到那一層的節點
+        self.assertEqual(node["via"], [0])
+        self.assertEqual(data["worlds"][0]["nodes"][0]["maps"], [1, 2])          # 總節點不動
+
     def test_spots_keep_clear_of_nodes_and_edges(self):
         data = {"worlds": [{"id": "W", "w": 200, "h": 200, "nodes": [{"x": 5, "y": 5, "maps": [1]}]}]}
         rows = [(1, "村", [10 + i for i in range(6)])] + [(10 + i, f"洞{i}", []) for i in range(6)]

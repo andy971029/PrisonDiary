@@ -633,7 +633,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.18.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.18.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2979,7 +2979,7 @@ function wmSideHtml() {
     <p>滑鼠移到節點看是哪張地圖，點一下看內容。${world.links.length ? "亮起來的區域可以點進去。" : ""}</p>
     ${extra.length ? `<h4>這一區沒有節點的地圖 ${extra.length}</h4><div class="chips">${extra.map((id) => mapChip(id, "goto")).join("")}</div>` : ""}`;
 }
-// 子地圖的節點比上一層涵蓋整區的節點少一些（奇幻村的旅館、桑那房）：那些地圖列在這一區，免得進來就找不到
+// 子地圖的節點比上一層涵蓋整區的節點少一些：有傳送點連得回來的補成紫色菱形（奇幻村的旅館、巨人之林），其他的列在這一區，免得進來就找不到
 function wmParentOnly(world) {
   const parent = wm.worlds.get(world.parent);
   if (!parent || !world.parent || world.parent === WM_ROOT) return [];
