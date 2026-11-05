@@ -51,6 +51,7 @@ TYPE_STRING = 11
 TYPE_LINK = 12
 TYPE_VECTOR = 14
 TYPE_SPRITE = 18
+TYPE_SPRITE_LINK = 19   # 圖借別格（$inlink），origin、map、z 是自己的
 
 _MAX_NAME = 64
 
@@ -99,11 +100,12 @@ def asset_name(data: bytes, header_at: int) -> str | None:
     return None
 
 
-def parse(data: bytes, magic_at: int) -> dict[str, Any]:
+def parse(data: bytes, magic_at: int, canvas: bool = False) -> dict[str, Any]:
     """把 *magic_at*（``WZJS`` 的位置）那一包解成巢狀 dict。
 
     容器是 dict（保留客戶端裡的順序），葉節點是 int、float、str 或 :class:`Vector`；
-    圖片之類讀不到內容的型別放 None，鍵還留著，看得出有這個節點。
+    圖片之類讀不到內容的型別放 None，鍵還留著，看得出有這個節點。*canvas* 為真時，有子節點的圖片（origin、map、z）
+    也展開成 dict，紙娃娃要靠這些對位。
     """
     if data[magic_at : magic_at + 4] != MAGIC:
         raise WzError("不是 WZJS")
@@ -146,7 +148,7 @@ def parse(data: bytes, magic_at: int) -> dict[str, Any]:
         if depth > 64:
             raise WzError("節點巢狀太深")
         kind, name_idx, value_idx, first, count, *_ = nodes[index]
-        if kind != TYPE_DIR:
+        if kind != TYPE_DIR and not (canvas and kind in (TYPE_SPRITE, TYPE_SPRITE_LINK) and count > 0):
             return leaf(kind, value_idx)
         out: dict[str, Any] = {}
         if count == 0:          # 空容器的「第一個子節點」是 -1
@@ -163,7 +165,7 @@ def parse(data: bytes, magic_at: int) -> dict[str, Any]:
     return root if isinstance(root, dict) else {}
 
 
-def iter_assets(data: bytes) -> Iterator[tuple[str, dict[str, Any]]]:
+def iter_assets(data: bytes, canvas: bool = False) -> Iterator[tuple[str, dict[str, Any]]]:
     """掃過整段資料，逐一產出 ``(名稱, 樹)``。
 
     壞掉或認不得的那包直接跳過：bundle 裡偶爾會有別的東西剛好含 ``WZJS`` 四個字。
@@ -178,7 +180,7 @@ def iter_assets(data: bytes) -> Iterator[tuple[str, dict[str, Any]]]:
             name = asset_name(data, at - HEADER_SIZE)
             if name is None:
                 continue
-            tree = parse(data, at)
+            tree = parse(data, at, canvas)
         except (WzError, struct.error):
             continue
         yield name, tree
