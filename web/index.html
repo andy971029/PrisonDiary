@@ -452,8 +452,8 @@
   .wm-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
   .wm-node i { display: block; width: 9px; height: 9px; background: #8b5cf6; border: 2px solid #fff; box-shadow: 0 0 0 1px #2e1065; transform: rotate(45deg); transition: transform .1s; }
   .wm-node:hover i, .wm-node:focus-visible i { transform: rotate(45deg) scale(1.35); }
-  .wm-via { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
-  .wm-via line { stroke: #5b21b6; stroke-width: 2; stroke-dasharray: 4 2; }
+  .wm-via { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+  .wm-via line { stroke: #7c3aed; stroke-width: 3; stroke-linecap: round; }
   .wm-node.off img { filter: grayscale(1); opacity: .6; }
   .wm-node.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px #b5600a; }
   .wm-cur { position: absolute; z-index: 2; transform: translate(-50%, -100%); pointer-events: none; }
@@ -633,7 +633,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.18.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.18.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2822,7 +2822,7 @@ function wmInit(worlds) {
   $("wm-others-body").innerHTML = [...groups].sort((a, b) => b[1].length - a[1].length).map(([street, maps]) =>
     `<h5>${esc(street)}<small>${maps.length}</small></h5><div class="chips">${maps.map((m) => `<button type="button" data-goto="map" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>`).join("");
   $("maps-count").textContent = `${all.length} 張`;
-  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。紫色菱形是客戶端世界地圖上沒有、依傳送點關係補上的地圖，虛線是它們之間與連到節點的傳送點，位置只是示意。怪物是生成清單上的（召喚出來的王不在上面）。";
+  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。紫色菱形是客戶端世界地圖上沒有、依傳送點關係補上的地圖，紫線是它們之間與連到節點的傳送點，位置只是示意。怪物是生成清單上的（召喚出來的王不在上面）。";
 }
 
 // 節點的名字：客戶端有標題就用；沒有就用第一張開放的地圖；全部沒開放的，總圖上看得出是哪個區域
@@ -2842,13 +2842,19 @@ function wmLevelText(ids) {
   const lo = Math.min(...maps.map((m) => m.lvLo)), hi = Math.max(...maps.map((m) => m.lvHi));
   return `怪物 Lv.${lo === hi ? lo : `${lo}–${hi}`}`;
 }
+// 粉色節點（type 2）是一個區域的入口：地圖跟某個子區域重疊的，點了直接進那一區；沒有子區域的（生命之穴內部）照一般節點看內容
+function wmNodeLink(world, node) {
+  if (node.type !== 2) return null;
+  return world.links.find((link) => wm.worlds.get(link.to).nodes.some((n) => n.maps.some((id) => node.maps.includes(id)))) || null;
+}
 const wmViaNames = (world, node) => node.via.map((i) => `「${wmNodeTitle(world, world.nodes[i])}」`).join("");
 function wmNodeHover(world, node) {
   const open = wmOpenMaps(node);
   const single = open.length === 1 && node.maps.length === 1 ? wbook.mapById.get(open[0]) : null;
   const count = node.maps.length > 1 ? `${node.maps.length} 張地圖${open.length < node.maps.length ? `，${open.length ? `${node.maps.length - open.length} 張` : "全部"}未開放` : ""}`
     : open.length ? "" : "未開放";
-  const lines = [single?.town ? "城鎮" : "", count, wmLevelText(open), node.via != null ? `依傳送點補的點，接${wmViaNames(world, node)}` : ""].filter(Boolean);
+  const enter = wmNodeLink(world, node);
+  const lines = [single?.town ? "城鎮" : "", count, wmLevelText(open), enter ? `點一下進入「${enter.tip}」` : "", node.via != null ? `依傳送點補的點，接${wmViaNames(world, node)}` : ""].filter(Boolean);
   return `<b>${esc(wmNodeTitle(world, node))}</b>${lines.map((t) => `<small>${esc(t)}</small>`).join("")}`;
 }
 function wmLinkHover(link) {
@@ -3048,7 +3054,12 @@ $("wm-stage").addEventListener("focusout", () => { wm.hoverBtn = null; wmHoverCl
 $("wm-stage").addEventListener("click", async (e) => {
   if (!wbook.data) return;
   const btn = e.target.closest(".wm-node");
-  if (btn) { wm.hoverBtn = null; wmPickNode(Number(btn.dataset.node)); return; }
+  if (btn) {
+    wm.hoverBtn = null;
+    const index = Number(btn.dataset.node), enter = wmNodeLink(wmWorld(), wmWorld().nodes[index]);
+    if (enter) wmEnter(enter.to); else wmPickNode(index);
+    return;
+  }
   const world = wmWorld(), [x, y] = wmStagePoint(e);
   await wmMasks(world);
   const link = wmLinkAt(world, x, y);
