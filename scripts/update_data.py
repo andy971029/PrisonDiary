@@ -93,8 +93,10 @@ def main() -> int:
     if git("branch", "--show-current") != "main":
         print("目前不在 main，先切回 main 再更新。")
         return 1
-    if git("status", "--porcelain", "--untracked-files=no"):
-        print("有還沒提交的修改，先提交或還原，免得跟圖鑑資料混在一起：\n" + git("status", "--short", "--untracked-files=no"))
+    # 上次匯出沒發布留下的資料不算，重跑會覆蓋
+    dirty = git("status", "--short", "--untracked-files=no", "--", ".", *[f":!web/{name}" for name in DATA])
+    if dirty:
+        print("有還沒提交的修改，先提交或還原，免得跟圖鑑資料混在一起：\n" + dirty)
         return 1
 
     before = counts(WEB)
