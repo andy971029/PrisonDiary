@@ -83,8 +83,13 @@ scripts/
 ├── export_itembook.py     從本機客戶端匯出 web/itembook.json 與圖示圖集
 ├── export_worldbook.py    從本機客戶端匯出任務、NPC、地圖圖鑑與 NPC 圖
 ├── export_worldmap.py     從本機客戶端匯出世界地圖的資料與圖
+├── update_data.py      照順序重跑上面的匯出、列數量變化、跑測試，問過才發布（update_data.bat 跑這支）
 └── serve_web.py      送 no-store 的靜態伺服器，改了檔案重新整理就生效
 ```
+
+## 更新圖鑑資料
+
+圖鑑都是客戶端資料的快照，遊戲改版不會自動更新，要在裝了遊戲的電腦上匯出。更新遊戲後雙擊根目錄的 `update_data.bat`：照順序重跑所有匯出、列出每份圖鑑的數量變化（變少的會警示）、跑測試，輸入 `y` 才升版號、提交並推送到 main，之後自動部署。工作目錄有未提交的修改或不在 main 時不會開始。
 
 ## 測試
 
