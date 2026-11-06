@@ -657,7 +657,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3304,7 +3304,7 @@ for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEvent
 // 客戶端的角色是一堆部位，網頁自己疊：身體放原點，其他部位靠共用的骨架點（navel、neck、brow、hand）對上去，再照圖層排前後。
 // avatar.json 是目錄，一件一個 avatar/<id>.json（部位表與圖集），選到才載，動作都在裡面。格式見 mapleexp/avatar.py。
 const DOLL_KEY = "mapleexp.doll";
-const DOLL_SIZE = 200, DOLL_X = 100, DOLL_Y = 150, DOLL_CELL = 36, DOLL_COLS = 56;
+const DOLL_SIZE = 200, DOLL_X = 100, DOLL_Y = 150, DOLL_PAD = 8, DOLL_CELL = 36, DOLL_COLS = 56;
 const DOLL_BASIC = [["stand", "站立"], ["walk", "走路"], ["alert", "警戒"], ["jump", "跳躍"], ["fly", "飛行"], ["sit", "坐下"], ["prone", "趴下"], ["ladder", "爬梯子"], ["rope", "爬繩子"], ["heal", "治療"]];
 const DOLL_ATTACKS = [
   ["單手揮", [["swingO1", "1"], ["swingO2", "2"], ["swingO3", "3"], ["swingOF", "F"]]],
@@ -3317,7 +3317,7 @@ const DOLL_ATTACKS = [
 ];
 const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "短劍", 34: "雙刀", 37: "短杖", 38: "長杖", 40: "雙手劍", 41: "雙手斧", 42: "雙手棍", 43: "槍", 44: "矛", 45: "弓", 46: "弩", 47: "拳套", 48: "指虎", 49: "火槍" };
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
-const doll = { index: null, loading: null, files: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0,
+const doll = { index: null, loading: null, files: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
   skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null };
 
 function dollSave() {
@@ -3421,7 +3421,21 @@ function dollHidden(capDrawn) {
   if (hit("Ae")) ["accessoryEar", "accessoryEarOverHair", "backAccessoryEar"].forEach((z) => hide.add(z));
   return hide;
 }
-function dollCompose(action, index) {
+// 有些時裝（不少披風）的圖在客戶端的特效裡：錨在腳底，動畫有自己的每格毫秒，沒有這個動作就用 default（背面用 backDefault）
+function dollEffect(file, action) {
+  const e = file.e;
+  if (!e) return null;
+  return e[action] || ((action === "ladder" || action === "rope") && e.backDefault) || e.default || null;
+}
+const dollEffTime = () => doll.effFrozen ?? performance.now() - doll.effBase;
+function dollEffectFrame(rows, time) {
+  const total = rows.reduce((sum, [, ms]) => sum + ms, 0);
+  let t = time % total, i = 0;
+  while (t >= rows[i][1]) t -= rows[i++][1];
+  return { row: rows[i], left: rows[i][1] - t };
+}
+// effectAt：特效這個動作要畫哪幾格，平常是現在這一格，算畫布範圍時傳每一格
+function dollCompose(action, index, effectAt = (rows) => [dollEffectFrame(rows, dollEffTime()).row]) {
   let pending = doll.ready.flatMap((x) => dollParts(x, action, index));
   // 帽子這一格沒有圖就不遮頭髮，不然會變光頭
   const cap = doll.ready.find((x) => x.id === doll.worn.cap)?.file;
@@ -3437,6 +3451,10 @@ function dollCompose(action, index) {
   const isBody = (e) => e.part[6] === "body" || e.part[6] === "backBody";
   pending.filter(isBody).forEach((e) => place(e, 0, 0));
   pending = pending.filter((e) => !isBody(e));
+  for (const { file } of doll.ready) {
+    const rows = dollEffect(file, action);
+    if (rows) for (const [n] of effectAt(rows)) if (file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0 });
+  }
   for (let moved = true; moved && pending.length;) {
     moved = false;
     pending = pending.filter((e) => {
@@ -3451,12 +3469,24 @@ function dollCompose(action, index) {
   const rank = (e) => doll.rank.get(e.part[6]) ?? Infinity;
   return placed.map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
 }
+// 武器的攻擊特效常常比角色大很多：畫布照這個動作每一格的範圍放大（至少 200），整段動作用同一個大小才不會晃
+function dollView(action, count) {
+  let left = -DOLL_X, top = -DOLL_Y, right = DOLL_SIZE - DOLL_X, bottom = DOLL_SIZE - DOLL_Y;
+  for (let i = 0; i < count; i++) for (const { part: [, , w, h, ox, oy], dx, dy } of dollCompose(action, i, (rows) => rows)) {
+    left = Math.min(left, dx - ox - DOLL_PAD); top = Math.min(top, dy - oy - DOLL_PAD);
+    right = Math.max(right, dx - ox + w + DOLL_PAD); bottom = Math.max(bottom, dy - oy + h + DOLL_PAD);
+  }
+  const size = Math.max(right - left, bottom - top);
+  return { size, x: Math.round(-left + (size - (right - left)) / 2), y: Math.round(-top + (size - (bottom - top)) / 2) };
+}
 function dollDraw() {
-  const ctx = $("doll-canvas").getContext("2d", { willReadFrequently: true });
+  const canvas = $("doll-canvas"), { size, x: cx, y: cy } = doll.view;
+  if (canvas.width !== size) canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, DOLL_SIZE, DOLL_SIZE);
+  ctx.clearRect(0, 0, size, size);
   for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of dollCompose(dollAction(), doll.frame))
-    ctx.drawImage(file.image, x, y, w, h, DOLL_X + dx - ox, DOLL_Y + dy - oy, w, h);
+    ctx.drawImage(file.image, x, y, w, h, cx + dx - ox, cy + dy - oy, w, h);
 }
 function dollPlay() {
   clearTimeout(doll.timer);
@@ -3464,9 +3494,25 @@ function dollPlay() {
   const body = doll.ready.find((x) => x.id === 2000 + doll.skin)?.file;
   const delays = body?.d?.[dollAction()] || [500];
   if (doll.frame >= delays.length) doll.frame = 0;
+  dollPlayEffects();
+  const key = `${dollAction()}|${dollGroup()}`;
+  if (doll.viewOf !== doll.ready || doll.viewKey !== key) {
+    doll.view = dollView(dollAction(), delays.length);
+    doll.viewOf = doll.ready; doll.viewKey = key;
+  }
   dollDraw();
   if (!doll.playing || delays.length < 2 || $("tab-doll").hidden) return;
   doll.timer = setTimeout(() => { doll.frame = (doll.frame + 1) % delays.length; dollPlay(); }, Math.max(60, delays[doll.frame]));
+}
+// 特效跟身體分開跑：等到最快換格的那一個再重畫
+function dollPlayEffects() {
+  clearTimeout(doll.effTimer);
+  if (!doll.ready || !doll.playing || $("tab-doll").hidden) return;
+  const action = dollAction();
+  const waits = doll.ready.map((x) => dollEffect(x.file, action)).filter((rows) => rows && rows.length > 1).map((rows) => dollEffectFrame(rows, dollEffTime()).left);
+  if (!waits.length) return;
+  const wait = Math.max(30, Math.min(...waits));
+  doll.effTimer = setTimeout(() => { dollDraw(); dollPlayEffects(); }, wait + 1);
 }
 function dollRenderActions() {
   const chip = ([key, label]) => `<button type="button" data-doll-action="${key}"${key === doll.action ? ' class="on"' : ""}>${esc(label)}</button>`;
@@ -3602,6 +3648,8 @@ $("doll-actions").addEventListener("click", (e) => {
 });
 $("doll-play").addEventListener("click", () => {
   doll.playing = !doll.playing;
+  if (doll.playing) { doll.effBase = performance.now() - doll.effFrozen; doll.effFrozen = null; }
+  else doll.effFrozen = dollEffTime();
   $("doll-play").textContent = doll.playing ? "暫停" : "播放";
   dollPlay();
 });
@@ -3617,9 +3665,9 @@ $("doll-group").addEventListener("change", (e) => {
 // 下載目前這一格：裁掉透明的邊，放大會糊所以存原尺寸
 $("doll-save").addEventListener("click", () => {
   if (!doll.ready) return;
-  const canvas = $("doll-canvas"), { data } = canvas.getContext("2d").getImageData(0, 0, DOLL_SIZE, DOLL_SIZE);
-  let left = DOLL_SIZE, top = DOLL_SIZE, right = -1, bottom = -1;
-  for (let y = 0; y < DOLL_SIZE; y++) for (let x = 0; x < DOLL_SIZE; x++) if (data[(y * DOLL_SIZE + x) * 4 + 3]) {
+  const canvas = $("doll-canvas"), size = canvas.width, { data } = canvas.getContext("2d").getImageData(0, 0, size, size);
+  let left = size, top = size, right = -1, bottom = -1;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (data[(y * size + x) * 4 + 3]) {
     left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
   }
   if (right < 0) return;

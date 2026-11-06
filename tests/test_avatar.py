@@ -63,6 +63,24 @@ class Collect(unittest.TestCase):
         self.assertEqual(parts.rows[0]["path"], "default/face")
         self.assertEqual(avatar.collect_default({"info": {}}, avatar.Parts()), {})
 
+    def test_item_effect_frames_follow_links_and_carry_delays(self):
+        frame = {"origin": Vector(5.0, 9.0), "z": 0, "delay": 120}
+        eff = {"1102513": {"effect": {"z": -2, "default": {"0": frame, "1": {"origin": Vector(5.0, 9.0)}},
+                                      "ladder2": {"0": "../ladder/0"}, "ladder": {"0": frame}, "move": {"0": frame}}}}
+        parts = avatar.Parts()
+        out = avatar.collect_effect(eff, "1102513", parts, "Effect/ItemEff")
+        self.assertEqual(out, {"ladder": [[0, 120]], "default": [[1, 120], [2, avatar.EFFECT_DELAY]]})
+        self.assertEqual(parts.rows[1]["path"], "1102513/effect/default/0")
+        self.assertEqual(parts.rows[0]["z"], avatar.EFFECT_BELOW)
+        self.assertEqual(parts.rows[0]["sheet"], "Effect/ItemEff")
+        self.assertEqual(avatar.collect_effect(eff, "1102005", parts, "Effect/ItemEff"), {})
+
+    def test_item_effect_without_z_goes_in_front(self):
+        eff = {"1": {"effect": {"default": {"0": {"origin": Vector(0.0, 0.0)}}}}}
+        parts = avatar.Parts()
+        avatar.collect_effect(eff, "1", parts, "x")
+        self.assertEqual(parts.rows[0]["z"], avatar.EFFECT_OVER)
+
     def test_delays_fill_in_frames_without_one(self):
         body = {"stand1": {"0": {"delay": 300}, "1": {}}}
         self.assertEqual(avatar.delays(body), {"stand1": [300, 500]})
@@ -84,6 +102,8 @@ class Layers(unittest.TestCase):
         self.assertLess(at("head"), at("face"))
         self.assertLess(at("face"), at("cap"))
         self.assertLess(at("arm"), at("weaponOverHand"))
+        self.assertLess(at("itemEffectBelow"), at("body"))
+        self.assertLess(at("backWeaponOverHead"), at("itemEffectOver"))
 
 
 class Styles(unittest.TestCase):

@@ -6,6 +6,9 @@
   這些骨架點，兩個部位共用同一點就對得起來）、``z``（圖層名稱）。部位也可能是 ``../../default/hair`` 這種連結。
 - 身體 ``00002xxx`` 與頭 ``00012xxx`` 是膚色；頭髮 ``0003xxxx``、``0004xxxx``；臉 ``0002xxxx`` 與臉飾只有 ``default``。
 - 時裝武器多一層武器類型：``01702020/30/stand1/0/weapon``，``30`` 是單手劍的握法。
+- 有些時裝（不少披風）在 ``Character`` 只放一張 1×1 的空圖，真正的圖在 ``Effect/ItemEff``：
+  ``1102513/effect/<動作>/<格>``，沒列的動作用 ``default``（背面用 ``backDefault``），錨點是角色腳底，
+  ``effect/z`` 小於 0 畫在角色後面。動畫有自己的每格毫秒，跟身體分開跑。
 
 客戶端找不到 ``zmap``（圖層前後）與 ``smap``（圖層佔哪些欄位），所以 :data:`ORDER` 是照圖層名稱手排的，
 新出現的名稱會由 :func:`clean_z` 放到最上層，``scripts/export_avatar.py`` 會印出來提醒補進去。
@@ -16,6 +19,7 @@
      "a": {"stand1": [[0, 1], [0, 2], …], …},                        動作 → 每一格用到的部位（臉、臉飾只有 default）
      "d": {"stand1": [500, 500, 500], …},                            每格幾毫秒（只有身體有）
      "w": {"30": {"stand1": …}, …},                                  武器類型（時裝武器才有，取代 a）
+     "e": {"default": [[部位, 毫秒], …], "ladder": …},               ItemEff 的特效（有才有）
      "img": "data:image/webp;base64,…"}                              圖集
 """
 
@@ -31,11 +35,14 @@ ATTACKS = (
     "shoot1", "shoot2", "shootF", "proneStab",
 )
 ACTIONS = (*STAND_ACTIONS, "alert", "jump", "fly", "sit", "prone", "ladder", "rope", "heal", *ATTACKS)
+EFFECT_ACTIONS = (*ACTIONS, "default", "backDefault")
+EFFECT_BELOW, EFFECT_OVER = "itemEffectBelow", "itemEffectOver"
+EFFECT_DELAY = 100
 MAX_LINK_HOPS = 8
 
 # 由後到前。背面（爬梯子、繩子）的部位都是 back 開頭，同一格不會跟正面的混到，放在一起就好
 ORDER = """
-characterStart backWing backTamingMobMid backSaddle
+characterStart itemEffectBelow backWing backTamingMobMid backSaddle
 hairBelowBody capAccessoryBelowBody capBelowBody capeUnderBody capeBelowBody shieldBelowBody
 weaponBelowBodyEffectUnder weaponBelowBody
 mailChestBelowBody gloveBelowBody gloveWristBelowBody body gloveWristOverBody gloveOverBody capeOverBody emotionOverBody
@@ -58,7 +65,7 @@ backMailChestAccessory backHairBelowHead backHead backAccessoryEar backHair back
 backHairBelowCapWide backCapAccessory backCap backCapOverHair backAccessoryOverHead backMailChestOverHead
 backCape backHairOverCape backShieldBelowBody backShield backWeaponEffectUnder backWeapon backWeaponOverShield
 backWeaponOverGlove backWeaponOverHead
-characterEnd
+itemEffectOver characterEnd
 """.split()
 _RANK = set(ORDER)
 _TYPO = {"weapnBelowBody": "weaponBelowBody", "Cape": "cape", "Cp": "cap", "Weapon": "weapon"}
@@ -123,13 +130,17 @@ class Parts:
         self.rows: list[dict[str, Any]] = []
         self.index: dict[str, int] = {}
 
-    def add(self, path: list[str], node: dict) -> int:
+    def add(self, path: list[str], node: dict, z: str | None = None, sheet: str | None = None) -> int:
+        """*z* 蓋掉節點自己的圖層；*sheet* 是圖不在這件自己的圖集時，要去哪一包裁（``Effect/ItemEff``）。"""
         key = "/".join(path)
         if key not in self.index:
             self.index[key] = len(self.rows)
             mapping = {k: [round(v.x), round(v.y)] for k, v in (node.get("map") or {}).items() if hasattr(v, "x")}
             origin = node["origin"]
-            self.rows.append({"path": key, "origin": [round(origin.x), round(origin.y)], "z": clean_z(node.get("z")), "map": mapping})
+            row = {"path": key, "origin": [round(origin.x), round(origin.y)], "z": z or clean_z(node.get("z")), "map": mapping}
+            if sheet:
+                row["sheet"] = sheet
+            self.rows.append(row)
         return self.index[key]
 
 
@@ -167,6 +178,29 @@ def collect_default(root: dict, parts: Parts) -> dict[str, list[list[int]]]:
             if node is not None:
                 used.append(parts.add(path, node))
     return {"default": [used]} if used else {}
+
+
+def collect_effect(item_eff: dict, item: str, parts: Parts, sheet: str) -> dict[str, list[list[int]]]:
+    """``ItemEff`` 裡這件的特效：動作 → 每格 ``[部位, 毫秒]``。格可能連到別的動作（``ladder2/0`` → ``../ladder/0``）。"""
+    effect = _node_at(item_eff, [item, "effect"])
+    if not isinstance(effect, dict):
+        return {}
+    depth = effect.get("z")
+    z = EFFECT_BELOW if isinstance(depth, int) and depth < 0 else EFFECT_OVER
+    out = {}
+    for name in EFFECT_ACTIONS:
+        action = effect.get(name)
+        if not isinstance(action, dict):
+            continue
+        rows = []
+        for key in sorted((k for k in action if k.isdigit()), key=int):
+            path, node = resolve(item_eff, [item, "effect", name, key])
+            if node is not None:
+                delay = node.get("delay")
+                rows.append([parts.add(path, node, z, sheet), delay if isinstance(delay, int) and delay > 0 else EFFECT_DELAY])
+        if rows:
+            out[name] = rows
+    return out
 
 
 def delays(body: dict) -> dict[str, list[int]]:

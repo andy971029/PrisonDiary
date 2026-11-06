@@ -1,7 +1,7 @@
 """從本機的遊戲客戶端匯出時裝紙娃娃：``web/avatar.json`` 與 ``web/avatar/``。
 
 網頁「紙娃娃」分頁讀這些。格式見 ``mapleexp/avatar.py``。部位資料跟裝備同一包 WZJS，圖在
-``spritesheet_*.bundle`` 的 ``Character/``，用 UnityPy 讀。一件一個 JSON（圖集以 base64 包在裡面），選到才下載。
+``spritesheet_*.bundle`` 的 ``Character/``，用 UnityPy 讀；有些時裝的圖在 ``Effect/ItemEff``，另外找那包。一件一個 JSON（圖集以 base64 包在裡面），選到才下載。
 客戶端改版就重跑一次（``update_data.bat`` 會跑）。
 """
 
@@ -11,6 +11,7 @@ import base64
 import io
 import json
 import math
+import struct
 import sys
 from pathlib import Path
 
@@ -24,6 +25,30 @@ OUT = ROOT / "web" / "avatar.json"
 DIR = ROOT / "web" / "avatar"
 PAD = 1
 ATLAS_WIDTH = 256
+EFFECT_SHEET = "Assets/WzAssets/SpriteSheet/TW/Effect/ItemEff.asset"
+EFFECT_MARKER = struct.pack("<i", 7) + b"ItemEff\0"
+
+
+class Effects:
+    """``Effect/ItemEff``：資料樹、圖集所在的 container、解開的圖集快取（每件都要用，留著）。"""
+
+    def __init__(self, tree: dict, container: dict) -> None:
+        self.tree, self.container, self.pages = tree, container, {}
+
+
+def find_effects(directory: Path) -> Effects | None:
+    import UnityPy
+
+    found = gamedata.find_bundle_containing(directory, EFFECT_MARKER, limit=itembook.EQUIP_BUNDLE_LIMIT)
+    tree = next((t for n, t in wzjs.iter_assets(found[1], canvas=True) if n == "ItemEff"), None) if found else None
+    if tree is None:
+        return None
+    for path in sorted(directory.glob("spritesheet_*.bundle"), key=lambda p: p.stat().st_size):
+        container = dict(UnityPy.load(str(path)).container.items())
+        if EFFECT_SHEET in container:
+            print(f"特效圖集：{path.name}", file=sys.stderr)
+            return Effects(tree, container)
+    return None
 
 
 def pack(crops: list) -> tuple[list[tuple[int, int]], object]:
@@ -48,7 +73,7 @@ def pack(crops: list) -> tuple[list[tuple[int, int]], object]:
     return spots, sheet
 
 
-def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: dict | None = None) -> int:
+def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: dict | None = None, effects: Effects | None = None) -> int:
     """寫一件的檔案，回傳位元組數；一格圖都裁不到就不寫，回傳 0。"""
     parts = avatar.Parts()
     if folder == "Weapon":
@@ -56,13 +81,18 @@ def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: di
         data: dict = {"w": {g: a for g, a in groups.items() if a}}
     else:
         data = {"a": avatar.collect_actions(tree, [], parts) or avatar.collect_default(tree, parts)}
+    if effects and (effect := avatar.collect_effect(effects.tree, str(item_id), parts, EFFECT_SHEET)):
+        data["e"] = effect
     if extra:
         data.update(extra)
     asset_key = f"{EQUIP_PREFIX}{folder + '/' if folder else ''}{item_id:08d}.asset"
     pages: dict = {}
     crops, rows = [], []
     for row in parts.rows:
-        crops.append(crop_icon(container, asset_key, row["path"], pages))
+        if row.get("sheet") and effects:
+            crops.append(crop_icon(effects.container, row["sheet"], row["path"], effects.pages))
+        else:
+            crops.append(crop_icon(container, asset_key, row["path"], pages))
         rows.append(row)
     usable = [c for c in crops if c is not None]
     if not usable:
@@ -130,6 +160,9 @@ def main() -> int:
     name_of = lambda i: ((names.get(str(i)) or {}).get("name") or "").strip() or None  # noqa: E731
     assets = {n: t for n, t in wzjs.iter_assets(bundle[1], canvas=True) if len(n) == 8 and n.isdigit()}
     container = sheets[0]
+    effects = find_effects(directory)
+    if effects is None:
+        print("找不到 Effect/ItemEff，圖放在特效裡的時裝（不少披風）會是空的", file=sys.stderr)
     DIR.mkdir(exist_ok=True)
     for stale in DIR.iterdir():                     # 下架的時裝不要留著
         stale.unlink()
@@ -145,10 +178,10 @@ def main() -> int:
                 note(value)
 
     total = written = 0
-    def emit(item_id: int, folder: str, tree: dict, extra: dict | None = None) -> bool:
+    def emit(item_id: int, folder: str, tree: dict, extra: dict | None = None, effects: Effects | None = None) -> bool:
         nonlocal total, written
         note(tree)
-        size = write_item(item_id, folder, tree, container, extra)
+        size = write_item(item_id, folder, tree, container, extra, effects)
         total += size
         written += bool(size)
         if written % 500 == 0 and size:
@@ -198,7 +231,7 @@ def main() -> int:
         if category is None or not info.get("cash") or not label:
             continue
         key, folder, _ = category
-        if not emit(int(name), folder, tree):
+        if not emit(int(name), folder, tree, effects=effects):
             continue
         entry: dict = {"id": int(name), "n": label}
         if isinstance(info.get("vslot"), str):
