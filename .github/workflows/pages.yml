@@ -61,5 +61,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # 紙娃娃有 8800 多個檔案，GitHub 那邊同步偶爾超過預設的 10 分鐘就被取消，放寬到 30 分鐘
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
