@@ -1,13 +1,14 @@
 """從本機的遊戲客戶端匯出時裝紙娃娃：``web/avatar.json`` 與 ``web/avatar/``。
 
 網頁「紙娃娃」分頁讀這些。格式見 ``mapleexp/avatar.py``。部位資料跟裝備同一包 WZJS，圖在
-``spritesheet_*.bundle`` 的 ``Character/``，用 UnityPy 讀；有些時裝的圖在 ``Effect/ItemEff``，另外找那包。一件一個 JSON（圖集以 base64 包在裡面），選到才下載。
+``spritesheet_*.bundle`` 的 ``Character/``，用 UnityPy 讀；有些時裝的圖在 ``Effect/ItemEff``，另外找那包。每件是一段 JSON 加一張 WebP 圖集，依 :func:`mapleexp.avatar.pack_key` 併成幾十個 ``.bin`` 包，
+網頁照 ``avatar.json`` 記的位置用 Range 只抓那一段。
 客戶端改版就重跑一次（``update_data.bat`` 會跑）。
 """
 
 from __future__ import annotations
 
-import base64
+import hashlib
 import io
 import json
 import math
@@ -73,8 +74,8 @@ def pack(crops: list) -> tuple[list[tuple[int, int]], object]:
     return spots, sheet
 
 
-def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: dict | None = None, effects: Effects | None = None) -> int:
-    """寫一件的檔案，回傳位元組數；一格圖都裁不到就不寫，回傳 0。"""
+def build_item(item_id: int, folder: str, tree: dict, container: dict, extra: dict | None = None, effects: Effects | None = None) -> tuple[bytes, bytes] | None:
+    """一件的 ``(JSON, WebP 圖集)``；一格圖都裁不到就 None。"""
     parts = avatar.Parts()
     if folder == "Weapon":
         groups = {g: avatar.collect_actions(tree, [g], parts) for g in avatar.weapon_groups(tree)}
@@ -96,7 +97,7 @@ def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: di
         rows.append(row)
     usable = [c for c in crops if c is not None]
     if not usable:
-        return 0
+        return None
     spots, sheet = pack(usable)
     table = []
     at = 0
@@ -109,10 +110,20 @@ def write_item(item_id: int, folder: str, tree: dict, container: dict, extra: di
     buffer = io.BytesIO()
     sheet.save(buffer, "WEBP", lossless=True, quality=100, method=4)
     data["p"] = table
-    data["img"] = "data:image/webp;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    (DIR / f"{item_id}.json").write_text(text, encoding="utf-8")
-    return len(text)
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), buffer.getvalue()
+
+
+def write_packs(packs: dict[str, list[tuple[int, bytes, bytes]]]) -> list:
+    """每包依 ID 排好、一件一件接起來寫檔。檔名帶內容雜湊，改版後瀏覽器不會拿舊包配新位置。
+    回傳 ``[[檔名, [[ID, JSON 長度, 圖長度], …]], …]``，位置照順序累加。"""
+    index = []
+    for key in sorted(packs):
+        entries = sorted(packs[key], key=lambda e: e[0])
+        blob = b"".join(j + w for _, j, w in entries)
+        name = f"{key}.{hashlib.sha1(blob).hexdigest()[:10]}.bin"
+        (DIR / name).write_bytes(blob)
+        index.append([name, [[i, len(j), len(w)] for i, j, w in entries]])
+    return index
 
 
 def hair_thumb(item_id: int, tree: dict, container: dict):
@@ -178,15 +189,19 @@ def main() -> int:
                 note(value)
 
     total = written = 0
+    packs: dict[str, list[tuple[int, bytes, bytes]]] = {}
     def emit(item_id: int, folder: str, tree: dict, extra: dict | None = None, effects: Effects | None = None) -> bool:
         nonlocal total, written
         note(tree)
-        size = write_item(item_id, folder, tree, container, extra, effects)
-        total += size
-        written += bool(size)
-        if written % 500 == 0 and size:
-            print(f"  {written} 個檔案，{total / 1048576:.0f} MB", file=sys.stderr, flush=True)
-        return bool(size)
+        built = build_item(item_id, folder, tree, container, extra, effects)
+        if built is None:
+            return False
+        packs.setdefault(avatar.pack_key(item_id), []).append((item_id, *built))
+        total += len(built[0]) + len(built[1])
+        written += 1
+        if written % 500 == 0:
+            print(f"  {written} 件，{total / 1048576:.0f} MB", file=sys.stderr, flush=True)
+        return True
 
     skins = []
     for name, tree in sorted(assets.items()):
@@ -248,13 +263,14 @@ def main() -> int:
     icons.save(DIR / "icons.png")
     thumbs["hair"].save(DIR / "hair.png")
     thumbs["face"].save(DIR / "face.png")
+    index = write_packs(packs)
     OUT.write_text(json.dumps({
-        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items,
+        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items, "packs": index,
         "cats": [[key, label] for key, _, label in avatar.CATEGORIES.values()],
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     count = sum(len(v) for v in items.values())
     print(f"{OUT.relative_to(ROOT)}: {len(skins)} 種膚色、{len(hair)} 款髮型、{len(face)} 款臉型、{count} 件時裝，{OUT.stat().st_size / 1024:.0f} KB\n"
-          f"{DIR.relative_to(ROOT)}/: {written} 個檔案，{total / 1048576:.0f} MB")
+          f"{DIR.relative_to(ROOT)}/: {written} 件併成 {len(index)} 包，{total / 1048576:.0f} MB")
     if unknown:
         print(f"這些圖層不在 avatar.ORDER 裡，先畫在最上層，請補進去：{unknown}", file=sys.stderr)
     return 0

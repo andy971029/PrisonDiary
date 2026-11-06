@@ -81,6 +81,15 @@ class Collect(unittest.TestCase):
         avatar.collect_effect(eff, "1", parts, "x")
         self.assertEqual(parts.rows[0]["z"], avatar.EFFECT_OVER)
 
+    def test_pack_keys_group_by_kind_and_id_range(self):
+        self.assertEqual(avatar.pack_key(2000), "base")
+        self.assertEqual(avatar.pack_key(21000), "base")
+        self.assertEqual(avatar.pack_key(30000), avatar.pack_key(31999))
+        self.assertNotEqual(avatar.pack_key(31999), avatar.pack_key(32000))
+        self.assertEqual(avatar.pack_key(1102513), avatar.pack_key(1102005))
+        self.assertNotEqual(avatar.pack_key(1102005), avatar.pack_key(1002005))
+        self.assertNotEqual(avatar.pack_key(1702000), avatar.pack_key(1702200))
+
     def test_delays_fill_in_frames_without_one(self):
         body = {"stand1": {"0": {"delay": 300}, "1": {}}}
         self.assertEqual(avatar.delays(body), {"stand1": [300, 500]})

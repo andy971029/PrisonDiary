@@ -13,14 +13,14 @@
 客戶端找不到 ``zmap``（圖層前後）與 ``smap``（圖層佔哪些欄位），所以 :data:`ORDER` 是照圖層名稱手排的，
 新出現的名稱會由 :func:`clean_z` 放到最上層，``scripts/export_avatar.py`` 會印出來提醒補進去。
 
-輸出兩種檔案。``web/avatar.json`` 是目錄；``web/avatar/<id>.json`` 一件一檔，選到才載::
+``web/avatar.json`` 是目錄，``packs`` 記每件放在 ``web/avatar/`` 哪一包的哪一段（見 :func:`pack_key`）。
+一件是一段 JSON 緊接著它的 WebP 圖集，網頁用 Range 只抓那一段，選到才載。JSON 長這樣::
 
     {"p": [[x, y, 寬, 高, 錨x, 錨y, "z", {"navel": [x, y]}], …],      圖集上的部位
      "a": {"stand1": [[0, 1], [0, 2], …], …},                        動作 → 每一格用到的部位（臉、臉飾只有 default）
      "d": {"stand1": [500, 500, 500], …},                            每格幾毫秒（只有身體有）
      "w": {"30": {"stand1": …}, …},                                  武器類型（時裝武器才有，取代 a）
-     "e": {"default": [[部位, 毫秒], …], "ladder": …},               ItemEff 的特效（有才有）
-     "img": "data:image/webp;base64,…"}                              圖集
+     "e": {"default": [[部位, 毫秒], …], "ladder": …}}              ItemEff 的特效（有才有）
 """
 
 from __future__ import annotations
@@ -201,6 +201,18 @@ def collect_effect(item_eff: dict, item: str, parts: Parts, sheet: str) -> dict[
         if rows:
             out[name] = rows
     return out
+
+
+def pack_key(item_id: int) -> str:
+    """這件併進哪一包。GitHub Pages 一次同步上萬個小檔會卡住，所以併成幾十包；
+    照類別與 ID 區段分，新增或改版一件只會動到那一包。時裝武器最大，再細切。"""
+    if item_id < 30000:
+        return "base"                       # 膚色、臉型都很小
+    if item_id < 50000:
+        return f"hair{item_id // 2000}"
+    if item_id >= 1700000:
+        return f"weapon{item_id // 200}"
+    return f"equip{item_id // 10000}"
 
 
 def delays(body: dict) -> dict[str, list[int]]:

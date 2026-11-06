@@ -686,7 +686,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.5</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.20.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3333,7 +3333,7 @@ for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEvent
 
 // ---------------------------------------------------------------- 時裝紙娃娃
 // 客戶端的角色是一堆部位，網頁自己疊：身體放原點，其他部位靠共用的骨架點（navel、neck、brow、hand）對上去，再照圖層排前後。
-// avatar.json 是目錄，一件一個 avatar/<id>.json（部位表與圖集），選到才載，動作都在裡面。格式見 mapleexp/avatar.py。
+// avatar.json 是目錄；每件（部位表 JSON 接著 WebP 圖集）併在 avatar/ 的幾十個 .bin 包裡，選到才用 Range 抓那一段。格式見 mapleexp/avatar.py。
 const DOLL_KEY = "mapleexp.doll";
 const DOLL_SIZE = 200, DOLL_X = 100, DOLL_Y = 150, DOLL_PAD = 8, DOLL_CELL = 36, DOLL_COLS = 56;
 const DOLL_BASIC = [["stand", "站立"], ["walk", "走路"], ["alert", "警戒"], ["jump", "跳躍"], ["fly", "飛行"], ["sit", "坐下"], ["prone", "趴下"], ["ladder", "爬梯子"], ["rope", "爬繩子"], ["heal", "治療"]];
@@ -3348,7 +3348,7 @@ const DOLL_ATTACKS = [
 ];
 const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "短劍", 34: "雙刀", 37: "短杖", 38: "長杖", 40: "雙手劍", 41: "雙手斧", 42: "雙手棍", 43: "槍", 44: "矛", 45: "弓", 46: "弩", 47: "拳套", 48: "指虎", 49: "火槍" };
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
-const doll = { index: null, loading: null, files: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
+const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
   skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null };
 
 function dollSave() {
@@ -3382,6 +3382,10 @@ async function dollOpen() {
     return;
   }
   doll.index.order.forEach((z, i) => doll.rank.set(z, i));
+  for (const [pack, entries] of doll.index.packs) {
+    let at = 0;
+    for (const [id, json, img] of entries) { doll.where.set(id, { pack, at, json, img }); at += json + img; }
+  }
   for (const [cat, list] of Object.entries(doll.index.items)) for (const item of list) doll.byId.set(item.id, { ...item, cat });
   dollRestore();
   dollRenderActions();
@@ -3389,15 +3393,27 @@ async function dollOpen() {
   dollRenderGrid();
   dollRefresh();
 }
+// 只抓這件那一段；伺服器不認 Range 會回整包（200），那就整包留著自己切，同一包不再下載第二次
+async function dollBytes({ pack, at, json, img }) {
+  const end = at + json + img;
+  if (!doll.whole.has(pack)) {
+    const res = await fetch(`avatar/${pack}`, { headers: { Range: `bytes=${at}-${end - 1}` } });
+    if (!res.ok) throw new Error(`${pack}: ${res.status}`);
+    if (res.status === 206) return res.arrayBuffer();
+    doll.whole.set(pack, res.arrayBuffer());
+  }
+  return (await doll.whole.get(pack)).slice(at, end);
+}
 function dollLoad(id) {
   if (!doll.files.has(id)) doll.files.set(id, (async () => {
-    const res = await fetch(`avatar/${id}.json`);
-    if (!res.ok) throw new Error(`${id}: ${res.status}`);
-    const data = await res.json();
+    const where = doll.where.get(id);
+    if (!where) throw new Error(`${id}: 沒有這件`);
+    const bytes = await dollBytes(where);
+    const data = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 0, where.json)));
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes, where.json)], { type: "image/webp" }));
     data.image = new Image();
-    data.image.src = data.img;
-    await data.image.decode();
-    delete data.img;
+    data.image.src = url;
+    try { await data.image.decode(); } finally { URL.revokeObjectURL(url); }
     return data;
   })());
   return doll.files.get(id);
