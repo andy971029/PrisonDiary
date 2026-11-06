@@ -53,7 +53,14 @@
   html, body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--body); }
   body { line-height: 1.5; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  main { max-width: 1160px; margin: 0 auto; padding: 20px 20px 56px; }
+  /* 整頁剛好一個視窗高：頂列（含功能頁籤）固定，底下的內容在 .page-scroll 裡自己捲，捲軸貼在視窗右邊。
+     內容欄寬 1120，兩側留白用 margin／padding 算，頂列與內容才對得齊 */
+  main { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+  main > header, main > #hint { flex: none; margin-inline: max(20px, calc((100% - 1120px) / 2)); }
+  main > header { margin-top: 20px; }
+  .page-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 max(20px, calc((100% - 1120px) / 2)) 56px; }
+  /* 視窗太矮（手機橫放）時頂列會吃掉大半畫面，改回整頁捲動 */
+  @media (max-height: 520px) { main { height: auto; } .page-scroll { overflow: visible; } }
 
   /* ---------- 頂列：左邊是標題與功能頁籤，右邊是跟讀畫面有關的東西（控制鈕、讀到的角色與地圖） ---------- */
   header { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
@@ -657,7 +664,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -685,6 +692,7 @@
     </div>
   </header>
   <p id="hint" class="warn" hidden></p>
+  <div class="page-scroll" id="page-scroll">
 
   <div id="tab-train" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-train">
 
@@ -967,6 +975,7 @@
       </section>
     </div>
     <p class="note">髮型、臉型、時裝與動作都來自遊戲客戶端的資料檔，所以可能包含遊戲裡買不到的項目。客戶端沒有圖層前後與帽子遮頭髮的對照表，這兩項是依圖層名稱排的，少數搭配可能跟遊戲裡不一樣。</p>
+  </div>
   </div>
 </main>
 <dialog id="settings-dlg" class="settings">
