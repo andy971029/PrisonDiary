@@ -366,7 +366,7 @@
   .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
-  .book-tools input[type="search"] { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
+  .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
   .book-tools .lv { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); white-space: nowrap; }
   .book-tools .lv input { width: 58px; font: 700 14px var(--mono); text-align: right; padding: 5px 6px;
@@ -374,6 +374,11 @@
   .book-tools button { padding: 6px 12px; font-size: 13px; }
   .book-tools button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
   .book-tools .switch { min-width: 0; font-size: 13px; }
+  /* 「所在地圖」開關緊跟在分類後面，計數仍靠右 */
+  .book-card .sec-head .here-switch { min-width: 0; margin-right: auto; font-size: 13px; }
+  /* 地圖分頁：搜尋框放右欄最上面，搜尋結果與節點內容接在下面 */
+  .wm-right { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .wm-q { flex: none; width: 100%; }
   .sub-panel .hist-wrap { max-height: 70vh; overflow: auto; }
   .sub-panel table.hist thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
   table.book tr.row { cursor: pointer; }
@@ -686,7 +691,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.20.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.21.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -847,6 +852,7 @@
         <button role="tab" data-sub="npcs" aria-selected="false" aria-controls="npcbook">NPC</button>
         <button role="tab" data-sub="maps" aria-selected="false" aria-controls="mapbook">地圖</button>
       </nav>
+      <label class="switch here-switch" title="開著、又在分享遊戲畫面而且讀到地圖名稱時，每個分類都只看這張地圖：這裡的怪、牠們會掉的道具與裝備、這裡的 NPC 與他們的任務"><input type="checkbox" id="book-here" autocomplete="off"><i></i>所在地圖</label>
       <span class="sec-sub" id="book-count" data-for="mobs">載入中…</span>
       <span class="sec-sub" id="items-count" data-for="items">載入中…</span>
       <span class="sec-sub" id="equips-count" data-for="equips">載入中…</span>
@@ -858,7 +864,6 @@
       <div class="book-tools">
         <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
         <label class="lv">等級 <input type="number" id="book-lo" min="1" max="250" placeholder="1" aria-label="最低等級"> – <input type="number" id="book-hi" min="1" max="250" placeholder="250" aria-label="最高等級"></label>
-        <button class="secondary" id="book-here" disabled title="讀到地圖名稱後，只列會在這張地圖生成的怪">目前地圖的怪</button>
         <label class="switch" title="客戶端只放已開放區域的地圖資料，沒出現在任何一張地圖的怪就是還沒開放的（武陵、童話王國…）"><input type="checkbox" id="book-unreleased"><i></i>含未開放的怪</label>
         <label class="switch" title="沒有圖鑑卡的怪多半是任務、活動或召喚出來的，只有數值沒有掉落物"><input type="checkbox" id="book-all"><i></i>含沒有圖鑑卡的怪</label>
       </div>
@@ -868,7 +873,6 @@
           <tbody id="book-body"></tbody>
         </table>
       </div>
-      <p class="note" id="book-note">數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。</p>
     </section>
     <section id="itembook" class="sub-panel" role="tabpanel" aria-label="道具圖鑑" hidden>
       <div class="book-tools">
@@ -883,7 +887,6 @@
           <tbody id="items-body"></tbody>
         </table>
       </div>
-      <p class="note" id="items-note"></p>
     </section>
     <section id="equipbook" class="sub-panel" role="tabpanel" aria-label="裝備圖鑑" hidden>
       <div class="book-tools">
@@ -903,7 +906,6 @@
           <tbody id="equips-body"></tbody>
         </table>
       </div>
-      <p class="note" id="equips-note"></p>
     </section>
     <section id="questbook" class="sub-panel" role="tabpanel" aria-label="任務圖鑑" hidden>
       <div class="book-tools">
@@ -923,7 +925,6 @@
           <tbody id="quests-body"></tbody>
         </table>
       </div>
-      <p class="note" id="quests-note"></p>
     </section>
     <section id="npcbook" class="sub-panel" role="tabpanel" aria-label="NPC 圖鑑" hidden>
       <div class="book-tools">
@@ -938,14 +939,8 @@
           <tbody id="npcs-body"></tbody>
         </table>
       </div>
-      <p class="note" id="npcs-note"></p>
     </section>
     <section id="mapbook" class="sub-panel" role="tabpanel" aria-label="地圖圖鑑" hidden>
-      <div class="book-tools">
-        <input type="search" id="maps-q" placeholder="搜尋地圖、區域、怪物或 NPC" aria-label="搜尋地圖、區域、怪物或 NPC">
-        <button class="secondary" id="maps-here" disabled title="讀到地圖名稱後，跳到目前所在的地圖">目前地圖</button>
-      </div>
-      <div id="wm-results" class="wm-results" hidden></div>
       <div class="wm-layout">
         <div class="wm-main">
           <nav id="wm-crumbs" class="wm-crumbs" aria-label="世界地圖的層級"></nav>
@@ -960,13 +955,16 @@
           </div>
           <div id="wm-links" class="chips wm-links"></div>
         </div>
-        <div id="wm-side" class="wm-side" aria-live="polite"></div>
+        <div class="wm-right">
+          <input type="search" id="maps-q" class="wm-q" placeholder="搜尋地圖、區域、怪物或 NPC" aria-label="搜尋地圖、區域、怪物或 NPC">
+          <div id="wm-results" class="wm-results" hidden></div>
+          <div id="wm-side" class="wm-side" aria-live="polite"></div>
+        </div>
       </div>
       <details id="wm-others" class="wm-others">
         <summary id="wm-others-sum">不在世界地圖上的地圖</summary>
         <div id="wm-others-body"></div>
       </details>
-      <p class="note" id="maps-note"></p>
     </section>
   </div>
 
@@ -1306,6 +1304,7 @@ function haltStream() {
   video.srcObject = null;
   paused = false;
   syncButtons();
+  syncBookTools();
   setState("已停止");
 }
 
@@ -2173,7 +2172,7 @@ renderGoddess(true);
 // monsterbook.json 是客戶端資料的快照（scripts/export_monsterbook.py）：每隻怪的數值、圖鑑卡上的
 // 掉落物與出現地圖、各種名稱。第一次切到這一頁才載入（約 500 KB），載完就留在記憶體裡。
 // 搜尋同時比對怪物名、型態、掉落物名與地圖名，所以打「嫩寶殼」會找到嫩寶、打「奇幻村」會找到那張圖的怪。
-const book = { data: null, promise: null, open: new Set(), sort: { col: 1, dir: 1 }, here: false, lastMap: "" };
+const book = { data: null, promise: null, open: new Set(), sort: { col: 1, dir: 1 }, lastHere: "", limit: 0, rows: [], shown: 0, want: null };
 const BOOK_ROW_CAP = 400;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
@@ -2246,8 +2245,7 @@ async function loadBookNow() {
     book.data = data;
     renderBook();
   } catch (err) {
-    $("book-count").textContent = "載入失敗";
-    $("book-note").textContent = "讀不到 monsterbook.json：" + err.message;
+    $("book-count").textContent = "載入失敗：讀不到 monsterbook.json（" + err.message + "）";
   }
 }
 
@@ -2257,12 +2255,38 @@ function bookFilter() {
   const hi = Number($("book-hi").value) || Infinity;
   const all = $("book-all").checked;
   const unreleased = $("book-unreleased").checked;
-  const here = book.here ? $("map-name").textContent : "";
+  const here = hereMaps();
   const pool = book.data.mobs.filter((m) => (all || m.card) && (unreleased || m.live));
   const rows = pool.filter((m) => m.level >= lo && m.level <= hi
-    && (!here || m.mapNames.includes(here))
+    && (!here || m.spawn.some((id) => here.has(id)))
     && (!q || m.hay.includes(q)));
   return { rows, total: pool.length, q, here };
+}
+
+// 「所在地圖」開著、在分享遊戲畫面、也讀到地圖名稱時，每個圖鑑都只看這張地圖相關的。回傳地圖 ID 的集合（名字可能對到好幾張），
+// 沒在篩就 null。辨識差一兩個字對不到就是空集合，列表會是空的，跟目前地圖真的沒東西一樣。
+function hereMaps() {
+  const name = $("map-name").textContent.trim();
+  if (!$("book-here").checked || !stream || !name || name === "--" || !book.data) return null;
+  const ids = new Set();
+  for (const [id, [street, map]] of Object.entries(book.data.maps)) if (map === name || `${street} ${map}`.trim() === name) ids.add(Number(id));
+  return ids;
+}
+// 會在這幾張地圖生成的怪
+const hereMobs = (here) => new Set(book.data.mobs.filter((m) => m.spawn.some((id) => here.has(id))).map((m) => m.id));
+// 跳到篩選外的東西時把開關關掉
+function bookHereOff() {
+  if (!$("book-here").checked) return;
+  $("book-here").checked = false;
+  renderAllBooks();
+}
+function renderAllBooks() {
+  renderBook(); renderItems(); renderEquips(); renderQuests(); renderNpcs();
+  wmGoHere();
+}
+// 表格框捲到快底了就再接下一批
+function onNearBottom(wrap, more) {
+  wrap.addEventListener("scroll", () => { if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 300) more(); });
 }
 
 // 職業分組的順序：全職業、初心者、五個職業、再來是多職業的組合
@@ -2289,7 +2313,7 @@ function dropGroups(m, q) {
 }
 function bookDetail(m, q, here) {
   const drops = dropGroups(m, q);
-  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", mapLabel(id) === here));
+  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
   const portrait = picTag(m, 240, 200, ' decoding="async"');
   const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
   return `<div class="mob-detail">
@@ -2300,7 +2324,8 @@ function bookDetail(m, q, here) {
   </div>`;
 }
 
-function renderBook() {
+// 先列 BOOK_ROW_CAP 隻，捲到底再接下一批；keep 是展開或收起一列時留著已經接上的列數
+function renderBook(keep) {
   if (!book.data) return;
   const col = BOOK_COLS[book.sort.col];
   [...$("book-head").children].forEach((th, i) => {
@@ -2317,14 +2342,20 @@ function renderBook() {
     const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
     return (c || x.level - y.level || x.id - y.id) * book.sort.dir;
   });
-  const shown = rows.slice(0, BOOK_ROW_CAP);
+  if (keep !== true) book.limit = BOOK_ROW_CAP;
+  if (book.want != null) {
+    const at = rows.findIndex((m) => m.id === book.want);
+    if (at >= book.limit) book.limit = (Math.floor(at / BOOK_ROW_CAP) + 1) * BOOK_ROW_CAP;
+    book.want = null;
+  }
   $("book-count").textContent = `${rows.length} / ${total} 隻`;
-  const note = rows.length > BOOK_ROW_CAP ? `符合 ${rows.length} 隻，只列前 ${BOOK_ROW_CAP} 隻，請縮小範圍。`
-    : here && !rows.length ? `客戶端的地圖資料裡，「${here}」沒有會生成的怪。` : "";
-  $("book-note").textContent = note || "數值、怪物圖、掉落物與出現地圖來自遊戲客戶端的資料檔（掉落物是怪物卡上列的，沒有機率）。預設只列已開放區域會出現的怪。點一列展開大圖、掉落物與出現地圖。";
-  const body = $("book-body");
-  body.textContent = "";
-  for (const m of shown) {
+  Object.assign(book, { rows, shown: 0, q, here });
+  $("book-body").textContent = "";
+  bookMore();
+}
+function bookMore() {
+  const body = $("book-body"), { q, here } = book, end = Math.min(book.rows.length, book.limit);
+  for (const m of book.rows.slice(book.shown, end)) {
     const tr = document.createElement("tr");
     tr.className = "row" + (book.open.has(m.id) ? " open" : "");
     tr.dataset.id = m.id;
@@ -2347,36 +2378,36 @@ function renderBook() {
       body.appendChild(detail);
     }
   }
+  book.shown = end;
 }
+onNearBottom($("book-body").closest(".hist-wrap"), () => {
+  if (book.shown >= book.rows.length) return;
+  book.limit += BOOK_ROW_CAP;
+  bookMore();
+});
 
 $("book-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr.row");
   if (!tr) return;
   const id = Number(tr.dataset.id);
   if (book.open.has(id)) book.open.delete(id); else book.open.add(id);
-  renderBook();
+  renderBook(true);
 });
 $("book-body").addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr.row")) { e.preventDefault(); e.target.click(); }
 });
-for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", renderBook);
-$("book-all").addEventListener("change", renderBook);
-$("book-unreleased").addEventListener("change", renderBook);
-$("book-here").addEventListener("click", () => {
-  book.here = !book.here;
-  $("book-here").classList.toggle("on", book.here);
-  renderBook();
-});
+for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", () => renderBook());
+$("book-all").addEventListener("change", () => renderBook());
+$("book-unreleased").addEventListener("change", () => renderBook());
+$("book-here").addEventListener("change", () => { book.lastHere = hereKey(); renderAllBooks(); });
 
-// 每格叫一次：讀到地圖才能按「目前地圖的怪」；地圖換了而且開著地圖篩選就重列。
+// 每格叫一次，停止分享時也叫：開著「所在地圖」時，換了地圖或開始、停止分享就全部重篩
+const hereKey = () => `${!!stream}|${$("map-name").textContent}`;
 function syncBookTools() {
-  const map = $("map-name").textContent;
-  $("book-here").disabled = $("maps-here").disabled = !map || map === "--";
-  if ($("book-here").disabled && book.here) { book.here = false; $("book-here").classList.remove("on"); }
-  if (map !== book.lastMap) {
-    book.lastMap = map;
-    if (book.here) renderBook();
-  }
+  const key = hereKey();
+  if (key === book.lastHere) return;
+  book.lastHere = key;
+  if ($("book-here").checked) renderAllBooks();
 }
 
 // ---------------------------------------------------------------- 道具、裝備圖鑑
@@ -2500,8 +2531,8 @@ const EQUIP_COLS = [
 
 // 道具與裝備共用一套表格：排序、篩選、點一列展開，跟怪物圖鑑一樣的操作
 // opts.ready 說資料載好了沒（預設看道具圖鑑）；opts.reset(q) 把篩選清掉、搜尋設成 q，跳到某一列時用；opts.name(e) 給那一列的名字
-function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit, opts = {}) {
-  const st = { open: new Set(), sort: { ...defaultSort } };
+function makeTable(key, cols, detail, filter, defaultSort, unit, opts = {}) {
+  const st = { open: new Set(), sort: { ...defaultSort }, limit: 0, rows: [], shown: 0, want: null };
   const head = $(`${key}-head`), body = $(`${key}-body`);
   const ready = opts.ready || (() => !!ibook.data);
   const cap = opts.cap || BOOK_ROW_CAP;
@@ -2515,7 +2546,8 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit, op
     }
     head.appendChild(th);
   });
-  function render() {
+  // 先列 cap 筆，捲到底再接下一批；keep 是展開或收起一列時留著已經接上的列數
+  function render(keep) {
     if (!ready()) return;
     const col = cols[st.sort.col];
     [...head.children].forEach((th, i) => {
@@ -2532,10 +2564,21 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit, op
       const c = typeof a === "string" ? a.localeCompare(b, "zh-Hant") : a - b;
       return (c || x.id - y.id) * st.sort.dir;
     });
+    if (keep !== true) st.limit = cap;
+    if (st.want != null) {
+      const at = rows.findIndex((e) => e.id === st.want);
+      if (at >= st.limit) st.limit = (Math.floor(at / cap) + 1) * cap;
+      st.want = null;
+    }
     $(`${key}-count`).textContent = `${rows.length} / ${total} ${unit}`;
-    $(`${key}-note`).textContent = rows.length > cap ? `符合 ${rows.length} ${unit}，只列前 ${cap} ${unit}，請縮小範圍。` : defaultNote;
+    st.rows = rows;
+    st.shown = 0;
     body.textContent = "";
-    for (const e of rows.slice(0, cap)) {
+    more();
+  }
+  function more() {
+    const end = Math.min(st.rows.length, st.limit);
+    for (const e of st.rows.slice(st.shown, end)) {
       const tr = document.createElement("tr");
       tr.className = "row" + (st.open.has(e.id) ? " open" : "");
       tr.dataset.id = e.id;
@@ -2558,24 +2601,31 @@ function makeTable(key, cols, detail, filter, defaultNote, defaultSort, unit, op
         body.appendChild(d);
       }
     }
+    st.shown = end;
   }
+  onNearBottom(body.closest(".hist-wrap"), () => {
+    if (st.shown >= st.rows.length) return;
+    st.limit += cap;
+    more();
+  });
   body.addEventListener("click", (e) => {
     const tr = e.target.closest("tr.row");
     if (!tr) return;
     const id = Number(tr.dataset.id);
     if (st.open.has(id)) st.open.delete(id); else st.open.add(id);
-    render();
+    render(true);
   });
   body.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr.row")) { e.preventDefault(); e.target.click(); }
   });
-  // 跳到某一列並展開：篩選會把它濾掉就清掉篩選；符合的太多列不出來就用名字搜；最後捲到眼前
-  render.open = (id, name = "") => {
+  // 跳到某一列並展開：篩選會把它濾掉就先關「所在地圖」、再清掉篩選；排在後面就多接幾批，最後捲到眼前
+  render.open = (id) => {
     if (!ready()) return;
     const visible = () => filter().rows.some((e) => e.id === id);
+    if (!visible()) bookHereOff();
     if (!visible() && opts.reset) opts.reset("");
-    if (filter().rows.length > cap && opts.reset) opts.reset(name);
     st.open.add(id);
+    st.want = id;
     render();
     scrollToRow(body, id);
   };
@@ -2596,18 +2646,19 @@ function resetTools(ids, qId, q = "") {
 }
 const renderItems = makeTable("items", ITEM_COLS, itemDetail, () => {
   const q = $("items-q").value.trim().toLowerCase(), kind = $("items-kind").value, drop = $("items-drop").checked, quest = $("items-quest").checked;
-  const pool = ibook.data.items;
-  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值與說明來自遊戲客戶端的資料檔。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；「任務」是接得到的任務會給的。商店賣的這裡看不出來。點一列展開說明與來源。", { col: 1, dir: 1 }, "個",
+  const pool = ibook.data.items, here = hereMaps(), mobs = here && hereMobs(here);
+  return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length)
+    && (!mobs || e.fromLive.some((id) => mobs.has(id))) && (!q || e.hay.includes(q))), total: pool.length };
+}, { col: 1, dir: 1 }, "個",
   { reset: (q) => resetTools(["items-kind", "items-drop", "items-quest"], "items-q", q) });
 const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
   const q = $("equips-q").value.trim().toLowerCase(), kind = $("equips-kind").value, job = Number($("equips-job").value);
   const lo = Number($("equips-lo").value) || 0, hi = $("equips-hi").value === "" ? Infinity : Number($("equips-hi").value);
   const drop = $("equips-drop").checked, quest = $("equips-quest").checked;
-  const pool = ibook.data.equips;
+  const pool = ibook.data.equips, here = hereMaps(), mobs = here && hereMobs(here);
   return { rows: pool.filter((e) => (!kind || e.kind === kind) && (!job || e.job <= 0 || (e.job & job)) && e.lv >= lo && e.lv <= hi
-    && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length) && (!q || e.hay.includes(q))), total: pool.length };
-}, "數值來自遊戲客戶端的資料檔，現金裝不列。「會掉的怪」是怪物圖鑑卡反查的（沒有機率），只算已開放的怪；「任務」是接得到的任務會給的。商店賣的這裡看不出來。點一列展開能力與來源。", { col: 2, dir: 1 }, "件",
+    && (!drop || e.fromLive.length) && (!quest || questsGiving(e.id).length) && (!mobs || e.fromLive.some((id) => mobs.has(id))) && (!q || e.hay.includes(q))), total: pool.length };
+}, { col: 2, dir: 1 }, "件",
   { reset: (q) => resetTools(["equips-kind", "equips-job", "equips-lo", "equips-hi", "equips-drop", "equips-quest"], "equips-q", q) });
 for (const id of ["items-q", "equips-q", "equips-lo", "equips-hi"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["items-kind", "items-drop", "items-quest", "equips-kind", "equips-job", "equips-drop", "equips-quest"]) $(id).addEventListener("change", () => renderSub());
@@ -2654,10 +2705,7 @@ async function loadItemBookNow() {
     renderEquips();
     renderBook();                                         // 展開中的怪物列補上掉落物的縮圖與分組
   } catch (err) {
-    for (const key of ["items", "equips"]) {
-      $(`${key}-count`).textContent = "載入失敗";
-      $(`${key}-note`).textContent = "讀不到 itembook.json：" + err.message;
-    }
+    for (const key of ["items", "equips"]) $(`${key}-count`).textContent = "載入失敗：讀不到 itembook.json（" + err.message + "）";
   }
 }
 
@@ -2753,13 +2801,10 @@ async function loadWorldNow() {
     fillKinds($("quests-area"), [...Object.entries(quests.cats), ["none", "其他"]]);
     fillKinds($("npcs-func"), [...new Set(npcs.npcs.map((n) => n.func).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant")).map((f) => [f, f]));
     wmInit(world.worlds);
-    renderQuests(); renderNpcs(); renderMaps();
+    renderQuests(); renderNpcs(); renderMaps(); wmGoHere();
     renderItems(); renderEquips(); renderBook();          // 道具、裝備補上任務獎勵；怪物的出現地圖變成能點的 chip
   } catch (err) {
-    for (const key of ["quests", "npcs", "maps"]) {
-      $(`${key}-count`).textContent = "載入失敗";
-      $(`${key}-note`).textContent = "讀不到任務、NPC 或地圖圖鑑：" + err.message;
-    }
+    for (const key of ["quests", "npcs", "maps"]) $(`${key}-count`).textContent = "載入失敗：讀不到任務、NPC 或地圖圖鑑（" + err.message + "）";
   }
 }
 
@@ -2857,16 +2902,18 @@ const renderQuests = makeTable("quests", QUEST_COLS, questDetail, () => {
   const q = $("quests-q").value.trim().toLowerCase(), area = $("quests-area").value, job = Number($("quests-job").value);
   const lo = Number($("quests-lo").value) || 0, hi = $("quests-hi").value === "" ? Infinity : Number($("quests-hi").value);
   const item = $("quests-item").checked, all = $("quests-all").checked;
-  const pool = wbook.data.quests.quests.filter((x) => all || x.live);
+  const pool = wbook.data.quests.quests.filter((x) => all || x.live), here = hereMaps(), mobs = here && hereMobs(here);
+  // 所在地圖：接或交任務的 NPC 站在這裡，或要打的怪在這裡生成
+  const onMap = (x) => [x.start, x.end].some((id) => id != null && wbook.npcById.get(id)?.maps.some((m) => here.has(m))) || x.need.mobs.some(([id]) => mobs.has(id));
   return { rows: pool.filter((x) => (!area || (area === "none" ? x.area == null : String(x.area) === area)) && (!job || x.job <= 0 || (x.job & job))
-    && (x.lv[1] == null || x.lv[1] >= lo) && (x.lv[0] == null || x.lv[0] <= hi) && (!item || x.give.items.length) && (!q || x.hay.includes(q))), total: pool.length };
-}, "任務的條件、獎勵與說明來自遊戲客戶端的資料檔。預設只列接得到的：接任務的 NPC 站在已開放的地圖上、活動沒結束。點一列展開需求、獎勵與說明。", { col: 1, dir: 1 }, "個",
+    && (x.lv[1] == null || x.lv[1] >= lo) && (x.lv[0] == null || x.lv[0] <= hi) && (!item || x.give.items.length) && (!here || onMap(x)) && (!q || x.hay.includes(q))), total: pool.length };
+}, { col: 1, dir: 1 }, "個",
   { ready: worldReady, cap: 600, reset: (q) => { resetTools(["quests-area", "quests-job", "quests-lo", "quests-hi", "quests-item"], "quests-q", q); $("quests-all").checked = true; } });
 const renderNpcs = makeTable("npcs", NPC_COLS, npcDetail, () => {
   const q = $("npcs-q").value.trim().toLowerCase(), func = $("npcs-func").value, quest = $("npcs-quest").checked, all = $("npcs-all").checked;
-  const pool = wbook.data.npcs.npcs.filter((n) => all || n.maps.length);
-  return { rows: pool.filter((n) => (!func || n.func === func) && (!quest || n.quests.length) && (!q || n.hay.includes(q))), total: pool.length };
-}, "名字、職稱與站的位置來自遊戲客戶端的資料檔。預設只列站在已開放地圖上的 NPC。點一列展開所在地圖與任務。", { col: 2, dir: 1 }, "個",
+  const pool = wbook.data.npcs.npcs.filter((n) => all || n.maps.length), here = hereMaps();
+  return { rows: pool.filter((n) => (!func || n.func === func) && (!quest || n.quests.length) && (!here || n.maps.some((id) => here.has(id))) && (!q || n.hay.includes(q))), total: pool.length };
+}, { col: 2, dir: 1 }, "個",
   { ready: worldReady, reset: (q) => { resetTools(["npcs-func", "npcs-quest"], "npcs-q", q); $("npcs-all").checked = true; } });
 for (const id of ["quests-q", "quests-lo", "quests-hi", "npcs-q", "maps-q"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all"]) $(id).addEventListener("change", () => renderSub());
@@ -2903,7 +2950,6 @@ function wmInit(worlds) {
   $("wm-others-body").innerHTML = [...groups].sort((a, b) => b[1].length - a[1].length).map(([street, maps]) =>
     `<h5>${esc(street)}<small>${maps.length}</small></h5><div class="chips">${maps.map((m) => `<button type="button" data-goto="map" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>`).join("");
   $("maps-count").textContent = `${all.length} 張`;
-  $("maps-note").textContent = "地圖插畫、節點與區域都來自遊戲客戶端。滑鼠移到節點看是哪張地圖，點一下看怪物、NPC 與相鄰地圖；亮起來的區域點了進入下一層。灰色節點是還沒開放的地圖，客戶端沒有它們的名字。紫色菱形是客戶端世界地圖上沒有、依傳送點關係補上的地圖，紫線是它們之間與連到節點的傳送點，位置只是示意。怪物是生成清單上的（召喚出來的王不在上面）。";
 }
 
 // 節點的名字：客戶端有標題就用；沒有就用第一張開放的地圖；全部沒開放的，總圖上看得出是哪個區域
@@ -3105,12 +3151,12 @@ function wmRender() {
 function renderMaps() {
   if (!wbook.data || !wm.worlds.size) return;
   wmRender();
-  const q = $("maps-q").value.trim().toLowerCase(), box = $("wm-results");
+  const q = $("maps-q").value.trim().toLowerCase(), box = $("wm-results"), here = hereMaps();
   box.hidden = !q;
   if (!q) { box.textContent = ""; return; }
-  const maps = wbook.data.maps.maps.filter((m) => m.hay.includes(q));
+  const maps = wbook.data.maps.maps.filter((m) => (!here || here.has(m.id)) && m.hay.includes(q));
   const places = [];
-  for (const w of wm.worlds.values()) {
+  if (!here) for (const w of wm.worlds.values()) {
     if (w.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}"><small class="pre">區域</small>${esc(w.title)}</button>`);
     w.nodes.forEach((n, i) => { if (n.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}" data-wm-node="${i}"><small class="pre">${esc(w.title)}</small>${esc(n.title)}</button>`); });
   }
@@ -3160,17 +3206,16 @@ for (const [event, on] of [["pointerover", true], ["pointerout", false], ["focus
     if (!on || !link) { wmHoverClear(); return; }
     wmHoverLink(link, link.box[0] + link.box[2] / 2, link.box[1] + link.box[3] / 2);
   });
-// 目前地圖：名字對得上就走到那張圖、標上位置；對不上（辨識差一兩個字）就拿去搜尋
-$("maps-here").addEventListener("click", () => {
-  const name = $("map-name").textContent;
-  const hits = wbook.data ? wbook.data.maps.maps.filter((m) => m.name === name || `${m.street} ${m.name}` === name) : [];
-  if (!hits.length) { $("maps-q").value = name; renderMaps(); return; }
+// 所在地圖：開關開著就走到那張圖、標上位置（搜尋也只搜這張）；關掉就拿掉標記
+function wmGoHere() {
+  if (!wbook.data || !wm.worlds.size) return;
+  const here = hereMaps();
+  const hits = here ? [...here].map((id) => wbook.mapById.get(id)).filter(Boolean) : [];
   const m = hits.find((h) => wm.where.has(h.id)) || hits[0];
-  $("maps-q").value = "";
-  wm.here = m.id;
+  wm.here = m ? m.id : null;
   renderMaps();
-  wmSelectMap(m.id);
-});
+  if (m) wmSelectMap(m.id);
+}
 
 // ---------------------------------------------------------------- 點 chip 彈出的小卡：怪物、道具、裝備各一種內容
 const tip = $("tip");
@@ -3234,12 +3279,10 @@ function gotoMob(id) {
   if (!m.live) $("book-unreleased").checked = true;
   if (!m.card) $("book-all").checked = true;
   const visible = () => bookFilter().rows.some((r) => r.id === id);
-  if (!visible()) {
-    $("book-q").value = ""; $("book-lo").value = ""; $("book-hi").value = "";
-    if (book.here) { book.here = false; $("book-here").classList.remove("on"); }
-  }
-  if (bookFilter().rows.length > BOOK_ROW_CAP) $("book-q").value = m.name;   // 太多列只列前幾百隻，用名字縮到牠
+  if (!visible()) bookHereOff();
+  if (!visible()) { $("book-q").value = ""; $("book-lo").value = ""; $("book-hi").value = ""; }
   book.open.add(id);
+  book.want = id;                                         // 排在幾百隻後面就多接幾批，接到牠為止
   renderBook();
   scrollToRow($("book-body"), id);
 }
@@ -3257,7 +3300,7 @@ async function goto(kind, id) {
   }
   const table = { item: renderItems, equip: renderEquips, quest: renderQuests, npc: renderNpcs }[kind];
   const e = { item: ibook.itemById, equip: ibook.equipById, quest: wbook.questById, npc: wbook.npcById }[kind].get(id);
-  if (table && e) table.open(id, e.name);
+  if (table && e) table.open(id);
 }
 function tipHtml(kind, id) {
   if (kind === "mob") { const m = ibook.mobById.get(id); return m ? mobTip(m) : ""; }
