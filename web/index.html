@@ -58,9 +58,31 @@
   main { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
   main > header, main > #hint { flex: none; margin-inline: max(20px, calc((100% - 1120px) / 2)); }
   main > header { margin-top: 20px; }
-  .page-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 max(20px, calc((100% - 1120px) / 2)) 56px; }
+  /* 捲軸不貼視窗邊：放在內容欄右邊的留白裡，內容右緣跟頂列對齊（--g 是兩側留白，捲軸 10px、跟內容隔 14px） */
+  .page-scroll { --g: max(20px, calc((100% - 1120px) / 2)); --m: max(0px, calc(var(--g) - 24px));
+    flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable;
+    margin: 0 var(--m) 0 0; padding: 0 calc(var(--g) - 10px - var(--m)) 56px var(--g); }
+  /* 圖鑑不要外層捲軸：卡片撐滿剩下的高度，表格（地圖是整個分頁）在卡片裡面捲 */
+  @media (min-height: 521px) {
+    .page-scroll:has(> #tab-book:not([hidden])) { display: flex; flex-direction: column; padding-bottom: 20px; }
+    #tab-book { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #tab-book > .sub-panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #tab-book > .sub-panel > * { flex: none; }
+    #tab-book > .sub-panel > .hist-wrap { flex: 1; min-height: 160px; max-height: none; }
+    #tab-book > #mapbook { overflow-y: auto; margin-right: -12px; padding-right: 12px; }
+    #tab-book .note { margin-bottom: 0; }
+  }
   /* 視窗太矮（手機橫放）時頂列會吃掉大半畫面，改回整頁捲動 */
   @media (max-height: 520px) { main { height: auto; } .page-scroll { overflow: visible; } }
+  /* 捲軸：細的圓角滑塊，平常是淡淡的灰青，滑過變亮、拖曳時是琥珀色，軌道透明 */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border: 2px solid transparent;
+    border-radius: 5px; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+  ::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
+  ::-webkit-scrollbar-button { display: none; }
+  @supports not selector(::-webkit-scrollbar) { * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; } }
 
   /* ---------- 頂列：左邊是標題與功能頁籤，右邊是跟讀畫面有關的東西（控制鈕、讀到的角色與地圖） ---------- */
   header { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
@@ -664,7 +686,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.4</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
