@@ -1,6 +1,7 @@
 """客戶端改版後更新全部圖鑑（``update_data.bat`` 跑這支）。
 
 照相依順序重跑每支匯出腳本，列出各圖鑑的數量變化，跑測試，問過才升版號、提交並推送；推到 main 就會自動部署。
+紙娃娃的資料有變的話，先用 ``publish_avatar.py`` 推到另外那個 repo（網站上的紙娃娃從那裡讀）。
 任何一步失敗就停下，什麼都不會提交。
 """
 
@@ -85,6 +86,8 @@ def publish(summary: list[str]) -> None:
     old = re.search(r'__version__ = "([^"]+)"', VERSION_PY.read_text(encoding="utf-8")).group(1)
     new = bump(old)
     set_version(old, new)
+    if git("status", "--porcelain", "--", "web/avatar.json", "web/avatar"):
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "publish_avatar.py")], cwd=ROOT, check=True)
     git("add", "-A", "--", *[f"web/{name}" for name in DATA], "web/index.html", "src/mapleexp/__init__.py")
     body = "\n".join(line.strip() for line in summary if "不變" not in line)
     git("commit", "-m", f"Data: refresh the books from the updated game client (v{new})\n\n{body}")

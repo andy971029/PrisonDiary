@@ -84,6 +84,7 @@ scripts/
 ├── export_worldbook.py    從本機客戶端匯出任務、NPC、地圖圖鑑與 NPC 圖
 ├── export_worldmap.py     從本機客戶端匯出世界地圖的資料與圖
 ├── export_avatar.py       從本機客戶端匯出時裝紙娃娃的資料與圖
+├── publish_avatar.py      把紙娃娃資料推到 PrisonDiary-avatar（它的 Pages 提供網站上的紙娃娃）
 ├── update_data.py      照順序重跑上面的匯出、列數量變化、跑測試，問過才發布（update_data.bat 跑這支）
 └── serve_web.py      送 no-store 的靜態伺服器，改了檔案重新整理就生效
 ```
@@ -92,7 +93,7 @@ scripts/
 
 跟練功助手、圖鑑同一層的分頁。選膚色、髮型、臉型與時裝（帽子、臉飾、眼飾、耳環、上衣、套服、褲裙、鞋子、手套、盾牌、披風、武器），角色在瀏覽器裡即時疊出來並播放動畫：站立、走路、警戒、跳躍、飛行、坐下、趴下、爬梯子、爬繩子、治療，加上 21 種攻擊（單手揮、雙手揮、長柄揮、單手刺、雙手刺、射擊與趴下刺）。時裝武器可以切換武器類型，握法跟著變；這個類型沒有的攻擊會標成虛線。可以下載目前這一格的透明 PNG，穿搭記在瀏覽器裡。
 
-資料是 `scripts/export_avatar.py` 從客戶端匯出的快照：`web/avatar.json` 是目錄，`web/avatar/` 裡是幾十個 `.bin` 包（每件的部位表與圖集接在一起，`avatar.json` 記每件在哪一包哪一段），網頁用 Range 只抓選到的那件。部位靠客戶端的骨架點對位；但客戶端找不到圖層前後與圖層佔用欄位的表，所以 `src/mapleexp/avatar.py` 的 `ORDER` 與網頁的 `dollHidden` 是依名稱手排的，少數搭配可能跟遊戲裡不一樣。匯出時遇到不認得的圖層會印出來提醒補進 `ORDER`。
+資料是 `scripts/export_avatar.py` 從客戶端匯出的快照：`web/avatar.json` 是目錄，`web/avatar/` 裡是幾十個 `.bin` 包（每件的部位表與圖集接在一起，`avatar.json` 記每件在哪一包哪一段），網頁用 Range 只抓選到的那件。網站上這些資料不跟主站一起部署（太大會讓 GitHub Pages 卡住），而是由 `scripts/publish_avatar.py` 推到另一個 repo `PrisonDiary-avatar`，從它的 Pages 讀；`update_data.bat` 發布時紙娃娃有變會自動推。部位靠客戶端的骨架點對位；但客戶端找不到圖層前後與圖層佔用欄位的表，所以 `src/mapleexp/avatar.py` 的 `ORDER` 與網頁的 `dollHidden` 是依名稱手排的，少數搭配可能跟遊戲裡不一樣。匯出時遇到不認得的圖層會印出來提醒補進 `ORDER`。
 
 ## 更新圖鑑資料
 

@@ -1,6 +1,7 @@
 # push 到 main 就重新打包並發布到 GitHub Pages。
 # mapleexp.zip 是打包產物、不進 git，所以要在這裡用 build_web.py 現做。
 # 只發布網頁真正會載入的檔案（頁面、資料 JSON、圖片與提示音效），src/、tests/ 這些不必放上網站。
+# 紙娃娃（web/avatar.json、web/avatar/）不在這裡：太大會讓部署卡住，另外由 scripts/publish_avatar.py 推到 PrisonDiary-avatar。
 name: Deploy to GitHub Pages
 
 on:
@@ -38,7 +39,7 @@ jobs:
         run: |
           python scripts/build_web.py
           mkdir _site
-          cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/itembook.json web/questbook.json web/npcbook.json web/mapbook.json web/worldmap.json web/avatar.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
+          cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/itembook.json web/questbook.json web/npcbook.json web/mapbook.json web/worldmap.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
           cp -r web/sounds _site/
           cp -r web/goddess _site/
           cp -r web/mobs _site/
@@ -46,7 +47,6 @@ jobs:
           cp -r web/npcs _site/
           cp -r web/minimaps _site/
           cp -r web/worldmap _site/
-          cp -r web/avatar _site/
 
       - uses: actions/configure-pages@v5
 

@@ -694,7 +694,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.21.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3380,6 +3380,9 @@ for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEvent
 // ---------------------------------------------------------------- 時裝紙娃娃
 // 客戶端的角色是一堆部位，網頁自己疊：身體放原點，其他部位靠共用的骨架點（navel、neck、brow、hand）對上去，再照圖層排前後。
 // avatar.json 是目錄；每件（部位表 JSON 接著 WebP 圖集）併在 avatar/ 的幾十個 .bin 包裡，選到才用 Range 抓那一段。格式見 mapleexp/avatar.py。
+// 網站上這些放在另一個 repo 的 Pages（PrisonDiary-avatar，scripts/publish_avatar.py 推上去），同一個網域不用跨來源：
+// 主站少了 100 多 MB，部署才不會卡在 GitHub 的同步。本機開發直接讀 web/ 裡匯出的。
+const DOLL_BASE = location.hostname.endsWith(".github.io") ? new URL("../PrisonDiary-avatar/", location.href).href : "";
 const DOLL_KEY = "mapleexp.doll";
 const DOLL_SIZE = 200, DOLL_X = 100, DOLL_Y = 150, DOLL_PAD = 8, DOLL_CELL = 36, DOLL_COLS = 56;
 const DOLL_BASIC = [["stand", "站立"], ["walk", "走路"], ["alert", "警戒"], ["jump", "跳躍"], ["fly", "飛行"], ["sit", "坐下"], ["prone", "趴下"], ["ladder", "爬梯子"], ["rope", "爬繩子"], ["heal", "治療"]];
@@ -3419,7 +3422,7 @@ async function dollOpen() {
   doll.loading = true;
   $("doll-state").textContent = "載入中…";
   try {
-    const res = await fetch("avatar.json");
+    const res = await fetch(DOLL_BASE + "avatar.json");
     if (!res.ok) throw new Error(res.status);
     doll.index = await res.json();
   } catch {
@@ -3443,7 +3446,7 @@ async function dollOpen() {
 async function dollBytes({ pack, at, json, img }) {
   const end = at + json + img;
   if (!doll.whole.has(pack)) {
-    const res = await fetch(`avatar/${pack}`, { headers: { Range: `bytes=${at}-${end - 1}` } });
+    const res = await fetch(`${DOLL_BASE}avatar/${pack}`, { headers: { Range: `bytes=${at}-${end - 1}` } });
     if (!res.ok) throw new Error(`${pack}: ${res.status}`);
     if (res.status === 206) return res.arrayBuffer();
     doll.whole.set(pack, res.arrayBuffer());
@@ -3642,7 +3645,7 @@ function dollRenderCats() {
 }
 function dollIcon(sheet, ic) {
   if (ic == null) return "<i></i>";
-  return `<i style="background:url(avatar/${sheet}.png) -${ic % DOLL_COLS * DOLL_CELL}px -${Math.floor(ic / DOLL_COLS) * DOLL_CELL}px"></i>`;
+  return `<i style="background:url(${DOLL_BASE}avatar/${sheet}.png) -${ic % DOLL_COLS * DOLL_CELL}px -${Math.floor(ic / DOLL_COLS) * DOLL_CELL}px"></i>`;
 }
 function dollRenderGrid() {
   const q = $("doll-q").value.trim().toLowerCase(), cat = doll.cat;
