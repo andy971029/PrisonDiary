@@ -59,10 +59,17 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
-      # 紙娃娃有 8800 多個檔案，GitHub 那邊同步偶爾超過預設的 10 分鐘就被取消，放寬到 30 分鐘
+      # 網站超過 100 MB 之後（紙娃娃），GitHub 那邊偶爾卡在 syncing_files 不動：正常 1～5 分鐘就好，
+      # 卡住的等再久也不會好，重新部署一次通常就過。所以第一次只等 6 分鐘，逾時就自動再部署一次。
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
         with:
-          timeout: 1800000
+          timeout: 360000
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 900000
