@@ -65,7 +65,7 @@
   /* 圖鑑不要外層捲軸：卡片撐滿剩下的高度，表格（地圖是整個分頁）在卡片裡面捲 */
   @media (min-height: 521px) {
     .page-scroll:has(> #tab-book:not([hidden])) { display: flex; flex-direction: column; padding-bottom: 20px; }
-    #tab-book { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #tab-book:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #tab-book > .sub-panel:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #tab-book > .sub-panel > * { flex: none; }
     #tab-book > .sub-panel > .hist-wrap { flex: 1; min-height: 160px; max-height: none; }
@@ -686,7 +686,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.4</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.19.5</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
