@@ -491,7 +491,10 @@
   .doll-grid b { font-weight: 500; overflow-wrap: anywhere; }
   .wm-layout { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px 20px; align-items: start; }
   @media (max-width: 1000px) { .wm-layout { grid-template-columns: minmax(0, 1fr); } .wm-main { max-width: 640px; } }
-  .wm-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-height: 26px; margin-bottom: 6px; font-size: 13px; }
+  /* 麵包屑疊在地圖左上角，不另外佔一列 */
+  .wm-main { position: relative; }
+  .wm-crumbs { position: absolute; top: 8px; left: 8px; z-index: 4; max-width: calc(100% - 16px); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;
+    padding: 3px 8px; font-size: 13px; background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: 4px; }
   .wm-crumbs b { font-weight: 700; }
   .wm-crumbs i { font-style: normal; color: var(--muted); }
   .wm-crumbs button { padding: 2px 6px; font: 500 13px var(--body); color: var(--accent); background: none; border: 0; cursor: pointer; }
@@ -691,7 +694,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.21.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.21.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
