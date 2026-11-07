@@ -715,7 +715,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1004,7 +1004,7 @@
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
-        <canvas id="doll-canvas" width="200" height="200" role="img" aria-label="角色預覽"></canvas>
+        <canvas id="doll-canvas" width="400" height="400" role="img" aria-label="角色預覽"></canvas>
         <div class="doll-bar">
           <button class="secondary" id="doll-play">暫停</button>
           <button class="secondary" id="doll-save" title="下載目前這一格，背景透明">下載 PNG</button>
@@ -3405,7 +3405,9 @@ for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEvent
 // 主站少了 100 多 MB，部署才不會卡在 GitHub 的同步。本機開發直接讀 web/ 裡匯出的。
 const DOLL_BASE = location.hostname.endsWith(".github.io") ? new URL("../PrisonDiary-avatar/", location.href).href : "";
 const DOLL_KEY = "mapleexp.doll";
-const DOLL_SIZE = 200, DOLL_X = 100, DOLL_Y = 150, DOLL_PAD = 8, DOLL_CELL = 36, DOLL_COLS = 56;
+// 畫布固定大小，角色不跟著武器縮放：量過全部武器每個動作的攻擊特效（與披風等時裝特效），以腳底為原點最遠到
+// 左 211、上 218、右 158（披風）、下 139，共 369×357，放進 400×400 置中，網頁上剛好 1:1
+const DOLL_SIZE = 400, DOLL_X = 226, DOLL_Y = 239, DOLL_CELL = 36, DOLL_COLS = 56;
 const DOLL_BASIC = [["stand", "站立"], ["walk", "走路"], ["alert", "警戒"], ["jump", "跳躍"], ["fly", "飛行"], ["sit", "坐下"], ["prone", "趴下"], ["ladder", "爬梯子"], ["rope", "爬繩子"], ["heal", "治療"]];
 const DOLL_ATTACKS = [
   ["單手揮", [["swingO1", "1"], ["swingO2", "2"], ["swingO3", "3"], ["swingOF", "F"]]],
@@ -3551,8 +3553,7 @@ function dollEffectFrame(rows, time) {
   while (t >= rows[i][1]) t -= rows[i++][1];
   return { row: rows[i], left: rows[i][1] - t };
 }
-// effectAt：特效這個動作要畫哪幾格，平常是現在這一格，算畫布範圍時傳每一格
-function dollCompose(action, index, effectAt = (rows) => [dollEffectFrame(rows, dollEffTime()).row]) {
+function dollCompose(action, index) {
   let pending = doll.ready.flatMap((x) => dollParts(x, action, index));
   // 帽子這一格沒有圖就不遮頭髮，不然會變光頭
   const cap = doll.ready.find((x) => x.id === doll.worn.cap)?.file;
@@ -3570,7 +3571,8 @@ function dollCompose(action, index, effectAt = (rows) => [dollEffectFrame(rows, 
   pending = pending.filter((e) => !isBody(e));
   for (const { file } of doll.ready) {
     const rows = dollEffect(file, action);
-    if (rows) for (const [n] of effectAt(rows)) if (file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0 });
+    const n = rows && dollEffectFrame(rows, dollEffTime()).row[0];
+    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0 });
   }
   for (let moved = true; moved && pending.length;) {
     moved = false;
@@ -3586,24 +3588,12 @@ function dollCompose(action, index, effectAt = (rows) => [dollEffectFrame(rows, 
   const rank = (e) => doll.rank.get(e.part[6]) ?? Infinity;
   return placed.map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
 }
-// 武器的攻擊特效常常比角色大很多：畫布照這個動作每一格的範圍放大（至少 200），整段動作用同一個大小才不會晃
-function dollView(action, count) {
-  let left = -DOLL_X, top = -DOLL_Y, right = DOLL_SIZE - DOLL_X, bottom = DOLL_SIZE - DOLL_Y;
-  for (let i = 0; i < count; i++) for (const { part: [, , w, h, ox, oy], dx, dy } of dollCompose(action, i, (rows) => rows)) {
-    left = Math.min(left, dx - ox - DOLL_PAD); top = Math.min(top, dy - oy - DOLL_PAD);
-    right = Math.max(right, dx - ox + w + DOLL_PAD); bottom = Math.max(bottom, dy - oy + h + DOLL_PAD);
-  }
-  const size = Math.max(right - left, bottom - top);
-  return { size, x: Math.round(-left + (size - (right - left)) / 2), y: Math.round(-top + (size - (bottom - top)) / 2) };
-}
 function dollDraw() {
-  const canvas = $("doll-canvas"), { size, x: cx, y: cy } = doll.view;
-  if (canvas.width !== size) canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const ctx = $("doll-canvas").getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, size, size);
+  ctx.clearRect(0, 0, DOLL_SIZE, DOLL_SIZE);
   for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of dollCompose(dollAction(), doll.frame))
-    ctx.drawImage(file.image, x, y, w, h, cx + dx - ox, cy + dy - oy, w, h);
+    ctx.drawImage(file.image, x, y, w, h, DOLL_X + dx - ox, DOLL_Y + dy - oy, w, h);
 }
 function dollPlay() {
   clearTimeout(doll.timer);
@@ -3612,11 +3602,6 @@ function dollPlay() {
   const delays = body?.d?.[dollAction()] || [500];
   if (doll.frame >= delays.length) doll.frame = 0;
   dollPlayEffects();
-  const key = `${dollAction()}|${dollGroup()}`;
-  if (doll.viewOf !== doll.ready || doll.viewKey !== key) {
-    doll.view = dollView(dollAction(), delays.length);
-    doll.viewOf = doll.ready; doll.viewKey = key;
-  }
   dollDraw();
   if (!doll.playing || delays.length < 2 || $("tab-doll").hidden) return;
   doll.timer = setTimeout(() => { doll.frame = (doll.frame + 1) % delays.length; dollPlay(); }, Math.max(60, delays[doll.frame]));
