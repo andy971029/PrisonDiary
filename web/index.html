@@ -715,7 +715,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.4</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2196,7 +2196,7 @@ renderGoddess(true);
 // monsterbook.json 是客戶端資料的快照（scripts/export_monsterbook.py）：每隻怪的數值、圖鑑卡上的
 // 掉落物與出現地圖、各種名稱。第一次切到這一頁才載入（約 500 KB），載完就留在記憶體裡。
 // 搜尋同時比對怪物名、型態、掉落物名與地圖名，所以打「嫩寶殼」會找到嫩寶、打「奇幻村」會找到那張圖的怪。
-const book = { data: null, promise: null, open: new Set(), sort: { col: 1, dir: 1 }, lastHere: "", limit: 0, rows: [], shown: 0, want: null };
+const book = { alias: new Map(), data: null, promise: null, open: new Set(), sort: { col: 1, dir: 1 }, lastHere: "", limit: 0, rows: [], shown: 0, want: null };
 const BOOK_ROW_CAP = 400;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
@@ -2255,6 +2255,18 @@ async function loadBookNow() {
     const res = await fetch("monsterbook.json", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    // 客戶端有些怪是別隻的複本：同名、數值一樣、外觀借本尊（pic 第三格），沒說明也沒掉落，地圖上兩個 ID 都會生。
+    // 玩家看起來就是同一隻，併回本尊：出現地圖合起來，複本拿掉，用到複本 ID 的地方（地圖、任務）都指到本尊
+    const byId = new Map(data.mobs.map((m) => [m.id, m]));
+    const stats = (m) => [m.name, m.level, m.hp, m.mp, m.exp, m.pad, m.pdd, m.mad, m.mdd, m.acc, m.eva].join("|");
+    book.alias = new Map();
+    for (const m of data.mobs) {
+      const main = byId.get(m.pic?.[2]);
+      if (!main || m.drops.length || m.desc || stats(m) !== stats(main)) continue;
+      book.alias.set(m.id, main);
+      main.spawn = [...new Set([...main.spawn, ...m.spawn])];
+    }
+    data.mobs = data.mobs.filter((m) => !book.alias.has(m.id));
     for (const m of data.mobs) {
       // 有圖鑑卡的才是玩家打得到的野怪；其他多半是任務、活動、召喚物，預設不列。
       m.card = !!(m.drops.length || m.maps.length || m.desc);
@@ -2710,7 +2722,7 @@ async function loadItemBookNow() {
     const res = await fetch("itembook.json", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    ibook.mobById = new Map(book.data.mobs.map((m) => [m.id, m]));
+    ibook.mobById = new Map([...book.data.mobs.map((m) => [m.id, m]), ...book.alias]);
     ibook.itemById = new Map(data.items.map((e) => [e.id, e]));
     ibook.equipById = new Map(data.equips.map((e) => [e.id, e]));
     const prep = (e, kindName) => {
@@ -2801,7 +2813,7 @@ async function loadWorldNow() {
       q.areaName = quests.cats[q.area] || "其他";
       if (q.live) for (const [id] of q.give.items) push(wbook.questsByItem, id, q);
       for (const id of [q.start, q.end]) if (id) push(wbook.questsByNpc, id, q);
-      for (const [id] of q.need.mobs) push(wbook.questsByMob, id, q);
+      for (const [id] of q.need.mobs) push(wbook.questsByMob, book.alias.get(id)?.id ?? id, q);
       if (q.give.next) push(wbook.questsByNext, q.give.next, q);
     }
     for (const q of quests.quests) {
@@ -2815,6 +2827,10 @@ async function loadWorldNow() {
     for (const m of maps.maps) {
       // 地圖的生成清單留著一些客戶端沒有名字也沒有資料的 NPC，不列
       m.npcs = m.npcs.filter((id) => wbook.npcById.has(id));
+      // 怪的複本算本尊，生成點數加在一起
+      const mobs = new Map();
+      for (const [id, n] of m.mobs) { const main = book.alias.get(id)?.id ?? id; mobs.set(main, (mobs.get(main) || 0) + n); }
+      m.mobs = [...mobs];
       if (m.mini) m.mini.npcs = m.mini.npcs.filter(([id]) => wbook.npcById.has(id));
       const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
       m.lvLo = levels.length ? Math.min(...levels) : null;
