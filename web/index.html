@@ -458,6 +458,14 @@
   .tip .tip-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; line-height: 1;
     font: 700 14px var(--body); background: none; border: 0; color: var(--muted); }
   .tip .tip-x:hover { color: var(--ink); }
+  /* 怪物小卡下半部分三個頁籤：掉落物、出現地圖、基本資料 */
+  .tip-tabs { display: flex; gap: 3px; padding: 3px; margin: 0 0 10px; background: var(--ground); border: 1px solid var(--line); border-radius: 3px; }
+  .tip-tabs button { flex: 1; font: 700 12px var(--body); letter-spacing: .06em; padding: 4px 8px; margin: 0;
+    background: none; border: 0; border-radius: 2px; color: var(--muted); cursor: pointer; }
+  .tip-tabs button:hover { color: var(--ink); background: var(--surface); }
+  .tip-tabs button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
+  .tip-tabs small { font-weight: 400; margin-left: 4px; opacity: .8; }
+  .tip [data-tip-panel] > .note:first-child { margin-top: 0; }
   .mob-detail h5 { margin: 8px 0 4px; font: 700 12px var(--body); color: var(--muted); }
   .tip h5 { margin: 8px 0 4px; font: 700 12px var(--body); color: var(--muted); }
   .tip .goto-row { margin-top: 10px; }
@@ -715,7 +723,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.4</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.5</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3262,13 +3270,23 @@ const tipHead = (pic, name, sub) => `<div class="tip-head">${pic ? `<div class="
 const tipRows = (rows) => `<dl>${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
 // 小卡裡的「會掉的怪」：同一段，但點了怪物是跳到怪物圖鑑，不是再彈一張小卡
 const tipSources = (e) => sourceChips(e, "goto");
+// 怪物小卡：名字與圖下面分三個頁籤，掉落物與出現地圖跟怪物圖鑑展開的一樣，chip 點了再彈小卡；上次看哪個頁籤就開哪個
+let tipMobTab = "drops";
 function mobTip(m) {
-  return tipHead(picTag(m, 96, 72, ' decoding="async"'), m.name, [m.type, m.boss ? "BOSS" : "", m.live ? "" : "還沒開放"].filter(Boolean).join(" · "))
-    + tipRows([["等級", m.level], ["HP / MP", `${fmtInt(m.hp)} / ${fmtInt(m.mp)}`], ["EXP", fmtInt(m.exp)],
+  const here = hereMaps(), drops = dropGroups(m), maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
+  const tabs = [["drops", "掉落物", m.drops.length], ["maps", m.live ? "出現地圖" : "還沒開放", m.live ? m.spawn.length : ""], ["info", "基本資料", ""]];
+  const panels = {
+    drops: drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>',
+    maps: (maps.length ? `<div class="chips">${maps.join("")}</div>` : '<p class="note">圖鑑上沒有列出現地圖。</p>')
+      + (m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'),
+    info: tipRows([["等級", m.level], ["HP / MP", `${fmtInt(m.hp)} / ${fmtInt(m.mp)}`], ["EXP", fmtInt(m.exp)],
       ["物攻 / 魔攻", m.pad != null || m.mad != null ? `${fmtInt(m.pad)} / ${fmtInt(m.mad)}` : ""],
-      ["物防 / 魔防", `${fmtInt(m.pdd)} / ${fmtInt(m.mdd)}`], ["命中 / 迴避", `${fmtInt(m.acc)} / ${fmtInt(m.eva)}`],
-      ["掉落物", m.drops.length], ["出現地圖", m.live ? m.spawn.length : "還沒開放"]])
-    + (m.desc ? `<p>${esc(m.desc)}</p>` : "");
+      ["物防 / 魔防", `${fmtInt(m.pdd)} / ${fmtInt(m.mdd)}`], ["命中 / 迴避", `${fmtInt(m.acc)} / ${fmtInt(m.eva)}`]])
+      + (m.desc ? `<p>${esc(m.desc)}</p>` : ""),
+  };
+  return tipHead(picTag(m, 96, 72, ' decoding="async"'), m.name, [m.type, m.boss ? "BOSS" : "", m.live ? "" : "還沒開放"].filter(Boolean).join(" · "))
+    + `<div class="tip-tabs" role="tablist">${tabs.map(([key, label, n]) => `<button type="button" role="tab" data-tip-tab="${key}" aria-selected="${key === tipMobTab}">${esc(label)}${n !== "" ? `<small>${n}</small>` : ""}</button>`).join("")}</div>`
+    + tabs.map(([key]) => `<div role="tabpanel" data-tip-panel="${key}"${key === tipMobTab ? "" : " hidden"}>${panels[key]}</div>`).join("");
 }
 function itemTip(e) {
   return tipHead(iconTag(e, "items"), e.name, itemKind(e))
@@ -3360,12 +3378,24 @@ function showTip(anchor) {
   if (!tip.hidden && tip.dataset.key === key) { hideTip(); return; }
   const html = tipHtml(anchor.dataset.tip, Number(anchor.dataset.id));
   if (!html) return;
-  hideTip();
+  // 小卡裡的 chip（怪物小卡的掉落物、出現地圖）：換成那一張，放在原地，原本的 chip 還是亮著
+  const inner = tip.contains(anchor), at = inner && { top: tip.offsetTop, left: tip.offsetLeft };
+  if (!inner) hideTip();
   const goRow = `<div class="goto-row"><button type="button" data-goto="${anchor.dataset.tip}" data-id="${anchor.dataset.id}">在圖鑑裡展開</button></div>`;
   tip.innerHTML = html + goRow + '<button type="button" class="tip-x" aria-label="關閉">✕</button>';
   tip.dataset.key = key;
   tip.hidden = false;
+  if (inner) {
+    tip.style.top = `${Math.max(8, Math.min(at.top, innerHeight - tip.offsetHeight - 8))}px`;
+    tip.style.left = `${at.left}px`;
+    tip.scrollTop = 0;
+    return;
+  }
   anchor.classList.add("on");
+  placeTip(anchor);
+}
+// 貼在 chip 下面，放不下就翻到上面；換頁籤高度會變，再放一次
+function placeTip(anchor) {
   const r = anchor.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
   let top = r.bottom + 6;
   if (top + h > innerHeight - 8) top = Math.max(8, r.top - 6 - h);
@@ -3379,6 +3409,15 @@ document.addEventListener("click", (e) => {
     const soon = rv.parentElement.nextElementSibling;
     if (soon?.classList.contains("soon-chips")) { rv.parentElement.append(...soon.children); soon.remove(); }
     rv.remove();
+    return;
+  }
+  const tab = e.target.closest("[data-tip-tab]");
+  if (tab) {
+    tipMobTab = tab.dataset.tipTab;
+    for (const b of tip.querySelectorAll("[data-tip-tab]")) b.setAttribute("aria-selected", String(b === tab));
+    for (const panel of tip.querySelectorAll("[data-tip-panel]")) panel.hidden = panel.dataset.tipPanel !== tipMobTab;
+    const anchor = document.querySelector("[data-tip].on");
+    if (anchor) placeTip(anchor);
     return;
   }
   const go = e.target.closest("[data-goto]");
