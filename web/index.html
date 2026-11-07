@@ -475,7 +475,7 @@
   /* 世界地圖：底圖 640 寬，節點與亮起來的圖層都用百分比疊上去，縮放時跟著走；手機上太擠就在框裡左右捲 */
   /* 紙娃娃：左邊挑時裝、右邊是人物，類別是最下面一整條。寬螢幕撐滿視窗，時裝格子與人物欄各自捲 */
   #tab-doll { padding-top: 20px; }
-  .doll-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 446px); gap: 16px 20px; align-items: start; }
+  .doll-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 522px); gap: 16px 20px; align-items: start; }
   @media (max-width: 860px) { .doll-layout { grid-template-columns: minmax(0, 1fr); } .doll-stage { order: -1; }
     .doll-cats { position: sticky; bottom: 0; z-index: 5; }
     .page-scroll:has(> #tab-doll:not([hidden])) { padding-bottom: 0; }   /* sticky 是貼在內距裡面，留著內距下面會露出一截 */ }
@@ -497,12 +497,20 @@
     background: none; border: 0; border-radius: 3px; color: var(--muted); cursor: pointer; }
   .doll-cats button:hover { color: var(--ink); background: var(--ground); }
   .doll-cats button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
-  #doll-canvas { display: block; width: 100%; max-width: 400px; aspect-ratio: 1; image-rendering: pixelated; background: #dbe7ec; border: 1px solid var(--line); border-radius: 6px; }
+  #doll-canvas { display: block; width: 100%; max-width: 476px; aspect-ratio: 476 / 353; image-rendering: pixelated; background: #dbe7ec; border: 1px solid var(--line); border-radius: 6px; }
   .doll-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0; }
   .doll-bar button { padding: 5px 10px; font-size: 13px; }
   .doll-group { font-size: 13px; }
   .doll-group[hidden], .doll-colors[hidden] { display: none; }
   .doll-state { font-size: 12px; color: var(--muted); }
+  /* 背景：縮圖按鈕，選中的框琥珀色 */
+  .doll-backs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+  .doll-backs[hidden] { display: none; }
+  .doll-backs span { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .doll-backs button { width: 52px; height: 39px; padding: 0; margin: 0; font: 700 12px var(--body); color: #5a6b72; cursor: pointer;
+    background: #dbe7ec center / cover no-repeat; border: 2px solid var(--line); border-radius: 3px; }
+  .doll-backs button:hover { border-color: var(--muted); }
+  .doll-backs button[aria-pressed="true"] { border-color: var(--accent); }
   .doll-h { margin: 12px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
   .doll-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 4px; }
   .doll-row > span { font-size: 12px; color: var(--muted); }
@@ -723,7 +731,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.22.6</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1012,14 +1020,15 @@
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
-        <canvas id="doll-canvas" width="400" height="400" role="img" aria-label="角色預覽"></canvas>
+        <canvas id="doll-canvas" width="476" height="353" role="img" aria-label="角色預覽"></canvas>
         <div class="doll-bar">
           <button class="secondary" id="doll-play">暫停</button>
-          <button class="secondary" id="doll-save" title="下載目前這一格，背景透明">下載 PNG</button>
+          <button class="secondary" id="doll-save" title="下載目前這一格；背景選「無」是透明的">下載 PNG</button>
           <button class="secondary" id="doll-clear">脫掉時裝</button>
           <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
           <span class="doll-state" id="doll-state" aria-live="polite"></span>
         </div>
+        <div class="doll-backs" id="doll-backs" hidden></div>
         <div id="doll-actions"></div>
         <h4 class="doll-h">穿在身上</h4>
         <div class="chips" id="doll-worn"></div>
@@ -3459,9 +3468,9 @@ for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEvent
 // 主站少了 100 多 MB，部署才不會卡在 GitHub 的同步。本機開發直接讀 web/ 裡匯出的。
 const DOLL_BASE = location.hostname.endsWith(".github.io") ? new URL("../PrisonDiary-avatar/", location.href).href : "";
 const DOLL_KEY = "mapleexp.doll";
-// 畫布固定大小，角色不跟著武器縮放：量過全部武器每個動作的攻擊特效（與披風等時裝特效），以腳底為原點最遠到
-// 左 211、上 218、右 158（披風）、下 139，共 369×357，放進 400×400 置中，網頁上剛好 1:1
-const DOLL_SIZE = 400, DOLL_X = 226, DOLL_Y = 239, DOLL_CELL = 36, DOLL_COLS = 56;
+// 畫布是購物商場試穿視窗背景的大小，角色不跟著武器縮放。腳底站在背景的草地上（y 252），左右置中：
+// 量過全部武器每個動作的攻擊特效與披風等時裝特效，以腳底為原點最遠到左 211、上 218、右 158、下 139，只有往下刺的會切到一點
+const DOLL_W = 476, DOLL_H = 353, DOLL_X = 238, DOLL_Y = 252, DOLL_CELL = 36, DOLL_COLS = 56;
 const DOLL_BASIC = [["stand", "站立"], ["walk", "走路"], ["alert", "警戒"], ["jump", "跳躍"], ["fly", "飛行"], ["sit", "坐下"], ["prone", "趴下"], ["ladder", "爬梯子"], ["rope", "爬繩子"], ["heal", "治療"]];
 const DOLL_ATTACKS = [
   ["單手揮", [["swingO1", "1"], ["swingO2", "2"], ["swingO3", "3"], ["swingOF", "F"]]],
@@ -3475,10 +3484,10 @@ const DOLL_ATTACKS = [
 const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "短劍", 34: "雙刀", 37: "短杖", 38: "長杖", 40: "雙手劍", 41: "雙手斧", 42: "雙手棍", 43: "槍", 44: "矛", 45: "弓", 46: "弩", 47: "拳套", 48: "指虎", 49: "火槍" };
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
 const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
-  skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null };
+  skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null, back: 1, backs: new Map() };
 
 function dollSave() {
-  try { localStorage.setItem(DOLL_KEY, JSON.stringify({ skin: doll.skin, hair: doll.hair, face: doll.face, worn: doll.worn, group: doll.group })); } catch { /* 存不了就算了 */ }
+  try { localStorage.setItem(DOLL_KEY, JSON.stringify({ skin: doll.skin, hair: doll.hair, face: doll.face, worn: doll.worn, group: doll.group, back: doll.back })); } catch { /* 存不了就算了 */ }
 }
 // 存檔可能指到下一版客戶端拿掉的東西：對不上的丟掉
 function dollRestore() {
@@ -3492,6 +3501,8 @@ function dollRestore() {
   else if (!known(doll.index.face, doll.face)) doll.face = Object.values(doll.index.face[0].c)[0];
   for (const [cat, id] of Object.entries(raw?.worn || {})) if (doll.byId.get(id)?.cat === cat) doll.worn[cat] = id;
   if (Number.isInteger(raw?.group)) doll.group = raw.group;
+  if (Number.isInteger(raw?.back) && raw.back >= 0 && raw.back <= (doll.index.backs || []).length) doll.back = raw.back;
+  if (doll.back > (doll.index.backs || []).length) doll.back = 0;
 }
 async function dollOpen() {
   if (doll.index) { dollRefresh(); return; }
@@ -3515,6 +3526,7 @@ async function dollOpen() {
   for (const [cat, list] of Object.entries(doll.index.items)) for (const item of list) doll.byId.set(item.id, { ...item, cat });
   dollRestore();
   dollRenderActions();
+  dollRenderBacks();
   dollRenderCats();
   dollRenderGrid();
   dollRefresh();
@@ -3645,9 +3657,30 @@ function dollCompose(action, index) {
 function dollDraw() {
   const ctx = $("doll-canvas").getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, DOLL_SIZE, DOLL_SIZE);
+  ctx.clearRect(0, 0, DOLL_W, DOLL_H);
+  const back = dollBackImage();
+  if (back) ctx.drawImage(back, 0, 0, DOLL_W, DOLL_H);
   for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of dollCompose(dollAction(), doll.frame))
     ctx.drawImage(file.image, x, y, w, h, DOLL_X + dx - ox, DOLL_Y + dy - oy, w, h);
+}
+// 背景：0 是素色（下載的 PNG 透明），1 起是購物商場試穿的背景；第一次用到才載，載好再重畫
+function dollBackImage() {
+  const file = doll.back && doll.index.backs?.[doll.back - 1];
+  if (!file) return null;
+  if (!doll.backs.has(file)) {
+    const image = new Image();
+    image.src = `${DOLL_BASE}avatar/${file}`;
+    image.decode().then(() => dollDraw(), () => {});
+    doll.backs.set(file, image);
+  }
+  const image = doll.backs.get(file);
+  return image.complete && image.naturalWidth ? image : null;
+}
+function dollRenderBacks() {
+  const backs = doll.index.backs || [];
+  $("doll-backs").hidden = !backs.length;
+  $("doll-backs").innerHTML = '<span>背景</span>' + ["", ...backs].map((file, i) =>
+    `<button type="button" data-doll-back="${i}" aria-pressed="${i === doll.back}" title="${i ? `背景 ${i}` : "素色（下載的 PNG 透明）"}"${file ? ` style="background-image:url('${DOLL_BASE}avatar/${file}')"` : ""}>${i ? "" : "無"}</button>`).join("");
 }
 function dollPlay() {
   clearTimeout(doll.timer);
@@ -3802,6 +3835,14 @@ $("doll-actions").addEventListener("click", (e) => {
   for (const b of $("doll-actions").querySelectorAll("[data-doll-action]")) b.classList.toggle("on", b === btn);
   dollPlay();
 });
+$("doll-backs").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-doll-back]");
+  if (!btn) return;
+  doll.back = Number(btn.dataset.dollBack);
+  for (const b of $("doll-backs").querySelectorAll("[data-doll-back]")) b.setAttribute("aria-pressed", String(b === btn));
+  dollSave();
+  dollDraw();
+});
 $("doll-play").addEventListener("click", () => {
   doll.playing = !doll.playing;
   if (doll.playing) { doll.effBase = performance.now() - doll.effFrozen; doll.effFrozen = null; }
@@ -3821,9 +3862,10 @@ $("doll-group").addEventListener("change", (e) => {
 // 下載目前這一格：裁掉透明的邊，放大會糊所以存原尺寸
 $("doll-save").addEventListener("click", () => {
   if (!doll.ready) return;
-  const canvas = $("doll-canvas"), size = canvas.width, { data } = canvas.getContext("2d").getImageData(0, 0, size, size);
-  let left = size, top = size, right = -1, bottom = -1;
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (data[(y * size + x) * 4 + 3]) {
+  // 有背景就整張下載；素色的切掉透明的邊
+  const canvas = $("doll-canvas"), width = canvas.width, height = canvas.height, { data } = canvas.getContext("2d").getImageData(0, 0, width, height);
+  let left = width, top = height, right = -1, bottom = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3]) {
     left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
   }
   if (right < 0) return;

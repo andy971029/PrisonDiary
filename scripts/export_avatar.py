@@ -3,6 +3,7 @@
 網頁「紙娃娃」分頁讀這些。格式見 ``mapleexp/avatar.py``。部位資料跟裝備同一包 WZJS，圖在
 ``spritesheet_*.bundle`` 的 ``Character/``，用 UnityPy 讀；有些時裝的圖在 ``Effect/ItemEff``，另外找那包。每件是一段 JSON 加一張 WebP 圖集，依 :func:`mapleexp.avatar.pack_key` 併成幾十個 ``.bin`` 包，
 網頁照 ``avatar.json`` 記的位置用 Range 只抓那一段。
+購物商場試穿視窗的背景也一起匯出（``back<N>.<hash>.webp``，``avatar.json`` 的 ``backs``）。
 客戶端改版就重跑一次（``update_data.bat`` 會跑）。
 """
 
@@ -151,6 +152,29 @@ def hair_thumb(item_id: int, tree: dict, container: dict):
     return out
 
 
+def export_backs(directory: Path) -> list[str]:
+    """購物商場試穿視窗的背景（``prefab_*.bundle`` 裡的 ``Bg_Preview_01``～）：照編號存成 WebP，回傳檔名。"""
+    import UnityPy
+    found: dict[str, object] = {}
+    for path in sorted(directory.glob("prefab_*.bundle")):
+        for obj in UnityPy.load(str(path)).objects:
+            if obj.type.name != "Sprite":
+                continue
+            sprite = obj.read()
+            name = sprite.m_Name
+            if name.startswith("Bg_Preview_") and name[11:].isdigit() and name not in found:
+                found[name] = sprite.image
+    names = []
+    for name in sorted(found, key=lambda n: int(n[11:])):
+        buffer = io.BytesIO()
+        found[name].convert("RGB").save(buffer, "WEBP", quality=90, method=6)
+        data = buffer.getvalue()
+        file = f"back{int(name[11:])}.{hashlib.sha1(data).hexdigest()[:10]}.webp"
+        (DIR / file).write_bytes(data)
+        names.append(file)
+    return names
+
+
 def main() -> int:
     directory = gamedata.find_bundle_dir()
     if directory is None:
@@ -264,8 +288,11 @@ def main() -> int:
     thumbs["hair"].save(DIR / "hair.png")
     thumbs["face"].save(DIR / "face.png")
     index = write_packs(packs)
+    backs = export_backs(directory)
+    if not backs:
+        print("找不到購物商場試穿的背景（Bg_Preview_*），紙娃娃只有素色背景", file=sys.stderr)
     OUT.write_text(json.dumps({
-        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items, "packs": index,
+        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items, "packs": index, "backs": backs,
         "cats": [[key, label] for key, _, label in avatar.CATEGORIES.values()],
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     count = sum(len(v) for v in items.values())
