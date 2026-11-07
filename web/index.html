@@ -489,7 +489,6 @@
     #tab-doll .doll-stage { min-height: 0; overflow-y: auto; }
   }
   .doll-shop .doll-tools { margin-top: 0; }
-  .doll-stage .note { margin: 14px 0 0; }
   /* 最下面的類別列：一整條，選中的那格填琥珀色 */
   .doll-cats { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 12px; padding: 4px; background: var(--surface);
     border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 0 0 4px 4px; }
@@ -498,26 +497,55 @@
   .doll-cats button:hover { color: var(--ink); background: var(--ground); }
   .doll-cats button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
   #doll-canvas { display: block; width: 100%; max-width: 476px; aspect-ratio: 476 / 353; image-rendering: pixelated; background: #dbe7ec; border: 1px solid var(--line); border-radius: 6px; }
-  /* 暫停、下載這一排疊在畫布左下角，跟左上角的背景列同一種底 */
-  .doll-bar { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
-    padding: 3px; background: color-mix(in srgb, var(--surface) 80%, transparent); border-radius: 4px; }
-  .doll-bar button { padding: 3px 8px; margin: 0; font-size: 12px; }
-  .doll-bar .doll-group { font-size: 12px; margin-left: 2px; }
-  .doll-bar .doll-state:empty { display: none; }
-  .doll-view + #doll-actions { margin-top: 12px; }
-  .doll-group { font-size: 13px; }
-  .doll-group[hidden], .doll-colors[hidden] { display: none; }
-  .doll-state { font-size: 12px; color: var(--muted); }
-  /* 背景：縮圖按鈕疊在畫布左上角，選中的框琥珀色 */
+  /* 畫布上疊的東西：上面一排是背景、鍵盤模式、動作面板的按鈕，左邊是穿著的時裝，左下是恢復原狀、全部脫下 */
   .doll-view { position: relative; max-width: 476px; }
-  .doll-backs { position: absolute; top: 6px; left: 6px; display: flex; flex-wrap: wrap; gap: 4px; padding: 3px;
-    background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: 4px; }
+  .doll-top { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; align-items: flex-start; gap: 6px; pointer-events: none; }
+  .doll-top > * { pointer-events: auto; }
+  .doll-backs, .doll-kb, .doll-panel-btn, .doll-worn, .doll-bar, .doll-panel { background: color-mix(in srgb, var(--surface) 80%, transparent); border-radius: 4px; }
+  .doll-backs { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; }
   .doll-backs[hidden] { display: none; }
   .doll-backs button { width: 36px; height: 27px; padding: 0; margin: 0; font: 700 11px var(--body); color: #5a6b72; cursor: pointer;
     background: #dbe7ec center / cover no-repeat; border: 2px solid var(--line); border-radius: 3px; }
   .doll-backs button:hover { border-color: var(--muted); }
   .doll-backs button[aria-pressed="true"] { border-color: var(--accent); }
-  .doll-h { margin: 12px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
+  .doll-kb.switch { min-width: 0; height: 35px; padding: 0 8px; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .doll-panel-btn { margin: 0 0 0 auto; height: 35px; padding: 0 10px; font: 700 12px var(--body); color: var(--ink); border: 0; cursor: pointer; white-space: nowrap; }
+  .doll-panel-btn:hover, .doll-panel-btn[aria-expanded="true"] { color: var(--accent); }
+  .doll-panel-btn[hidden] { display: none; }
+  .doll-panel { position: absolute; top: 47px; right: 6px; width: min(300px, calc(100% - 112px)); max-height: calc(100% - 92px); overflow-y: auto;
+    padding: 2px 10px 8px; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); }
+  .doll-panel[hidden] { display: none; }
+  .doll-panel .doll-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .doll-panel .chips button { padding: 2px 8px; font-size: 12px; }
+  .doll-worn { position: absolute; top: 47px; left: 6px; bottom: 44px; width: 84px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 3px; }
+  .doll-worn[hidden] { display: none; }
+  .doll-worn > div { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 3px 5px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+  .doll-worn i { display: block; width: 36px; height: 36px; flex: none; }
+  .doll-worn b { font: 500 11px/1.25 var(--body); text-align: center; overflow-wrap: anywhere; }
+  .doll-worn button { position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; padding: 0; margin: 0; font: 700 11px/1 var(--body);
+    color: var(--muted); background: none; border: 0; cursor: pointer; }
+  .doll-worn button:hover { color: var(--ink); }
+  .doll-bar { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 3px; }
+  .doll-bar button { padding: 3px 8px; margin: 0; font-size: 12px; }
+  .doll-bar .doll-group { font-size: 12px; margin-left: 2px; }
+  .doll-bar .doll-state:empty { display: none; }
+  .doll-group { font-size: 13px; }
+  .doll-group[hidden], .doll-colors[hidden] { display: none; }
+  .doll-state { font-size: 12px; color: var(--muted); }
+  /* 四格儲存：縮圖是存的時候拍的站姿，右上角存檔，點格子套用，套用中的框琥珀色 */
+  .doll-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 476px; margin-top: 12px; }
+  .doll-slot { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; cursor: pointer;
+    background: var(--ground); border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font: 500 12px var(--body); }
+  .doll-slot:hover { border-color: var(--muted); }
+  .doll-slot.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .doll-slot img { max-width: 80%; max-height: 80%; image-rendering: pixelated; }
+  .doll-slot small { position: absolute; left: 6px; top: 4px; font-size: 11px; font-weight: 700; }
+  .doll-slot .doll-slot-save { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+    padding: 0; margin: 0; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+  .doll-slot .doll-slot-save:hover { color: var(--accent); border-color: var(--accent); }
+  .doll-slot svg { width: 14px; height: 14px; }
+  .doll-h { margin: 10px 0 6px; font: 700 12px var(--body); letter-spacing: .1em; color: var(--muted); }
   .doll-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 4px; }
   .doll-row > span { font-size: 12px; color: var(--muted); }
   #doll-actions .miss { opacity: .55; border-style: dashed; }
@@ -737,7 +765,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1028,19 +1056,21 @@
       <section class="doll-stage">
         <div class="doll-view">
           <canvas id="doll-canvas" width="476" height="353" role="img" aria-label="角色預覽"></canvas>
-          <div class="doll-backs" id="doll-backs" role="group" aria-label="背景" hidden></div>
+          <div class="doll-top">
+            <div class="doll-backs" id="doll-backs" role="group" aria-label="背景" hidden></div>
+            <label class="switch doll-kb" title="開著時用鍵盤操作角色：← → 走路、↓ 趴下、↑ 爬梯子或繩子（要碰到）、Ctrl 攻擊、Alt 跳躍、X 坐下"><input type="checkbox" id="doll-kb" autocomplete="off"><i></i>鍵盤模式</label>
+            <button type="button" class="doll-panel-btn" id="doll-panel-btn" aria-expanded="false" aria-controls="doll-panel">展開動作面板</button>
+          </div>
+          <div class="doll-panel" id="doll-panel" hidden><div id="doll-actions"></div></div>
+          <div class="doll-worn" id="doll-worn" hidden></div>
           <div class="doll-bar">
-          <button class="secondary" id="doll-play">暫停</button>
-          <button class="secondary" id="doll-save" title="下載目前這一格；背景選「無」是透明的">下載 PNG</button>
-          <button class="secondary" id="doll-clear">脫掉時裝</button>
-          <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
-          <span class="doll-state" id="doll-state" aria-live="polite"></span>
+            <button class="secondary" id="doll-reset" title="回到目前套用的儲存格">恢復原狀</button>
+            <button class="secondary" id="doll-clear">全部脫下</button>
+            <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
+            <span class="doll-state" id="doll-state" aria-live="polite"></span>
           </div>
         </div>
-        <div id="doll-actions"></div>
-        <h4 class="doll-h">穿在身上</h4>
-        <div class="chips" id="doll-worn"></div>
-        <p class="note">髮型、臉型、時裝與動作都來自遊戲客戶端的資料檔，所以可能包含遊戲裡買不到的項目。客戶端沒有圖層前後與帽子遮頭髮的對照表，這兩項是依圖層名稱排的，少數搭配可能跟遊戲裡不一樣。</p>
+        <div class="doll-slots" id="doll-slots"></div>
       </section>
     </div>
     <nav class="doll-cats" id="doll-cats" role="tablist" aria-label="時裝分類"></nav>
@@ -3493,26 +3523,36 @@ const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "�
 // 臉型的顏色是眼睛的顏色（ID 百位數）；色票取自客戶端圖上虹膜的顏色
 const DOLL_EYE_COLORS = [["黑", "#2b2b2b"], ["藍", "#3060c0"], ["紅", "#c0352f"], ["綠", "#78b432"], ["褐", "#8c7a4e"], ["天藍", "#2aa0cc"], ["紫", "#8232c0"], ["紫紅", "#b2308e"], ["白", "#d0d0d0"]];
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
-const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
-  skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null, back: 1, backs: new Map() };
+const DOLL_SLOTS = 4;
+const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, timer: 0, token: 0, effBase: performance.now(), effTimer: 0,
+  skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null, back: 1, backs: new Map(),
+  slots: Array(DOLL_SLOTS).fill(null), slot: null, kb: false, pos: { x: DOLL_X, y: DOLL_Y, flip: false } };
 
+const dollLook = () => ({ skin: doll.skin, hair: doll.hair, face: doll.face, worn: { ...doll.worn }, group: doll.group });
 function dollSave() {
-  try { localStorage.setItem(DOLL_KEY, JSON.stringify({ skin: doll.skin, hair: doll.hair, face: doll.face, worn: doll.worn, group: doll.group, back: doll.back })); } catch { /* 存不了就算了 */ }
+  try { localStorage.setItem(DOLL_KEY, JSON.stringify({ ...dollLook(), back: doll.back, kb: doll.kb, slots: doll.slots, slot: doll.slot })); } catch { /* 存不了就算了 */ }
 }
-// 存檔可能指到下一版客戶端拿掉的東西：對不上的丟掉
+// 換成一套造型（存檔、儲存格）；沒寫的、或指到下一版客戶端拿掉的東西，用什麼都沒穿的原始狀態
+function dollSetLook(raw) {
+  const known = (styles, id) => styles.some((s) => Object.values(s.c).includes(id));
+  const pick = (styles, id, base) => known(styles, id) ? id : known(styles, base) ? base : Object.values(styles[0].c)[0];
+  doll.skin = doll.index.skins.some((s) => s.id === raw?.skin) ? raw.skin : 0;
+  doll.hair = pick(doll.index.hair, raw?.hair, 30000);
+  doll.face = pick(doll.index.face, raw?.face, 20000);
+  doll.worn = {};
+  for (const [cat, id] of Object.entries(raw?.worn || {})) if (doll.byId.get(id)?.cat === cat) doll.worn[cat] = id;
+  doll.group = Number.isInteger(raw?.group) ? raw.group : null;
+}
 function dollRestore() {
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(DOLL_KEY) || "null"); } catch { /* 壞了就用預設 */ }
-  const known = (styles, id) => styles.some((s) => Object.values(s.c).includes(id));
-  if (doll.index.skins.some((s) => s.id === raw?.skin)) doll.skin = raw.skin;
-  if (known(doll.index.hair, raw?.hair)) doll.hair = raw.hair;
-  else if (!known(doll.index.hair, doll.hair)) doll.hair = Object.values(doll.index.hair[0].c)[0];
-  if (known(doll.index.face, raw?.face)) doll.face = raw.face;
-  else if (!known(doll.index.face, doll.face)) doll.face = Object.values(doll.index.face[0].c)[0];
-  for (const [cat, id] of Object.entries(raw?.worn || {})) if (doll.byId.get(id)?.cat === cat) doll.worn[cat] = id;
-  if (Number.isInteger(raw?.group)) doll.group = raw.group;
+  dollSetLook(raw);
   if (Number.isInteger(raw?.back) && raw.back >= 0 && raw.back <= (doll.index.backs || []).length) doll.back = raw.back;
   if (doll.back > (doll.index.backs || []).length) doll.back = 0;
+  if (Array.isArray(raw?.slots)) doll.slots = Array.from({ length: DOLL_SLOTS }, (_, i) => raw.slots[i] && typeof raw.slots[i] === "object" ? raw.slots[i] : null);
+  doll.slot = Number.isInteger(raw?.slot) && raw.slot >= 0 && raw.slot < DOLL_SLOTS ? raw.slot : null;
+  doll.kb = raw?.kb === true;
+  $("doll-kb").checked = doll.kb;
 }
 async function dollOpen() {
   if (doll.index) { dollRefresh(); return; }
@@ -3537,6 +3577,8 @@ async function dollOpen() {
   dollRestore();
   dollRenderActions();
   dollRenderBacks();
+  dollRenderSlots();
+  dollRenderMode();
   dollRenderCats();
   dollRenderGrid();
   dollRefresh();
@@ -3584,11 +3626,12 @@ async function dollRefresh() {
   results.forEach((r, i) => { if (r.status === "rejected") doll.files.delete(ids[i]); });
   $("doll-state").textContent = failed ? `有 ${failed} 件讀不到` : "";
   doll.ready = results.map((r, i) => ({ id: ids[i], file: r.status === "fulfilled" ? r.value : null })).filter((x) => x.file);
+  doll.readyToken = token;
   dollPlay();
 }
 // 站立與走路要看武器：雙手武器只有 stand2
-function dollAction() {
-  const action = doll.action;
+const dollAction = () => dollBasic(doll.action);
+function dollBasic(action) {
   if (action !== "stand" && action !== "walk") return action;
   const weapon = doll.ready.find((x) => x.id === doll.worn.weapon)?.file.w?.[dollGroup()];
   return weapon && !weapon[`${action}1`] && weapon[`${action}2`] ? `${action}2` : `${action}1`;
@@ -3622,7 +3665,7 @@ function dollEffect(file, action) {
   if (!e) return null;
   return e[action] || ((action === "ladder" || action === "rope") && e.backDefault) || e.default || null;
 }
-const dollEffTime = () => doll.effFrozen ?? performance.now() - doll.effBase;
+const dollEffTime = () => performance.now() - doll.effBase;
 function dollEffectFrame(rows, time) {
   const total = rows.reduce((sum, [, ms]) => sum + ms, 0);
   let t = time % total, i = 0;
@@ -3648,7 +3691,7 @@ function dollCompose(action, index) {
   for (const { file } of doll.ready) {
     const rows = dollEffect(file, action);
     const n = rows && dollEffectFrame(rows, dollEffTime()).row[0];
-    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0 });
+    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0, effect: true });
   }
   for (let moved = true; moved && pending.length;) {
     moved = false;
@@ -3670,8 +3713,14 @@ function dollDraw() {
   ctx.clearRect(0, 0, DOLL_W, DOLL_H);
   const back = dollBackImage();
   if (back) ctx.drawImage(back, 0, 0, DOLL_W, DOLL_H);
+  // 角色本來面向左邊，鍵盤模式往右走就整個翻過來
+  const { x: px, y: py, flip } = doll.pos;
+  ctx.save();
+  ctx.translate(Math.round(px), Math.round(py));
+  if (flip) ctx.scale(-1, 1);
   for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of dollCompose(dollAction(), doll.frame))
-    ctx.drawImage(file.image, x, y, w, h, DOLL_X + dx - ox, DOLL_Y + dy - oy, w, h);
+    ctx.drawImage(file.image, x, y, w, h, dx - ox, dy - oy, w, h);
+  ctx.restore();
 }
 // 背景：0 是素色（下載的 PNG 透明），1 起是購物商場試穿的背景；第一次用到才載，載好再重畫
 function dollBackImage() {
@@ -3690,23 +3739,144 @@ function dollRenderBacks() {
   const backs = doll.index.backs || [];
   $("doll-backs").hidden = !backs.length;
   $("doll-backs").innerHTML = ["", ...backs].map((file, i) =>
-    `<button type="button" data-doll-back="${i}" aria-pressed="${i === doll.back}" title="${i ? `背景 ${i}` : "素色（下載的 PNG 透明）"}"${file ? ` style="background-image:url('${DOLL_BASE}avatar/${file}')"` : ""}>${i ? "" : "無"}</button>`).join("");
+    `<button type="button" data-doll-back="${i}" aria-pressed="${i === doll.back}" title="${i ? `背景 ${i}` : "素色"}"${file ? ` style="background-image:url('${DOLL_BASE}avatar/${file}')"` : ""}>${i ? "" : "無"}</button>`).join("");
 }
+// ---- 鍵盤模式：用鍵盤實際控制畫布裡的角色
+// 地面在 y 252（每張背景的草地）；梯子、繩子是各背景量出來的位置，top/bottom 是梯子本身的上下端，碰到才爬得上去
+const KB_GROUND = DOLL_Y, KB_SPEED = 125, KB_CLIMB = 80, KB_JUMP = 520, KB_GRAVITY = 1900, KB_ALERT = 5000;
+const KB_CLIMBS = {
+  1: [{ x: 382, top: 20, bottom: 245, rope: false }],
+  2: [{ x: 131, top: 0, bottom: 125, rope: true }, { x: 307, top: 15, bottom: 90, rope: true }, { x: 381, top: 0, bottom: 220, rope: true }],
+  3: [{ x: 381, top: 0, bottom: 240, rope: true }],
+  4: [{ x: 382, top: 44, bottom: 228, rope: false }],
+  5: [{ x: 382, top: 44, bottom: 228, rope: false }],
+};
+const KB_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Control", "Alt", "x"]);
+const kb = { keys: new Set(), raf: 0, last: 0, x: DOLL_X, y: DOLL_Y, vy: 0, air: false, climb: null, face: -1, act: "stand", frame: 0, frameT: 0,
+  attack: null, alertUntil: 0, hits: 0 };
+function kbReset() {
+  Object.assign(kb, { x: DOLL_X, y: DOLL_Y, vy: 0, air: false, climb: null, face: -1, act: "stand", frame: 0, frameT: 0, attack: null, alertUntil: 0, hits: 0 });
+  kb.keys.clear();
+  doll.pos = { x: DOLL_X, y: DOLL_Y, flip: false };
+}
+function dollRenderMode() {
+  $("doll-panel-btn").hidden = doll.kb;
+  if (doll.kb) { $("doll-panel").hidden = true; $("doll-panel-btn").setAttribute("aria-expanded", "false"); $("doll-panel-btn").textContent = "展開動作面板"; }
+  if (!doll.kb) { cancelAnimationFrame(kb.raf); kb.raf = 0; kbReset(); doll.action = "stand"; doll.frame = 0; }
+}
+const kbDelays = (action) => (doll.ready?.find((x) => x.id === 2000 + doll.skin)?.file.d?.[dollBasic(action)] || [500]).map((d) => Math.max(60, Math.abs(d)));
+// 攻擊照武器類型做得出來的動作輪流，每種三次換下一種；沒拿武器就全部輪
+function kbNextAttack() {
+  const weapon = doll.ready?.find((x) => x.id === doll.worn.weapon)?.file.w?.[dollGroup()];
+  const all = DOLL_ATTACKS.flatMap(([, list]) => list.map(([key]) => key)).filter((key) => key !== "proneStab");
+  const list = weapon ? all.filter((key) => weapon[key]) : all;
+  const pick = list.length ? list[Math.floor(kb.hits / 3) % list.length] : "swingO1";
+  kb.hits++;
+  return pick;
+}
+function kbStart() {
+  if (kb.raf || !doll.kb || $("tab-doll").hidden) return;
+  kb.last = performance.now();
+  kb.raf = requestAnimationFrame(kbTick);
+}
+function kbTick(now) {
+  kb.raf = 0;
+  if (!doll.kb || $("tab-doll").hidden || !doll.ready) return;
+  const dt = Math.min(0.05, (now - kb.last) / 1000);
+  kb.last = now;
+  const key = (k) => kb.keys.has(k), dir = (key("ArrowRight") ? 1 : 0) - (key("ArrowLeft") ? 1 : 0);
+  let act = kb.act, moving = true;
+  const grab = () => (KB_CLIMBS[doll.back] || []).find((c) => Math.abs(kb.x - c.x) < 12 && kb.y >= c.top + 30 && kb.y - 60 <= c.bottom);
+  const fall = () => {
+    if (!kb.air) return;
+    kb.vy += KB_GRAVITY * dt;
+    kb.y += kb.vy * dt;
+    kb.x += dir * KB_SPEED * dt;
+    if (dir) kb.face = dir;
+    if (kb.y >= KB_GROUND) { kb.y = KB_GROUND; kb.vy = 0; kb.air = false; }
+  };
+  if (kb.attack && now < kb.attack.end) {
+    act = kb.attack.action;
+    fall();
+  } else if (kb.climb) {
+    kb.attack = null;
+    const c = kb.climb, v = (key("ArrowDown") ? 1 : 0) - (key("ArrowUp") ? 1 : 0);
+    act = c.rope ? "rope" : "ladder";
+    if (key("Alt") && dir) { kb.climb = null; kb.air = true; kb.vy = -KB_JUMP * 0.6; kb.face = dir; act = "jump"; }
+    else {
+      moving = v !== 0;
+      kb.y = Math.max(c.top + 70, 90, kb.y + v * KB_CLIMB * dt);          // 頭不要爬出畫面
+      if (kb.y >= KB_GROUND) { kb.y = KB_GROUND; kb.climb = null; act = "stand"; }
+      else if (kb.y - 50 > c.bottom) { kb.climb = null; kb.air = true; kb.vy = 0; act = "jump"; }   // 爬到繩子下端外面就掉下去
+    }
+  } else {
+    kb.attack = null;
+    const c = key("ArrowUp") && grab();
+    if (key("Control")) {
+      const action = !kb.air && key("ArrowDown") ? "proneStab" : kbNextAttack();
+      kb.attack = { action, end: now + kbDelays(action).reduce((s, d) => s + d, 0) };
+      kb.alertUntil = kb.attack.end + KB_ALERT;
+      kb.act = "";                                         // 同一招連出也從第一格開始
+      act = action;
+      fall();
+    } else if (c) {
+      kb.climb = c; kb.air = false; kb.vy = 0; kb.x = c.x;
+      act = c.rope ? "rope" : "ladder";
+    } else if (kb.air) {
+      act = "jump";
+      fall();
+    } else if (key("Alt")) {
+      kb.air = true; kb.vy = -KB_JUMP; act = "jump";
+      fall();
+    } else if (key("ArrowDown")) act = "prone";
+    else if (key("x")) act = "sit";
+    else if (dir) { act = "walk"; kb.face = dir; kb.x += dir * KB_SPEED * dt; }
+    else act = now < kb.alertUntil ? "alert" : "stand";
+  }
+  kb.x = Math.min(DOLL_W - 12, Math.max(12, kb.x));
+  if (act !== kb.act) { kb.act = act; kb.frame = 0; kb.frameT = 0; }
+  else if (moving) {
+    const delays = kbDelays(act);
+    kb.frameT += dt * 1000;
+    while (kb.frameT >= delays[kb.frame % delays.length]) { kb.frameT -= delays[kb.frame % delays.length]; kb.frame = (kb.frame + 1) % delays.length; }
+  }
+  doll.action = act;
+  doll.frame = kb.frame % kbDelays(act).length;
+  doll.pos = { x: kb.x, y: kb.y, flip: kb.face > 0 };
+  dollDraw();
+  kb.raf = requestAnimationFrame(kbTick);
+}
+// 打字的地方不攔；換頁、切走視窗就當全部放開
+const kbActive = (e) => doll.kb && !$("tab-doll").hidden && !e.target.closest?.("input:not([type=checkbox]), select, textarea");
+const kbName = (e) => e.key.length === 1 ? e.key.toLowerCase() : e.key;
+document.addEventListener("keydown", (e) => {
+  if (!kbActive(e) || !KB_KEYS.has(kbName(e))) return;
+  e.preventDefault();
+  kb.keys.add(kbName(e));
+  kbStart();
+});
+document.addEventListener("keyup", (e) => {
+  if (!KB_KEYS.has(kbName(e))) return;
+  kb.keys.delete(kbName(e));
+  if (kbActive(e)) e.preventDefault();                    // Alt 放開不要跑去選單列
+});
+addEventListener("blur", () => kb.keys.clear());
 function dollPlay() {
   clearTimeout(doll.timer);
   if (!doll.ready) return;
+  if (doll.kb) { clearTimeout(doll.effTimer); kbStart(); return; }
   const body = doll.ready.find((x) => x.id === 2000 + doll.skin)?.file;
   const delays = body?.d?.[dollAction()] || [500];
   if (doll.frame >= delays.length) doll.frame = 0;
   dollPlayEffects();
   dollDraw();
-  if (!doll.playing || delays.length < 2 || $("tab-doll").hidden) return;
+  if (delays.length < 2 || $("tab-doll").hidden) return;
   doll.timer = setTimeout(() => { doll.frame = (doll.frame + 1) % delays.length; dollPlay(); }, Math.max(60, delays[doll.frame]));
 }
 // 特效跟身體分開跑：等到最快換格的那一個再重畫
 function dollPlayEffects() {
   clearTimeout(doll.effTimer);
-  if (!doll.ready || !doll.playing || $("tab-doll").hidden) return;
+  if (!doll.ready || doll.kb || $("tab-doll").hidden) return;
   const action = dollAction();
   const waits = doll.ready.map((x) => dollEffect(x.file, action)).filter((rows) => rows && rows.length > 1).map((rows) => dollEffectFrame(rows, dollEffTime()).left);
   if (!waits.length) return;
@@ -3737,10 +3907,36 @@ function dollRenderMisses() {
   if (weapon) dollLoad(weapon.id).then((file) => mark(file.w?.[dollGroup()])).catch(() => {});
 }
 function dollRenderWorn() {
-  const name = (styles, id) => styles.find((s) => Object.values(s.c).includes(id))?.n || String(id);
-  const fixed = [["髮型", name(doll.index.hair, doll.hair)], ["臉型", name(doll.index.face, doll.face)]];
-  $("doll-worn").innerHTML = fixed.map(([label, text]) => `<span><small class="pre">${esc(label)}</small>${esc(text)}</span>`).join("")
-    + doll.index.cats.filter(([cat]) => doll.worn[cat]).map(([cat, label]) => `<button type="button" data-doll-off="${cat}" title="點一下脫掉"><small class="pre">${esc(label)}</small>${esc(doll.byId.get(doll.worn[cat]).n)} ✕</button>`).join("");
+  const worn = doll.index.cats.filter(([cat]) => doll.worn[cat]).map(([cat]) => doll.byId.get(doll.worn[cat]));
+  $("doll-worn").hidden = !worn.length;
+  $("doll-worn").innerHTML = worn.map((it) => `<div title="${esc(it.n)}">${dollIcon("icons", it.ic)}<b>${esc(it.n)}</b><button type="button" data-doll-off="${it.cat}" aria-label="脫掉${esc(it.n)}">✕</button></div>`).join("");
+}
+// 儲存格：預設都是什麼都沒穿的原始狀態；縮圖是存的時候拍的站姿
+const DOLL_SAVE_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 2.5h9l2 2v9h-11z"/><path d="M5 2.5v4h5v-4M5 13.5v-4h6v4"/></svg>';
+function dollRenderSlots() {
+  $("doll-slots").innerHTML = doll.slots.map((slot, i) => `<div class="doll-slot${i === doll.slot ? " on" : ""}" role="button" tabindex="0" data-doll-slot="${i}" title="套用儲存格 ${i + 1}">
+    <small>${i + 1}</small>${slot?.pic ? `<img src="${slot.pic}" alt="">` : "原始狀態"}
+    <button type="button" class="doll-slot-save" data-doll-slot-save="${i}" title="把目前的造型存進儲存格 ${i + 1}" aria-label="存進儲存格 ${i + 1}">${DOLL_SAVE_ICON}</button></div>`).join("");
+}
+// 拍一張站姿（不含特效與背景），切掉透明的邊
+function dollSnapshot() {
+  const parts = dollCompose(dollBasic("stand"), 0).filter((e) => !e.effect);
+  if (!parts.length) return "";
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const { part: [, , w, h, ox, oy], dx, dy } of parts) {
+    left = Math.min(left, dx - ox); top = Math.min(top, dy - oy); right = Math.max(right, dx - ox + w); bottom = Math.max(bottom, dy - oy + h);
+  }
+  const out = document.createElement("canvas");
+  out.width = right - left; out.height = bottom - top;
+  const ctx = out.getContext("2d");
+  for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of parts) ctx.drawImage(file.image, x, y, w, h, dx - ox - left, dy - oy - top, w, h);
+  return out.toDataURL("image/png");
+}
+function dollApplySlot(i) {
+  doll.slot = i;
+  dollSetLook(doll.slots[i]);
+  dollRenderSlots();
+  dollChanged();
 }
 function dollRenderCats() {
   const tabs = [["hair", "髮型"], ["face", "臉型"], ["skin", "膚色"], ...doll.index.cats.filter(([cat]) => doll.index.items[cat].length)];
@@ -3853,11 +4049,41 @@ $("doll-backs").addEventListener("click", (e) => {
   dollSave();
   dollDraw();
 });
-$("doll-play").addEventListener("click", () => {
-  doll.playing = !doll.playing;
-  if (doll.playing) { doll.effBase = performance.now() - doll.effFrozen; doll.effFrozen = null; }
-  else doll.effFrozen = dollEffTime();
-  $("doll-play").textContent = doll.playing ? "暫停" : "播放";
+$("doll-slots").addEventListener("click", async (e) => {
+  const save = e.target.closest("[data-doll-slot-save]");
+  if (save) {
+    // 剛換的那件還在載的話，等畫面跟上再拍縮圖
+    while (!doll.ready || doll.readyToken !== doll.token) await new Promise((r) => setTimeout(r, 50));
+    const i = Number(save.dataset.dollSlotSave);
+    doll.slots[i] = { ...dollLook(), pic: dollSnapshot() };
+    doll.slot = i;
+    dollSave();
+    dollRenderSlots();
+    return;
+  }
+  const slot = e.target.closest("[data-doll-slot]");
+  if (slot) dollApplySlot(Number(slot.dataset.dollSlot));
+});
+$("doll-slots").addEventListener("keydown", (e) => {
+  const slot = e.target.closest("[data-doll-slot]");
+  if (slot && e.target === slot && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); dollApplySlot(Number(slot.dataset.dollSlot)); }
+});
+$("doll-reset").addEventListener("click", () => {
+  dollSetLook(doll.slot == null ? null : doll.slots[doll.slot]);
+  dollChanged();
+});
+$("doll-panel-btn").addEventListener("click", () => {
+  const open = $("doll-panel").hidden;
+  $("doll-panel").hidden = !open;
+  $("doll-panel-btn").setAttribute("aria-expanded", String(open));
+  $("doll-panel-btn").textContent = open ? "收起動作面板" : "展開動作面板";
+});
+$("doll-kb").addEventListener("change", (e) => {
+  doll.kb = e.target.checked;
+  e.target.blur();                                         // 不然方向鍵、空白鍵會去動開關
+  dollSave();
+  dollRenderMode();
+  if (!doll.kb) { dollRenderActions(); dollRenderMisses(); }
   dollPlay();
 });
 $("doll-clear").addEventListener("click", () => {
@@ -3869,28 +4095,6 @@ $("doll-group").addEventListener("change", (e) => {
   dollSave();
   dollRefresh();
 });
-// 下載目前這一格：裁掉透明的邊，放大會糊所以存原尺寸
-$("doll-save").addEventListener("click", () => {
-  if (!doll.ready) return;
-  // 有背景就整張下載；素色的切掉透明的邊
-  const canvas = $("doll-canvas"), width = canvas.width, height = canvas.height, { data } = canvas.getContext("2d").getImageData(0, 0, width, height);
-  let left = width, top = height, right = -1, bottom = -1;
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (data[(y * width + x) * 4 + 3]) {
-    left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
-  }
-  if (right < 0) return;
-  const out = document.createElement("canvas");
-  out.width = right - left + 1; out.height = bottom - top + 1;
-  out.getContext("2d").drawImage(canvas, -left, -top);
-  out.toBlob((blob) => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "紙娃娃.png";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-});
-
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
 // 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備），網址上的優先於記住的。
