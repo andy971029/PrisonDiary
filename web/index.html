@@ -503,11 +503,12 @@
   .doll-group { font-size: 13px; }
   .doll-group[hidden], .doll-colors[hidden] { display: none; }
   .doll-state { font-size: 12px; color: var(--muted); }
-  /* 背景：縮圖按鈕，選中的框琥珀色 */
-  .doll-backs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+  /* 背景：縮圖按鈕疊在畫布左上角，選中的框琥珀色 */
+  .doll-view { position: relative; max-width: 476px; }
+  .doll-backs { position: absolute; top: 6px; left: 6px; display: flex; flex-wrap: wrap; gap: 4px; padding: 3px;
+    background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: 4px; }
   .doll-backs[hidden] { display: none; }
-  .doll-backs span { font-size: 12px; color: var(--muted); margin-right: 2px; }
-  .doll-backs button { width: 52px; height: 39px; padding: 0; margin: 0; font: 700 12px var(--body); color: #5a6b72; cursor: pointer;
+  .doll-backs button { width: 36px; height: 27px; padding: 0; margin: 0; font: 700 11px var(--body); color: #5a6b72; cursor: pointer;
     background: #dbe7ec center / cover no-repeat; border: 2px solid var(--line); border-radius: 3px; }
   .doll-backs button:hover { border-color: var(--muted); }
   .doll-backs button[aria-pressed="true"] { border-color: var(--accent); }
@@ -731,7 +732,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1020,7 +1021,10 @@
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
-        <canvas id="doll-canvas" width="476" height="353" role="img" aria-label="角色預覽"></canvas>
+        <div class="doll-view">
+          <canvas id="doll-canvas" width="476" height="353" role="img" aria-label="角色預覽"></canvas>
+          <div class="doll-backs" id="doll-backs" role="group" aria-label="背景" hidden></div>
+        </div>
         <div class="doll-bar">
           <button class="secondary" id="doll-play">暫停</button>
           <button class="secondary" id="doll-save" title="下載目前這一格；背景選「無」是透明的">下載 PNG</button>
@@ -1028,7 +1032,6 @@
           <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
           <span class="doll-state" id="doll-state" aria-live="polite"></span>
         </div>
-        <div class="doll-backs" id="doll-backs" hidden></div>
         <div id="doll-actions"></div>
         <h4 class="doll-h">穿在身上</h4>
         <div class="chips" id="doll-worn"></div>
@@ -3679,7 +3682,7 @@ function dollBackImage() {
 function dollRenderBacks() {
   const backs = doll.index.backs || [];
   $("doll-backs").hidden = !backs.length;
-  $("doll-backs").innerHTML = '<span>背景</span>' + ["", ...backs].map((file, i) =>
+  $("doll-backs").innerHTML = ["", ...backs].map((file, i) =>
     `<button type="button" data-doll-back="${i}" aria-pressed="${i === doll.back}" title="${i ? `背景 ${i}` : "素色（下載的 PNG 透明）"}"${file ? ` style="background-image:url('${DOLL_BASE}avatar/${file}')"` : ""}>${i ? "" : "無"}</button>`).join("");
 }
 function dollPlay() {
