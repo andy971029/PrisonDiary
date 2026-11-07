@@ -737,7 +737,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3490,6 +3490,8 @@ const DOLL_ATTACKS = [
   ["趴下", [["proneStab", "刺"]]],
 ];
 const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "短劍", 34: "雙刀", 37: "短杖", 38: "長杖", 40: "雙手劍", 41: "雙手斧", 42: "雙手棍", 43: "槍", 44: "矛", 45: "弓", 46: "弩", 47: "拳套", 48: "指虎", 49: "火槍" };
+// 臉型的顏色是眼睛的顏色（ID 百位數）；色票取自客戶端圖上虹膜的顏色
+const DOLL_EYE_COLORS = [["黑", "#2b2b2b"], ["藍", "#3060c0"], ["紅", "#c0352f"], ["綠", "#78b432"], ["褐", "#8c7a4e"], ["天藍", "#2aa0cc"], ["紫", "#8232c0"], ["紫紅", "#b2308e"], ["白", "#d0d0d0"]];
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
 const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, playing: true, timer: 0, token: 0, effBase: performance.now(), effFrozen: null, effTimer: 0,
   skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null, back: 1, backs: new Map() };
@@ -3778,7 +3780,7 @@ function dollRenderColors() {
   box.hidden = !style;
   if (!style) return;
   box.innerHTML = Object.entries(style.c).map(([color, id]) => {
-    const known = cat === "hair" ? DOLL_HAIR_COLORS[color] : null;
+    const known = (cat === "hair" ? DOLL_HAIR_COLORS : DOLL_EYE_COLORS)[color];
     return `<button type="button" data-doll-color="${id}"${id === doll[cat] ? ' class="on"' : ""}>${known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`}</button>`;
   }).join("");
 }
