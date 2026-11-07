@@ -498,8 +498,13 @@
   .doll-cats button:hover { color: var(--ink); background: var(--ground); }
   .doll-cats button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
   #doll-canvas { display: block; width: 100%; max-width: 476px; aspect-ratio: 476 / 353; image-rendering: pixelated; background: #dbe7ec; border: 1px solid var(--line); border-radius: 6px; }
-  .doll-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0; }
-  .doll-bar button { padding: 5px 10px; font-size: 13px; }
+  /* 暫停、下載這一排疊在畫布左下角，跟左上角的背景列同一種底 */
+  .doll-bar { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+    padding: 3px; background: color-mix(in srgb, var(--surface) 80%, transparent); border-radius: 4px; }
+  .doll-bar button { padding: 3px 8px; margin: 0; font-size: 12px; }
+  .doll-bar .doll-group { font-size: 12px; margin-left: 2px; }
+  .doll-bar .doll-state:empty { display: none; }
+  .doll-view + #doll-actions { margin-top: 12px; }
   .doll-group { font-size: 13px; }
   .doll-group[hidden], .doll-colors[hidden] { display: none; }
   .doll-state { font-size: 12px; color: var(--muted); }
@@ -732,7 +737,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.23.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1024,13 +1029,13 @@
         <div class="doll-view">
           <canvas id="doll-canvas" width="476" height="353" role="img" aria-label="角色預覽"></canvas>
           <div class="doll-backs" id="doll-backs" role="group" aria-label="背景" hidden></div>
-        </div>
-        <div class="doll-bar">
+          <div class="doll-bar">
           <button class="secondary" id="doll-play">暫停</button>
           <button class="secondary" id="doll-save" title="下載目前這一格；背景選「無」是透明的">下載 PNG</button>
           <button class="secondary" id="doll-clear">脫掉時裝</button>
           <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
           <span class="doll-state" id="doll-state" aria-live="polite"></span>
+          </div>
         </div>
         <div id="doll-actions"></div>
         <h4 class="doll-h">穿在身上</h4>
