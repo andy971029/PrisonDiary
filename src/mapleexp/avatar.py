@@ -230,6 +230,44 @@ def weapon_groups(tree: dict) -> list[str]:
     return sorted(k for k, v in tree.items() if k.isdigit() and isinstance(v, dict) and any(a in v for a in ACTIONS))
 
 
+# 這一版遊戲有的武器類型（裝備 ID 的第 3、4 碼）：單手劍、單手斧、單手棍、短劍、雙刀、短杖、長杖、雙手劍、雙手斧、雙手棍、槍、矛、弓、弩、拳套、指虎、火槍
+WEAPON_TYPES = (30, 31, 32, 33, 34, 37, 38, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49)
+
+
+def weapon_types(tree: dict, link: dict[str, int]) -> tuple[list[int], dict[str, int]]:
+    """時裝武器能當哪些武器類型用，跟遊戲一樣：``(類型, {借圖的類型: 用哪一組圖})``。
+
+    自己有圖的類型都算；``info/exceptLinkCashWeaponData`` 沒開的，另外照客戶端的
+    ``LinkCashWeaponData``（類型 → 用哪一組圖，現在都是 30）把表上的類型也算進去。
+    """
+    own = weapon_groups(tree)
+    types = {int(g) for g in own}
+    art: dict[str, int] = {}
+    info = tree.get("info") if isinstance(tree.get("info"), dict) else {}
+    if not info.get("exceptLinkCashWeaponData"):
+        for kind, group in link.items():
+            if kind.isdigit() and int(kind) in WEAPON_TYPES and int(kind) not in types and str(group) in own:
+                types.add(int(kind))
+                art[str(int(kind))] = int(group)
+    return sorted(types), art
+
+
+def type_attacks(weapons: dict[int, dict]) -> dict[str, list[str]]:
+    """每種武器類型會用的攻擊姿勢：一般（非時裝）武器有一半以上畫了這個姿勢就算。
+
+    客戶端沒有「哪個類型用哪些攻擊」的表，但一般武器只畫自己類型用得到的姿勢。
+    *weapons* 是 ``{裝備 ID: 資料樹}``，時裝的會跳過。
+    """
+    seen: dict[int, list[dict]] = {}
+    for item_id, tree in weapons.items():
+        info = tree.get("info") if isinstance(tree.get("info"), dict) else {}
+        kind = item_id // 10000 % 100
+        if kind in WEAPON_TYPES and not info.get("cash"):
+            seen.setdefault(kind, []).append(tree)
+    return {str(kind): [a for a in ATTACKS if 2 * sum(a in tree for tree in trees) >= len(trees)]
+            for kind, trees in sorted(seen.items())}
+
+
 def style_name(name: str) -> str:
     """``黑色基本冒險造型`` → ``基本冒險造型``：同一款髮型只差顏色。"""
     return _COLOR_PREFIX.sub("", name.strip(), count=1) or name.strip()

@@ -28,6 +28,7 @@ DIR = ROOT / "web" / "avatar"
 PAD = 1
 ATLAS_WIDTH = 256
 EFFECT_SHEET = "Assets/WzAssets/SpriteSheet/TW/Effect/ItemEff.asset"
+LINK_TABLE = "LinkCashWeaponData"
 EFFECT_MARKER = struct.pack("<i", 7) + b"ItemEff\0"
 
 
@@ -152,6 +153,23 @@ def hair_thumb(item_id: int, tree: dict, container: dict):
     return out
 
 
+def read_link(directory: Path) -> dict[str, int]:
+    """客戶端的 ``LinkCashWeaponData``：武器類型 → 時裝武器沒有這個類型的圖時借哪一組。"""
+    hit = gamedata.read_table(directory, LINK_TABLE)
+    if not hit:
+        print(f"找不到 {LINK_TABLE}，時裝武器只列自己有圖的武器類型", file=sys.stderr)
+        return {}
+    return {str(k): int(v) for k, v in json.loads(hit[1].decode("utf-8-sig")).items()}
+
+
+def weapon_entry(entry: dict, tree: dict, link: dict[str, int]) -> None:
+    """時裝武器在目錄裡的武器類型 ``g``，與借圖的類型 ``l``（類型 → 用哪一組圖）。"""
+    types, art = avatar.weapon_types(tree, link)
+    entry["g"] = types
+    if art:
+        entry["l"] = art
+
+
 def export_backs(directory: Path) -> list[str]:
     """購物商場試穿視窗的背景（``prefab_*.bundle`` 裡的 ``Bg_Preview_01``～）：照編號存成 WebP，回傳檔名。"""
     import UnityPy
@@ -196,6 +214,7 @@ def main() -> int:
     assets = {n: t for n, t in wzjs.iter_assets(bundle[1], canvas=True) if len(n) == 8 and n.isdigit()}
     container = sheets[0]
     effects = find_effects(directory)
+    link = read_link(directory)
     if effects is None:
         print("找不到 Effect/ItemEff，圖放在特效裡的時裝（不少披風）會是空的", file=sys.stderr)
     DIR.mkdir(exist_ok=True)
@@ -276,7 +295,7 @@ def main() -> int:
         if isinstance(info.get("vslot"), str):
             entry["v"] = info["vslot"]
         if folder == "Weapon":
-            entry["g"] = [int(g) for g in avatar.weapon_groups(tree)]
+            weapon_entry(entry, tree, link)
         image = crop_icon(container, f"{EQUIP_PREFIX}{folder}/{name}.asset", "info/icon", pages)
         if image is not None:
             entry["ic"] = icons.add(image)
@@ -289,10 +308,11 @@ def main() -> int:
     thumbs["face"].save(DIR / "face.png")
     index = write_packs(packs)
     backs = export_backs(directory)
+    attacks = avatar.type_attacks({int(n): t for n, t in assets.items() if n.startswith(("013", "014"))})
     if not backs:
         print("找不到購物商場試穿的背景（Bg_Preview_*），紙娃娃只有素色背景", file=sys.stderr)
     OUT.write_text(json.dumps({
-        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items, "packs": index, "backs": backs,
+        "order": avatar.ORDER, "skins": skins, "hair": hair, "face": face, "items": items, "packs": index, "backs": backs, "attacks": attacks,
         "cats": [[key, label] for key, _, label in avatar.CATEGORIES.values()],
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     count = sum(len(v) for v in items.values())

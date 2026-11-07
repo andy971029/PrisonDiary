@@ -765,7 +765,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3609,10 +3609,16 @@ function dollLoad(id) {
   return doll.files.get(id);
 }
 const dollWeapon = () => doll.byId.get(doll.worn.weapon) || null;
+// 武器類型跟遊戲一樣：選單是這件時裝武器支援的類型（avatar.json 的 g），換武器時沿用上次選的，不支援就用第一個
 function dollGroup() {
   const weapon = dollWeapon();
   return weapon ? (weapon.g.includes(doll.group) ? doll.group : weapon.g[0]) : null;
 }
+// 這個類型用哪一組圖：沒有自己的圖、照 LinkCashWeaponData 借的，記在 l（現在都借 30）
+const dollArt = () => dollWeapon()?.l?.[dollGroup()] ?? dollGroup();
+// 這個類型會用的攻擊姿勢（匯出時從一般武器統計的）；沒拿武器或沒資料就是全部
+const DOLL_ALL_ATTACKS = DOLL_ATTACKS.flatMap(([, list]) => list.map(([key]) => key));
+const dollTypeAttacks = () => (dollWeapon() && doll.index.attacks?.[dollGroup()]) || DOLL_ALL_ATTACKS;
 // 全部檔案到齊才換畫面，換裝時不會閃一下沒穿衣服
 async function dollRefresh() {
   const token = ++doll.token;
@@ -3633,12 +3639,12 @@ async function dollRefresh() {
 const dollAction = () => dollBasic(doll.action);
 function dollBasic(action) {
   if (action !== "stand" && action !== "walk") return action;
-  const weapon = doll.ready.find((x) => x.id === doll.worn.weapon)?.file.w?.[dollGroup()];
+  const weapon = doll.ready.find((x) => x.id === doll.worn.weapon)?.file.w?.[dollArt()];
   return weapon && !weapon[`${action}1`] && weapon[`${action}2`] ? `${action}2` : `${action}1`;
 }
 function dollParts(entry, action, index) {
   const { file } = entry;
-  const table = file.w ? file.w[dollGroup()] : file.a;
+  const table = file.w ? file.w[dollArt()] : file.a;
   const rows = table?.[action] ?? table?.default;               // 臉、臉飾只有一張，每個動作都用它
   if (!rows) return [];
   return (rows[index] ?? rows[0] ?? []).map((n) => ({ file, part: file.p[n] })).filter((x) => x.part);
@@ -3753,7 +3759,7 @@ const KB_CLIMBS = {
 };
 const KB_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Control", "Alt", "x"]);
 const kb = { keys: new Set(), raf: 0, last: 0, x: DOLL_X, y: DOLL_Y, vy: 0, air: false, climb: null, face: -1, act: "stand", frame: 0, frameT: 0,
-  attack: null, alertUntil: 0, hits: 0 };
+  attack: null, alertUntil: 0, hits: 0, hitsKey: "" };
 function kbReset() {
   Object.assign(kb, { x: DOLL_X, y: DOLL_Y, vy: 0, air: false, climb: null, face: -1, act: "stand", frame: 0, frameT: 0, attack: null, alertUntil: 0, hits: 0 });
   kb.keys.clear();
@@ -3765,11 +3771,10 @@ function dollRenderMode() {
   if (!doll.kb) { cancelAnimationFrame(kb.raf); kb.raf = 0; kbReset(); doll.action = "stand"; doll.frame = 0; }
 }
 const kbDelays = (action) => (doll.ready?.find((x) => x.id === 2000 + doll.skin)?.file.d?.[dollBasic(action)] || [500]).map((d) => Math.max(60, Math.abs(d)));
-// 攻擊照武器類型做得出來的動作輪流，每種三次換下一種；沒拿武器就全部輪
+// 攻擊在選的武器類型會用的姿勢裡輪流，每種三次換下一種；換武器或類型就從頭
 function kbNextAttack() {
-  const weapon = doll.ready?.find((x) => x.id === doll.worn.weapon)?.file.w?.[dollGroup()];
-  const all = DOLL_ATTACKS.flatMap(([, list]) => list.map(([key]) => key)).filter((key) => key !== "proneStab");
-  const list = weapon ? all.filter((key) => weapon[key]) : all;
+  const list = dollTypeAttacks().filter((key) => key !== "proneStab"), key = `${doll.worn.weapon}|${dollGroup()}`;
+  if (kb.hitsKey !== key) { kb.hitsKey = key; kb.hits = 0; }
   const pick = list.length ? list[Math.floor(kb.hits / 3) % list.length] : "swingO1";
   kb.hits++;
   return pick;
@@ -3888,7 +3893,7 @@ function dollRenderActions() {
   $("doll-actions").innerHTML = `<h4 class="doll-h">動作</h4><div class="chips">${DOLL_BASIC.map(chip).join("")}</div>
     <h4 class="doll-h">攻擊</h4>${DOLL_ATTACKS.map(([label, list]) => `<div class="doll-row"><span>${esc(label)}</span><div class="chips">${list.map(chip).join("")}</div></div>`).join("")}`;
 }
-// 武器類型的選單；這個類型沒有的攻擊動作，身體照做但手上沒武器，要標出來
+// 武器類型的選單；這個類型不用的攻擊、或這件武器沒畫的（身體照做但手上沒武器），標成虛線
 function dollRenderMisses() {
   const weapon = dollWeapon();
   $("doll-group-box").hidden = !weapon;
@@ -3896,15 +3901,16 @@ function dollRenderMisses() {
     const group = dollGroup();
     $("doll-group").innerHTML = weapon.g.map((g) => `<option value="${g}"${g === group ? " selected" : ""}>${esc(DOLL_WEAPONS[g] || `類型 ${g}`)}</option>`).join("");
   }
+  const used = new Set(dollTypeAttacks());
   const mark = (actions) => {
     for (const row of $("doll-actions").querySelectorAll(".doll-row [data-doll-action]")) {
-      const miss = actions && !actions[row.dataset.dollAction];
-      row.classList.toggle("miss", !!miss);
-      row.title = miss ? "這個武器類型沒有這個動作，手上不會有武器" : "";
+      const key = row.dataset.dollAction, unused = !used.has(key), bare = actions && !actions[key];
+      row.classList.toggle("miss", unused || !!bare);
+      row.title = unused ? "這個武器類型不會用這個攻擊" : bare ? "這件武器沒畫這個動作，手上不會有武器" : "";
     }
   };
   mark(null);
-  if (weapon) dollLoad(weapon.id).then((file) => mark(file.w?.[dollGroup()])).catch(() => {});
+  if (weapon) dollLoad(weapon.id).then((file) => mark(file.w?.[dollArt()])).catch(() => {});
 }
 function dollRenderWorn() {
   const worn = doll.index.cats.filter(([cat]) => doll.worn[cat]).map(([cat]) => doll.byId.get(doll.worn[cat]));

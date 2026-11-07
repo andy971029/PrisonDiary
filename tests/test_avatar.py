@@ -53,6 +53,25 @@ class Collect(unittest.TestCase):
         self.assertEqual(avatar.collect_actions(tree, ["30"], parts), {"stand1": [[0]]})
         self.assertEqual(parts.rows[0]["path"], "30/stand1/0/weapon")
 
+    def test_weapon_types_follow_the_link_table_unless_excepted(self):
+        link = {"21": 30, "31": 30, "45": 30, "404": 30}
+        shared = {"info": {}, "30": {"stand1": {}}}
+        self.assertEqual(avatar.weapon_types(shared, link), ([30, 31, 45], {"31": 30, "45": 30}))
+        own = {"info": {"exceptLinkCashWeaponData": 1}, "30": {"stand1": {}}, "32": {"stand1": {}}}
+        self.assertEqual(avatar.weapon_types(own, link), ([30, 32], {}))
+        no_base = {"info": {}, "33": {"stand1": {}}}
+        self.assertEqual(avatar.weapon_types(no_base, link), ([33], {}))
+
+    def test_type_attacks_take_what_most_plain_weapons_draw(self):
+        weapons = {
+            1302000: {"info": {}, "swingO1": {}, "stabO1": {}},
+            1302001: {"info": {}, "swingO1": {}},
+            1302002: {"info": {}, "swingO1": {}, "shoot1": {}},
+            1452000: {"info": {}, "shoot1": {}},
+            1702000: {"info": {"cash": 1}, "swingT1": {}},
+        }
+        self.assertEqual(avatar.type_attacks(weapons), {"30": ["swingO1"], "45": ["shoot1"]})
+
     def test_action_with_no_pictures_is_left_out(self):
         tree = {"sit": {"0": {"delay": 100}}}
         self.assertEqual(avatar.collect_actions(tree, [], avatar.Parts()), {})
