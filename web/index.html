@@ -555,9 +555,17 @@
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
   .doll-tools .doll-palette-btn { flex: none; width: 36px; height: 34px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }
   .doll-palette-btn svg { width: 20px; height: 20px; }
-  .doll-colors { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-  .doll-colors .chips { align-items: center; }
-  .doll-colors-label { font-size: 12px; color: var(--muted); min-width: 30px; }
+  .doll-pal { display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; }
+  .doll-pal-pic { flex: none; width: 76px; height: 76px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #ccc; border-radius: 4px; }
+  .doll-pal-pic img, .doll-pal-skins img { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+  .doll-colors { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .doll-pal-line { display: flex; gap: 8px; align-items: flex-start; }
+  .doll-colors-label { flex: none; padding-top: 4px; font-size: 12px; color: var(--muted); }
+  .doll-pal-skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; margin-top: 8px; }
+  .doll-pal-skins button { display: flex; flex-direction: column; align-items: center; gap: 3px; height: 104px; margin: 0; padding: 6px 4px; cursor: pointer;
+    background: #fff; border: 1px solid #ccc; border-radius: 4px; color: #000; font: 500 12px var(--body); }
+  .doll-pal-skins button img { flex: 1; min-height: 0; }
+  .doll-pal-skins button:hover, .doll-pal-skins button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .doll-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); }
   .doll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; max-height: 620px; overflow-y: auto; padding: 2px; }
   .doll-grid button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 6px 4px; font: 500 11px/1.3 var(--body); color: #000; background: #fff; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; }
@@ -569,7 +577,7 @@
   .doll-sex { position: absolute; top: 2px; right: 5px; font: 700 13px/1 var(--body); }
   .doll-sex.m { color: #2f6fd6; }
   .doll-sex.f { color: #e0457b; }
-  .doll-grid .doll-skin-pic { display: block; height: 64px; image-rendering: pixelated; }
+
   .wm-layout { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px 20px; align-items: start; }
   @media (max-width: 1000px) { .wm-layout { grid-template-columns: minmax(0, 1fr); } .wm-main { max-width: 640px; } }
   /* 麵包屑疊在地圖左上角，不另外佔一列 */
@@ -775,7 +783,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.26.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.27.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3982,7 +3990,7 @@ function dollApplySlot(i) {
   dollChanged();
 }
 function dollRenderCats() {
-  const tabs = [["all", "全部"], ["hair", "髮型"], ["face", "臉型"], ["skin", "膚色"], ...doll.index.cats.filter(([cat]) => doll.index.items[cat].length)];
+  const tabs = [["all", "全部"], ["hair", "髮型"], ["face", "臉型"], ...doll.index.cats.filter(([cat]) => doll.index.items[cat].length)];
   $("doll-cats").innerHTML = tabs.map(([cat, label]) => `<button role="tab" type="button" data-doll-cat="${cat}" aria-selected="${cat === doll.cat}">${esc(label)}</button>`).join("");
 }
 function dollIcon(sheet, ic) {
@@ -4015,11 +4023,6 @@ function dollRenderGrid() {
     const list = doll.index[cat];
     total = list.length;
     cells = list.filter((s) => hit(s.n)).map((s) => styleCell(cat, s));
-  } else if (cat === "skin") {
-    const list = doll.index.skins;
-    total = list.length;
-    cells = list.filter((s) => hit(s.n)).map((s) => `<button type="button" data-doll-skin="${s.id}"${s.id === doll.skin ? ' class="on"' : ""}><img class="doll-skin-pic" data-doll-skin-pic="${s.id}" alt=""><b>${esc(s.n)}</b></button>`);
-    queueMicrotask(dollFillSkinPics);
   } else {
     const list = doll.index.items[cat];
     total = list.length;
@@ -4029,18 +4032,21 @@ function dollRenderGrid() {
   $("doll-count").textContent = cells.length === total ? `${total} 項` : `${cells.length} / ${total} 項`;
   if ($("doll-palette").open) dollRenderPalette();
 }
-// 膚色格子畫成光溜溜的人形：那個膚色的身體加頭站著的第一格
-const dollSkinPics = new Map();
-function dollSkinPic(skin) {
-  if (!dollSkinPics.has(skin)) dollSkinPics.set(skin, (async () => {
-    const files = await Promise.all([2000 + skin, 12000 + skin].map(dollLoad));
+// 小圖：幾個編號的站姿第一格照錨點疊好；有身體從身體排起，沒有就從頭排起。[編號, 透明度] 的透明度是混色用的
+const dollPics = new Map();
+function dollPic(list) {
+  const key = list.join(";");
+  if (!dollPics.has(key)) dollPics.set(key, (async () => {
+    const files = await Promise.all(list.map(([id]) => dollLoad(id)));
     const anchors = new Map(), placed = [];
-    let pending = files.flatMap((file) => ((file.a.stand1 || file.a.default)[0] || []).map((n) => ({ file, part: file.p[n] })));
+    let pending = files.flatMap((file, i) => ((file.a.stand1 || file.a.default)[0] || []).map((n) => ({ file, part: file.p[n], alpha: list[i][1] ?? 1 })))
+      .filter((e) => e.alpha === 1 || e.part[6] !== "hairShade");   // 混色的頭髮陰影不畫，免得陰影疊深
+    const root = pending.some((e) => e.part[6] === "body") ? "body" : "head";
     for (let moved = true; moved && pending.length;) {
       moved = false;
       pending = pending.filter((e) => {
-        const map = e.part[7], name = e.part[6] === "body" ? null : Object.keys(map).find((k) => anchors.has(k));
-        if (e.part[6] !== "body" && !name) return true;
+        const map = e.part[7], isRoot = e.part[6] === root && !anchors.size, name = isRoot ? null : Object.keys(map).find((k) => anchors.has(k));
+        if (!isRoot && !name) return true;
         const [ax, ay] = name ? anchors.get(name) : [0, 0], [mx, my] = name ? map[name] : [0, 0], dx = ax - mx, dy = ay - my;
         for (const [k, [x, y]] of Object.entries(map)) if (!anchors.has(k)) anchors.set(k, [dx + x, dy + y]);
         placed.push({ ...e, dx: dx - e.part[4], dy: dy - e.part[5] });
@@ -4053,17 +4059,22 @@ function dollSkinPic(skin) {
     canvas.width = Math.max(...placed.map((e) => e.dx + e.part[2])) - left;
     canvas.height = Math.max(...placed.map((e) => e.dy + e.part[3])) - top;
     const ctx = canvas.getContext("2d");
-    for (const { file, part: [x, y, w, h], dx, dy } of placed) ctx.drawImage(file.image, x, y, w, h, dx - left, dy - top, w, h);
+    for (const { file, part: [x, y, w, h], dx, dy, alpha } of placed) {
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(file.image, x, y, w, h, dx - left, dy - top, w, h);
+    }
     return canvas.toDataURL();
   })());
-  return dollSkinPics.get(skin);
+  return dollPics.get(key);
 }
-function dollFillSkinPics() {
-  for (const img of document.querySelectorAll("[data-doll-skin-pic]"))
-    dollSkinPic(Number(img.dataset.dollSkinPic)).then((src) => { img.src = src; }, () => {});
+function dollFillPics(box) {
+  for (const img of box.querySelectorAll("[data-doll-pic]"))
+    dollPic(JSON.parse(img.dataset.dollPic)).then((src) => { img.src = src; }, () => {});
 }
-// 調色盤：髮型、臉型各一段，上排換顏色、下排選另一色 50:50 混進去
+// 調色盤：髮型、臉型各一段，左邊是現在顏色（含混色）戴在頭上的樣子，右邊上排換顏色、下排選另一色 50:50 混進去；最下面換膚色
 function dollRenderPalette() {
+  const head = 12000 + doll.skin;
+  const pic = (list) => `<img data-doll-pic="${esc(JSON.stringify(list))}" alt="">`;
   $("doll-palette-body").innerHTML = [["hair", "髮型"], ["face", "臉型"]].map(([kind, title]) => {
     const style = dollStyleOf(kind, doll[kind]);
     if (!style) return "";
@@ -4071,13 +4082,17 @@ function dollRenderPalette() {
       const known = (kind === "hair" ? DOLL_HAIR_COLORS : DOLL_EYE_COLORS)[color];
       return known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`;
     };
-    const base = dollColorOf(kind, doll[kind]), mix = dollMixId(kind) == null ? null : doll.mix[kind];
+    const base = dollColorOf(kind, doll[kind]), mixId = dollMixId(kind), mix = mixId == null ? null : doll.mix[kind];
     const others = Object.keys(style.c).filter((color) => Number(color) !== base);
-    return `<h3>${title}・${esc(style.n)}</h3><div class="doll-colors" data-doll-kind="${kind}"><div class="chips"><span class="doll-colors-label">顏色</span>${Object.entries(style.c).map(([color, id]) =>
-      `<button type="button" data-doll-color="${id}"${id === doll[kind] ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>`
-      + (others.length ? `<div class="chips"><span class="doll-colors-label">混色</span><button type="button" data-doll-mix=""${mix == null ? ' class="on"' : ""}>無</button>${others.map((color) =>
-        `<button type="button" data-doll-mix="${color}"${Number(color) === mix ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>` : "") + "</div>";
-  }).join("");
+    const look = [[head, 1], [doll[kind], 1], ...(mixId == null ? [] : [[mixId, 0.5]])];
+    return `<h3>${title}・${esc(style.n)}</h3><div class="doll-pal" data-doll-kind="${kind}"><div class="doll-pal-pic">${pic(look)}</div><div class="doll-colors">`
+      + `<div class="doll-pal-line"><span class="doll-colors-label">顏色</span><div class="chips">${Object.entries(style.c).map(([color, id]) =>
+        `<button type="button" data-doll-color="${id}"${id === doll[kind] ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div></div>`
+      + (others.length ? `<div class="doll-pal-line"><span class="doll-colors-label">混色</span><div class="chips"><button type="button" data-doll-mix=""${mix == null ? ' class="on"' : ""}>無</button>${others.map((color) =>
+        `<button type="button" data-doll-mix="${color}"${Number(color) === mix ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div></div>` : "") + "</div></div>";
+  }).join("") + `<h3>膚色</h3><div class="doll-pal-skins">${doll.index.skins.map((s) =>
+    `<button type="button" data-doll-skin="${s.id}"${s.id === doll.skin ? ' class="on"' : ""}>${pic([[2000 + s.id, 1], [12000 + s.id, 1]])}<b>${esc(s.n)}</b></button>`).join("")}</div>`;
+  dollFillPics($("doll-palette-body"));
 }
 function dollWear(id) {
   const item = doll.byId.get(id), worn = doll.worn;
@@ -4111,8 +4126,7 @@ $("doll-grid").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   if (btn.dataset.dollItem) { dollWear(Number(btn.dataset.dollItem)); return; }
-  if (btn.dataset.dollSkin) doll.skin = Number(btn.dataset.dollSkin);
-  else if (btn.dataset.dollStyle) {
+  if (btn.dataset.dollStyle) {
     // 換款式時盡量留著原本的顏色
     const key = btn.dataset.dollKind, id = Number(btn.dataset.dollStyle), style = doll.index[key].find((s) => Object.values(s.c).includes(id));
     const color = key === "hair" ? doll.hair % 10 : Math.floor(doll.face / 100) % 10;
@@ -4124,8 +4138,9 @@ $("doll-palette-btn").addEventListener("click", () => { dollRenderPalette(); $("
 $("doll-palette-close").addEventListener("click", () => $("doll-palette").close());
 $("doll-palette").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) { e.currentTarget.close(); return; }   // 點外面的暗處就關
-  const btn = e.target.closest("[data-doll-color], [data-doll-mix]");
+  const btn = e.target.closest("[data-doll-color], [data-doll-mix], [data-doll-skin]");
   if (!btn) return;
+  if (btn.dataset.dollSkin) { doll.skin = Number(btn.dataset.dollSkin); dollChanged(); return; }
   const kind = btn.closest("[data-doll-kind]").dataset.dollKind;
   if (btn.dataset.dollColor) {
     doll[kind] = Number(btn.dataset.dollColor);
