@@ -553,7 +553,8 @@
   .doll-tools { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
   .doll-tools input { flex: 0 1 320px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
-  .doll-tools button { margin: 0; padding: 7px 12px; font-size: 13px; }
+  .doll-tools .doll-palette-btn { flex: none; width: 36px; height: 34px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .doll-palette-btn svg { width: 20px; height: 20px; }
   .doll-colors { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
   .doll-colors .chips { align-items: center; }
   .doll-colors-label { font-size: 12px; color: var(--muted); min-width: 30px; }
@@ -774,7 +775,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.26.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.26.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1058,7 +1059,7 @@
   <div id="tab-doll" class="tab-panel doll" role="tabpanel" aria-labelledby="tab-btn-doll" hidden>
     <div class="doll-layout">
       <section class="doll-shop">
-        <div class="doll-tools"><input type="search" id="doll-q" placeholder="搜尋名稱" aria-label="搜尋名稱"><button type="button" class="secondary" id="doll-palette-btn" aria-haspopup="dialog">調色盤</button><span class="sec-sub" id="doll-count"></span></div>
+        <div class="doll-tools"><input type="search" id="doll-q" placeholder="搜尋名稱" aria-label="搜尋名稱"><button type="button" class="secondary doll-palette-btn" id="doll-palette-btn" aria-haspopup="dialog" title="調色盤" aria-label="調色盤"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M8 1.75a6.25 6.25 0 0 0 0 12.5c1 0 1.4-.6 1.4-1.2 0-.9-.8-1.2-.8-2 0-.7.6-1.2 1.4-1.2h1.6a2.65 2.65 0 0 0 2.65-2.65C14.25 4.3 11.45 1.75 8 1.75z"/><circle cx="4.9" cy="7.6" r=".9" fill="currentColor" stroke="none"/><circle cx="6.6" cy="4.8" r=".9" fill="currentColor" stroke="none"/><circle cx="9.9" cy="4.7" r=".9" fill="currentColor" stroke="none"/></svg></button><span class="sec-sub" id="doll-count"></span></div>
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
