@@ -520,12 +520,12 @@
   .doll-worn { position: absolute; top: 47px; left: 6px; bottom: 44px; width: 84px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 3px; }
   .doll-worn[hidden] { display: none; }
   .doll-worn > div { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 3px 5px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+    background: #fff; border: 1px solid #ccc; border-radius: 4px; }
   .doll-worn i { display: block; width: 36px; height: 36px; flex: none; }
-  .doll-worn b { font: 500 11px/1.25 var(--body); text-align: center; overflow-wrap: anywhere; }
+  .doll-worn b { font: 500 11px/1.25 var(--body); text-align: center; overflow-wrap: anywhere; color: #000; }
   .doll-worn button { position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; padding: 0; margin: 0; font: 700 11px/1 var(--body);
-    color: var(--muted); background: none; border: 0; cursor: pointer; }
-  .doll-worn button:hover { color: var(--ink); }
+    color: #666; background: none; border: 0; cursor: pointer; }
+  .doll-worn button:hover { color: #000; }
   .doll-bar { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 3px; }
   .doll-bar button { padding: 3px 8px; margin: 0; font-size: 12px; }
   .doll-bar .doll-group { font-size: 12px; margin-left: 2px; }
@@ -765,7 +765,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
