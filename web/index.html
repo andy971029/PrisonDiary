@@ -560,6 +560,7 @@
   .doll-grid button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .doll-grid i { display: block; width: 36px; height: 36px; flex: none; }
   .doll-grid b { font-weight: 500; overflow-wrap: anywhere; }
+  .doll-grid .doll-skin-pic { display: block; height: 64px; image-rendering: pixelated; }
   .wm-layout { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px 20px; align-items: start; }
   @media (max-width: 1000px) { .wm-layout { grid-template-columns: minmax(0, 1fr); } .wm-main { max-width: 640px; } }
   /* 麵包屑疊在地圖左上角，不另外佔一列 */
@@ -765,7 +766,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.8</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.9</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3969,7 +3970,8 @@ function dollRenderGrid() {
   } else if (cat === "skin") {
     const list = doll.index.skins;
     total = list.length;
-    cells = list.filter((s) => hit(s.n)).map((s) => `<button type="button" data-doll-skin="${s.id}"${s.id === doll.skin ? ' class="on"' : ""}><b>${esc(s.n)}</b></button>`);
+    cells = list.filter((s) => hit(s.n)).map((s) => `<button type="button" data-doll-skin="${s.id}"${s.id === doll.skin ? ' class="on"' : ""}><img class="doll-skin-pic" data-doll-skin-pic="${s.id}" alt=""><b>${esc(s.n)}</b></button>`);
+    queueMicrotask(dollFillSkinPics);
   } else {
     const list = doll.index.items[cat];
     total = list.length;
@@ -3978,6 +3980,39 @@ function dollRenderGrid() {
   $("doll-grid").innerHTML = cells.join("") || '<p class="note">找不到符合的項目。</p>';
   $("doll-count").textContent = cells.length === total ? `${total} 項` : `${cells.length} / ${total} 項`;
   dollRenderColors();
+}
+// 膚色格子畫成光溜溜的人形：那個膚色的身體加頭站著的第一格
+const dollSkinPics = new Map();
+function dollSkinPic(skin) {
+  if (!dollSkinPics.has(skin)) dollSkinPics.set(skin, (async () => {
+    const files = await Promise.all([2000 + skin, 12000 + skin].map(dollLoad));
+    const anchors = new Map(), placed = [];
+    let pending = files.flatMap((file) => ((file.a.stand1 || file.a.default)[0] || []).map((n) => ({ file, part: file.p[n] })));
+    for (let moved = true; moved && pending.length;) {
+      moved = false;
+      pending = pending.filter((e) => {
+        const map = e.part[7], name = e.part[6] === "body" ? null : Object.keys(map).find((k) => anchors.has(k));
+        if (e.part[6] !== "body" && !name) return true;
+        const [ax, ay] = name ? anchors.get(name) : [0, 0], [mx, my] = name ? map[name] : [0, 0], dx = ax - mx, dy = ay - my;
+        for (const [k, [x, y]] of Object.entries(map)) if (!anchors.has(k)) anchors.set(k, [dx + x, dy + y]);
+        placed.push({ ...e, dx: dx - e.part[4], dy: dy - e.part[5] });
+        return !(moved = true);
+      });
+    }
+    placed.sort((a, b) => (doll.rank.get(a.part[6]) ?? 0) - (doll.rank.get(b.part[6]) ?? 0));
+    const left = Math.min(...placed.map((e) => e.dx)), top = Math.min(...placed.map((e) => e.dy));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(...placed.map((e) => e.dx + e.part[2])) - left;
+    canvas.height = Math.max(...placed.map((e) => e.dy + e.part[3])) - top;
+    const ctx = canvas.getContext("2d");
+    for (const { file, part: [x, y, w, h], dx, dy } of placed) ctx.drawImage(file.image, x, y, w, h, dx - left, dy - top, w, h);
+    return canvas.toDataURL();
+  })());
+  return dollSkinPics.get(skin);
+}
+function dollFillSkinPics() {
+  for (const img of document.querySelectorAll("[data-doll-skin-pic]"))
+    dollSkinPic(Number(img.dataset.dollSkinPic)).then((src) => { img.src = src; }, () => {});
 }
 function dollRenderColors() {
   const box = $("doll-colors"), cat = doll.cat;
