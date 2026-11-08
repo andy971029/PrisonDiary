@@ -766,7 +766,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.9</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.10</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3685,9 +3685,7 @@ function dollCompose(action, index) {
   const cap = doll.ready.find((x) => x.id === doll.worn.cap)?.file;
   const hidden = dollHidden(pending.some((x) => x.file === cap));
   const back = pending.some((x) => x.part[6] === "backHead");     // 背對鏡頭（爬梯子、繩子）看不到臉與臉飾
-  // 反過來，面向前方時背面的圖層不畫：有些帽子（假髮、寧靜的心…）正面的格子裡也放了 backCap，排在最上層會把整張臉蓋掉
-  const backLayer = (z) => { const r = doll.rank.get(z); return r >= doll.rank.get("backBody") && r < doll.rank.get("itemEffectOver"); };
-  pending = pending.filter((x) => back ? !x.file.a?.default : !backLayer(x.part[6]));
+  pending = pending.filter((x) => !(back && x.file.a?.default));
   const anchors = new Map(), placed = [];
   const place = (entry, dx, dy) => {
     for (const [name, [x, y]] of Object.entries(entry.part[7])) if (!anchors.has(name)) anchors.set(name, [dx + x, dy + y]);
@@ -3714,7 +3712,13 @@ function dollCompose(action, index) {
     });
   }
   // 被遮住的部位（頭、臉、頭髮）照樣放，骨架點還要給別人用（面具遮了頭，帽子還是錨在頭上），只是不畫
-  const rank = (e) => doll.rank.get(e.part[6]) ?? Infinity;
+  // 面向前方時，背面那段圖層（backCap、backHair、backCape…）排到身體後面：有 51 件（假髮、寧靜的心、幾件披風、鞋子…）
+  // 正面的格子裡也放了背面的圖，是垂在腦後、身後的長髮與飾物；照背面的順序畫在最上層會蓋住整張臉
+  const lo = doll.rank.get("backBody"), hi = doll.rank.get("itemEffectOver"), behind = doll.rank.get("itemEffectBelow") + 0.5;
+  const rank = (e) => {
+    const r = doll.rank.get(e.part[6]) ?? Infinity;
+    return !back && r >= lo && r < hi ? behind + (r - lo) / (hi - lo) / 2 : r;
+  };
   return placed.filter((e) => e.effect || !hidden.has(e.part[6])).map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
 }
 function dollDraw() {
