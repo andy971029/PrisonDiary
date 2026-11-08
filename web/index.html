@@ -765,7 +765,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.5</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.6</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3653,7 +3653,7 @@ function dollParts(entry, action, index) {
 function dollHidden(capDrawn) {
   const v = capDrawn ? doll.byId.get(doll.worn.cap)?.v || "" : "", hit = (slot) => v.includes(slot), hide = new Set();
   const below = ["backHairBelowCap", "backHairBelowCapNarrow", "backHairBelowCapWide"];
-  if (hit("H1")) hide.add("hairOverHead").add("backHair");
+  if (hit("H1")) hide.add("hairOverHead").add("hairShade").add("backHair");      // 頭髮投在臉上的影子是跟著前面那層的，前面那層收起來就不該有影子
   else below.forEach((z) => hide.add(z));
   if (hit("H3") || hit("H4") || hit("H6")) hide.add("hair");
   if (hit("Hb")) ["hairBelowBody", "backHair", ...below].forEach((z) => hide.add(z));
@@ -3684,7 +3684,7 @@ function dollCompose(action, index) {
   const cap = doll.ready.find((x) => x.id === doll.worn.cap)?.file;
   const hidden = dollHidden(pending.some((x) => x.file === cap));
   const back = pending.some((x) => x.part[6] === "backHead");     // 背對鏡頭（爬梯子、繩子）看不到臉與臉飾
-  pending = pending.filter((x) => !hidden.has(x.part[6]) && !(back && x.file.a?.default));
+  pending = pending.filter((x) => !(back && x.file.a?.default));
   const anchors = new Map(), placed = [];
   const place = (entry, dx, dy) => {
     for (const [name, [x, y]] of Object.entries(entry.part[7])) if (!anchors.has(name)) anchors.set(name, [dx + x, dy + y]);
@@ -3710,8 +3710,9 @@ function dollCompose(action, index) {
       return false;
     });
   }
+  // 被遮住的部位（頭、臉、頭髮）照樣放，骨架點還要給別人用（面具遮了頭，帽子還是錨在頭上），只是不畫
   const rank = (e) => doll.rank.get(e.part[6]) ?? Infinity;
-  return placed.map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
+  return placed.filter((e) => e.effect || !hidden.has(e.part[6])).map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
 }
 function dollDraw() {
   const ctx = $("doll-canvas").getContext("2d", { willReadFrequently: true });
