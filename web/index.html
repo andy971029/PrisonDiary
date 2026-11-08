@@ -765,7 +765,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.6</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.7</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3684,7 +3684,9 @@ function dollCompose(action, index) {
   const cap = doll.ready.find((x) => x.id === doll.worn.cap)?.file;
   const hidden = dollHidden(pending.some((x) => x.file === cap));
   const back = pending.some((x) => x.part[6] === "backHead");     // 背對鏡頭（爬梯子、繩子）看不到臉與臉飾
-  pending = pending.filter((x) => !(back && x.file.a?.default));
+  // 反過來，面向前方時背面的圖層不畫：有些帽子（假髮、寧靜的心…）正面的格子裡也放了 backCap，排在最上層會把整張臉蓋掉
+  const backLayer = (z) => { const r = doll.rank.get(z); return r >= doll.rank.get("backBody") && r < doll.rank.get("itemEffectOver"); };
+  pending = pending.filter((x) => back ? !x.file.a?.default : !backLayer(x.part[6]));
   const anchors = new Map(), placed = [];
   const place = (entry, dx, dy) => {
     for (const [name, [x, y]] of Object.entries(entry.part[7])) if (!anchors.has(name)) anchors.set(name, [dx + x, dy + y]);

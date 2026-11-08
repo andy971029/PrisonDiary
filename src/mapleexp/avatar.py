@@ -40,7 +40,7 @@ EFFECT_BELOW, EFFECT_OVER = "itemEffectBelow", "itemEffectOver"
 EFFECT_DELAY = 100
 MAX_LINK_HOPS = 8
 
-# 由後到前。背面（爬梯子、繩子）的部位都是 back 開頭，同一格不會跟正面的混到，放在一起就好
+# 由後到前。背面（爬梯子、繩子）的部位都是 back 開頭，放在一起；有些帽子正面的格子也混了 backCap，網頁面向前方時不畫背面這段
 ORDER = """
 characterStart itemEffectBelow backWing backTamingMobMid backSaddle
 hairBelowBody capAccessoryBelowBody capBelowBody capeUnderBody capeBelowBody shieldBelowBody
