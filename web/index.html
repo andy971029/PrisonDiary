@@ -135,6 +135,7 @@
   dialog p { margin: 0 0 18px; line-height: 1.6; }
   dialog .btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   dialog.settings { width: min(440px, 94vw); }
+  dialog.doll-palette { width: min(620px, 94vw); }
   .field { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 700; }
   .field span { flex: 1; }
   .field input { width: 72px; font: 700 15px var(--mono); text-align: right; padding: 4px 6px;
@@ -531,7 +532,7 @@
   .doll-bar .doll-group { font-size: 12px; margin-left: 2px; }
   .doll-bar .doll-state:empty { display: none; }
   .doll-group { font-size: 13px; }
-  .doll-group[hidden], .doll-colors[hidden] { display: none; }
+  .doll-group[hidden] { display: none; }
   .doll-state { font-size: 12px; color: var(--muted); }
   /* 四格儲存：縮圖是存的時候拍的站姿，右上角存檔，點格子套用，套用中的框琥珀色 */
   .doll-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 476px; margin-top: 12px; }
@@ -552,7 +553,8 @@
   .doll-tools { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
   .doll-tools input { flex: 0 1 320px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
-  .doll-colors { margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .doll-tools button { margin: 0; padding: 7px 12px; font-size: 13px; }
+  .doll-colors { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
   .doll-colors .chips { align-items: center; }
   .doll-colors-label { font-size: 12px; color: var(--muted); min-width: 30px; }
   .doll-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); }
@@ -772,7 +774,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.25.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.26.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1056,8 +1058,7 @@
   <div id="tab-doll" class="tab-panel doll" role="tabpanel" aria-labelledby="tab-btn-doll" hidden>
     <div class="doll-layout">
       <section class="doll-shop">
-        <div class="doll-tools"><input type="search" id="doll-q" placeholder="搜尋名稱" aria-label="搜尋名稱"><span class="sec-sub" id="doll-count"></span></div>
-        <div class="doll-colors" id="doll-colors" hidden></div>
+        <div class="doll-tools"><input type="search" id="doll-q" placeholder="搜尋名稱" aria-label="搜尋名稱"><button type="button" class="secondary" id="doll-palette-btn" aria-haspopup="dialog">調色盤</button><span class="sec-sub" id="doll-count"></span></div>
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
@@ -1118,6 +1119,11 @@
     <button id="set-cancel" class="secondary">取消</button>
     <button id="set-save" class="go">套用</button>
   </div>
+</dialog>
+<dialog id="doll-palette" class="settings doll-palette" aria-label="調色盤">
+  <h2>調色盤</h2>
+  <div id="doll-palette-body"></div>
+  <div class="btns"><button type="button" class="secondary" id="doll-palette-close">關閉</button></div>
 </dialog>
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
@@ -3531,7 +3537,7 @@ const DOLL_WEAPONS = { 30: "單手劍", 31: "單手斧", 32: "單手棍", 33: "�
 const DOLL_EYE_COLORS = [["黑", "#2b2b2b"], ["藍", "#3060c0"], ["紅", "#c0352f"], ["綠", "#78b432"], ["褐", "#8c7a4e"], ["天藍", "#2aa0cc"], ["紫", "#8232c0"], ["紫紅", "#b2308e"], ["白", "#d0d0d0"]];
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
 const DOLL_SLOTS = 4;
-const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, timer: 0, token: 0, effBase: performance.now(), effTimer: 0,
+const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "all", action: "stand", frame: 0, timer: 0, token: 0, effBase: performance.now(), effTimer: 0,
   skin: 0, hair: 30000, face: 20000, mix: { hair: null, face: null }, worn: {}, group: null, ready: null, back: 1, backs: new Map(),
   slots: Array(DOLL_SLOTS).fill(null), slot: null, kb: false, pos: { x: DOLL_X, y: DOLL_Y, flip: false } };
 
@@ -3975,7 +3981,7 @@ function dollApplySlot(i) {
   dollChanged();
 }
 function dollRenderCats() {
-  const tabs = [["hair", "髮型"], ["face", "臉型"], ["skin", "膚色"], ...doll.index.cats.filter(([cat]) => doll.index.items[cat].length)];
+  const tabs = [["all", "全部"], ["hair", "髮型"], ["face", "臉型"], ["skin", "膚色"], ...doll.index.cats.filter(([cat]) => doll.index.items[cat].length)];
   $("doll-cats").innerHTML = tabs.map(([cat, label]) => `<button role="tab" type="button" data-doll-cat="${cat}" aria-selected="${cat === doll.cat}">${esc(label)}</button>`).join("");
 }
 function dollIcon(sheet, ic) {
@@ -3993,14 +3999,21 @@ function dollSex(id, kind) {
 function dollRenderGrid() {
   const q = $("doll-q").value.trim().toLowerCase(), cat = doll.cat;
   const hit = (name) => !q || name.toLowerCase().includes(q);
+  const styleCell = (kind, s) => {
+    const ids = Object.values(s.c);
+    return `<button type="button" data-doll-style="${ids[0]}" data-doll-kind="${kind}"${ids.includes(doll[kind]) ? ' class="on"' : ""}>${dollSex(ids[0], kind)}${dollIcon(kind, s.ic)}<b>${esc(s.n)}</b></button>`;
+  };
+  const itemCell = (it, c = cat) => `<button type="button" data-doll-item="${it.id}"${doll.worn[c] === it.id ? ' class="on"' : ""}>${dollSex(it.id)}${dollIcon("icons", it.ic)}<b>${esc(it.n)}</b></button>`;
   let cells, total;
-  if (cat === "hair" || cat === "face") {
+  if (cat === "all") {
+    // 全部：髮型、臉型，再接著各類時裝（不含膚色）
+    const all = [...["hair", "face"].flatMap((kind) => doll.index[kind].map((s) => [kind, s])), ...doll.index.cats.flatMap(([c]) => doll.index.items[c].map((it) => [c, it]))];
+    total = all.length;
+    cells = all.filter(([, x]) => hit(x.n)).map(([kind, x]) => kind === "hair" || kind === "face" ? styleCell(kind, x) : itemCell(x, kind));
+  } else if (cat === "hair" || cat === "face") {
     const list = doll.index[cat];
     total = list.length;
-    cells = list.filter((s) => hit(s.n)).map((s) => {
-      const ids = Object.values(s.c);
-      return `<button type="button" data-doll-style="${ids[0]}"${ids.includes(doll[cat]) ? ' class="on"' : ""}>${dollSex(ids[0], cat)}${dollIcon(cat, s.ic)}<b>${esc(s.n)}</b></button>`;
-    });
+    cells = list.filter((s) => hit(s.n)).map((s) => styleCell(cat, s));
   } else if (cat === "skin") {
     const list = doll.index.skins;
     total = list.length;
@@ -4009,11 +4022,11 @@ function dollRenderGrid() {
   } else {
     const list = doll.index.items[cat];
     total = list.length;
-    cells = list.filter((it) => hit(it.n)).map((it) => `<button type="button" data-doll-item="${it.id}"${doll.worn[cat] === it.id ? ' class="on"' : ""}>${dollSex(it.id)}${dollIcon("icons", it.ic)}<b>${esc(it.n)}</b></button>`);
+    cells = list.filter((it) => hit(it.n)).map((it) => itemCell(it));
   }
   $("doll-grid").innerHTML = cells.join("") || '<p class="note">找不到符合的項目。</p>';
   $("doll-count").textContent = cells.length === total ? `${total} 項` : `${cells.length} / ${total} 項`;
-  dollRenderColors();
+  if ($("doll-palette").open) dollRenderPalette();
 }
 // 膚色格子畫成光溜溜的人形：那個膚色的身體加頭站著的第一格
 const dollSkinPics = new Map();
@@ -4048,21 +4061,22 @@ function dollFillSkinPics() {
   for (const img of document.querySelectorAll("[data-doll-skin-pic]"))
     dollSkinPic(Number(img.dataset.dollSkinPic)).then((src) => { img.src = src; }, () => {});
 }
-function dollRenderColors() {
-  const box = $("doll-colors"), cat = doll.cat;
-  const style = cat === "hair" || cat === "face" ? doll.index[cat].find((s) => Object.values(s.c).includes(doll[cat])) : null;
-  box.hidden = !style;
-  if (!style) return;
-  const label = (color) => {
-    const known = (cat === "hair" ? DOLL_HAIR_COLORS : DOLL_EYE_COLORS)[color];
-    return known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`;
-  };
-  const base = dollColorOf(cat, doll[cat]), mix = dollMixId(cat) == null ? null : doll.mix[cat];
-  const others = Object.keys(style.c).filter((color) => Number(color) !== base);
-  box.innerHTML = `<div class="chips"><span class="doll-colors-label">顏色</span>${Object.entries(style.c).map(([color, id]) =>
-    `<button type="button" data-doll-color="${id}"${id === doll[cat] ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>`
-    + (others.length ? `<div class="chips"><span class="doll-colors-label">混色</span><button type="button" data-doll-mix=""${mix == null ? ' class="on"' : ""}>無</button>${others.map((color) =>
-      `<button type="button" data-doll-mix="${color}"${Number(color) === mix ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>` : "");
+// 調色盤：髮型、臉型各一段，上排換顏色、下排選另一色 50:50 混進去
+function dollRenderPalette() {
+  $("doll-palette-body").innerHTML = [["hair", "髮型"], ["face", "臉型"]].map(([kind, title]) => {
+    const style = dollStyleOf(kind, doll[kind]);
+    if (!style) return "";
+    const label = (color) => {
+      const known = (kind === "hair" ? DOLL_HAIR_COLORS : DOLL_EYE_COLORS)[color];
+      return known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`;
+    };
+    const base = dollColorOf(kind, doll[kind]), mix = dollMixId(kind) == null ? null : doll.mix[kind];
+    const others = Object.keys(style.c).filter((color) => Number(color) !== base);
+    return `<h3>${title}・${esc(style.n)}</h3><div class="doll-colors" data-doll-kind="${kind}"><div class="chips"><span class="doll-colors-label">顏色</span>${Object.entries(style.c).map(([color, id]) =>
+      `<button type="button" data-doll-color="${id}"${id === doll[kind] ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>`
+      + (others.length ? `<div class="chips"><span class="doll-colors-label">混色</span><button type="button" data-doll-mix=""${mix == null ? ' class="on"' : ""}>無</button>${others.map((color) =>
+        `<button type="button" data-doll-mix="${color}"${Number(color) === mix ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>` : "") + "</div>";
+  }).join("");
 }
 function dollWear(id) {
   const item = doll.byId.get(id), worn = doll.worn;
@@ -4099,19 +4113,23 @@ $("doll-grid").addEventListener("click", (e) => {
   if (btn.dataset.dollSkin) doll.skin = Number(btn.dataset.dollSkin);
   else if (btn.dataset.dollStyle) {
     // 換款式時盡量留著原本的顏色
-    const key = doll.cat, id = Number(btn.dataset.dollStyle), style = doll.index[key].find((s) => Object.values(s.c).includes(id));
+    const key = btn.dataset.dollKind, id = Number(btn.dataset.dollStyle), style = doll.index[key].find((s) => Object.values(s.c).includes(id));
     const color = key === "hair" ? doll.hair % 10 : Math.floor(doll.face / 100) % 10;
     doll[key] = style.c[color] ?? id;
   }
   dollChanged();
 });
-$("doll-colors").addEventListener("click", (e) => {
+$("doll-palette-btn").addEventListener("click", () => { dollRenderPalette(); $("doll-palette").showModal(); });
+$("doll-palette-close").addEventListener("click", () => $("doll-palette").close());
+$("doll-palette").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) { e.currentTarget.close(); return; }   // 點外面的暗處就關
   const btn = e.target.closest("[data-doll-color], [data-doll-mix]");
   if (!btn) return;
+  const kind = btn.closest("[data-doll-kind]").dataset.dollKind;
   if (btn.dataset.dollColor) {
-    doll[doll.cat] = Number(btn.dataset.dollColor);
-    if (doll.mix[doll.cat] === dollColorOf(doll.cat, doll[doll.cat])) doll.mix[doll.cat] = null;   // 混同一色等於沒混
-  } else doll.mix[doll.cat] = btn.dataset.dollMix === "" ? null : Number(btn.dataset.dollMix);
+    doll[kind] = Number(btn.dataset.dollColor);
+    if (doll.mix[kind] === dollColorOf(kind, doll[kind])) doll.mix[kind] = null;   // 混同一色等於沒混
+  } else doll.mix[kind] = btn.dataset.dollMix === "" ? null : Number(btn.dataset.dollMix);
   dollChanged();
 });
 $("doll-worn").addEventListener("click", (e) => {
