@@ -153,6 +153,30 @@ def hair_thumb(item_id: int, tree: dict, container: dict):
     return out
 
 
+def style_thumbs(kind: str, styles: list[dict], assets: dict, container: dict) -> dict[str, Atlas]:
+    """髮型、臉型每個顏色一張縮圖集（``hair0.png``、``face3.png``…），同一款在每張的格子一樣，序號記到 ``ic``。
+    網頁照調色盤選的顏色換圖集；那款沒有的顏色留空格，網頁改用它有的第一個顏色。"""
+    from PIL import Image
+
+    colors = sorted({c for style in styles for c in style["c"]}, key=int)
+    atlases = {c: Atlas() for c in colors}
+    pages: dict = {}
+    def thumb(item: int):
+        if kind == "hair":
+            return hair_thumb(item, assets[f"{item:08d}"], container)
+        if len(pages) > 64:
+            pages.clear()
+        return crop_icon(container, f"{EQUIP_PREFIX}Face/{item:08d}.asset", "default/face", pages)
+    for style in styles:
+        images = {c: thumb(item) for c, item in style["c"].items()}
+        first = next(iter(images.values()))
+        if first is None:
+            continue
+        for c, atlas in atlases.items():
+            style["ic"] = atlas.add(images.get(c) or Image.new("RGBA", (1, 1)))
+    return atlases
+
+
 def read_link(directory: Path) -> dict[str, int]:
     """客戶端的 ``LinkCashWeaponData``：武器類型 → 時裝武器沒有這個類型的圖時借哪一組。"""
     hit = gamedata.read_table(directory, LINK_TABLE)
@@ -265,19 +289,9 @@ def main() -> int:
     hair = avatar.hair_styles(hair_ids, name_of)
     face = avatar.face_styles(face_ids, name_of)
 
-    thumbs = {"hair": Atlas(), "face": Atlas()}
-    pages: dict = {}
-    for style in hair:
-        image = hair_thumb(next(iter(style["c"].values())), assets[f"{next(iter(style['c'].values())):08d}"], container)
-        if image is not None:
-            style["ic"] = thumbs["hair"].add(image)
-    for style in face:
-        item = next(iter(style["c"].values()))
-        image = crop_icon(container, f"{EQUIP_PREFIX}Face/{item:08d}.asset", "default/face", pages)
-        if image is not None:
-            style["ic"] = thumbs["face"].add(image)
-        if len(pages) > 64:
-            pages.clear()
+    for kind, styles in (("hair", hair), ("face", face)):
+        for color, atlas in style_thumbs(kind, styles, assets, container).items():
+            atlas.save(DIR / f"{kind}{color}.png")
 
     icons = Atlas()
     pages = {}
@@ -304,8 +318,6 @@ def main() -> int:
             pages.clear()
 
     icons.save(DIR / "icons.png")
-    thumbs["hair"].save(DIR / "hair.png")
-    thumbs["face"].save(DIR / "face.png")
     index = write_packs(packs)
     backs = export_backs(directory)
     attacks = avatar.type_attacks({int(n): t for n, t in assets.items() if n.startswith(("013", "014"))})
