@@ -552,7 +552,9 @@
   .doll-tools { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
   .doll-tools input { flex: 0 1 320px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
-  .doll-colors { margin-bottom: 10px; }
+  .doll-colors { margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .doll-colors .chips { align-items: center; }
+  .doll-colors-label { font-size: 12px; color: var(--muted); min-width: 30px; }
   .doll-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); }
   .doll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; max-height: 620px; overflow-y: auto; padding: 2px; }
   .doll-grid button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 6px 4px; font: 500 11px/1.3 var(--body); color: #000; background: #fff; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; }
@@ -770,7 +772,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.11</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.25.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1055,7 +1057,7 @@
     <div class="doll-layout">
       <section class="doll-shop">
         <div class="doll-tools"><input type="search" id="doll-q" placeholder="搜尋名稱" aria-label="搜尋名稱"><span class="sec-sub" id="doll-count"></span></div>
-        <div class="chips doll-colors" id="doll-colors" hidden></div>
+        <div class="doll-colors" id="doll-colors" hidden></div>
         <div class="doll-grid" id="doll-grid"></div>
       </section>
       <section class="doll-stage">
@@ -3530,10 +3532,10 @@ const DOLL_EYE_COLORS = [["黑", "#2b2b2b"], ["藍", "#3060c0"], ["紅", "#c0352
 const DOLL_HAIR_COLORS = [["黑", "#2b2b2b"], ["紅", "#c8452f"], ["橘", "#e08a2e"], ["黃", "#e8c94e"], ["綠", "#4f9e4a"], ["藍", "#3f74c9"], ["紫", "#8a55b8"], ["棕", "#7a4f2c"]];
 const DOLL_SLOTS = 4;
 const doll = { index: null, loading: null, files: new Map(), where: new Map(), whole: new Map(), byId: new Map(), rank: new Map(), cat: "hair", action: "stand", frame: 0, timer: 0, token: 0, effBase: performance.now(), effTimer: 0,
-  skin: 0, hair: 30000, face: 20000, worn: {}, group: null, ready: null, back: 1, backs: new Map(),
+  skin: 0, hair: 30000, face: 20000, mix: { hair: null, face: null }, worn: {}, group: null, ready: null, back: 1, backs: new Map(),
   slots: Array(DOLL_SLOTS).fill(null), slot: null, kb: false, pos: { x: DOLL_X, y: DOLL_Y, flip: false } };
 
-const dollLook = () => ({ skin: doll.skin, hair: doll.hair, face: doll.face, worn: { ...doll.worn }, group: doll.group });
+const dollLook = () => ({ skin: doll.skin, hair: doll.hair, face: doll.face, mix: { ...doll.mix }, worn: { ...doll.worn }, group: doll.group });
 function dollSave() {
   try { localStorage.setItem(DOLL_KEY, JSON.stringify({ ...dollLook(), back: doll.back, kb: doll.kb, slots: doll.slots, slot: doll.slot })); } catch { /* 存不了就算了 */ }
 }
@@ -3544,6 +3546,7 @@ function dollSetLook(raw) {
   doll.skin = doll.index.skins.some((s) => s.id === raw?.skin) ? raw.skin : 0;
   doll.hair = pick(doll.index.hair, raw?.hair, 30000);
   doll.face = pick(doll.index.face, raw?.face, 20000);
+  doll.mix = { hair: Number.isInteger(raw?.mix?.hair) ? raw.mix.hair : null, face: Number.isInteger(raw?.mix?.face) ? raw.mix.face : null };
   doll.worn = {};
   for (const [cat, id] of Object.entries(raw?.worn || {})) if (doll.byId.get(id)?.cat === cat) doll.worn[cat] = id;
   doll.group = Number.isInteger(raw?.group) ? raw.group : null;
@@ -3624,10 +3627,18 @@ const dollArt = () => dollWeapon()?.l?.[dollGroup()] ?? dollGroup();
 // 這個類型會用的攻擊姿勢（匯出時從一般武器統計的）；沒拿武器或沒資料就是全部
 const DOLL_ALL_ATTACKS = DOLL_ATTACKS.flatMap(([, list]) => list.map(([key]) => key));
 const dollTypeAttacks = () => (dollWeapon() && doll.index.attacks?.[dollGroup()]) || DOLL_ALL_ATTACKS;
+// 混色跟遊戲的混合染髮、混合瞳色一樣：同款式的另一個顏色，以 50：50 疊在原本的顏色上
+const dollStyleOf = (kind, id) => doll.index[kind].find((s) => Object.values(s.c).includes(id));
+const dollColorOf = (kind, id) => kind === "hair" ? id % 10 : Math.floor(id / 100) % 10;
+function dollMixId(kind) {
+  const color = doll.mix[kind], id = color == null ? null : dollStyleOf(kind, doll[kind])?.c[color];
+  return id != null && id !== doll[kind] ? id : null;
+}
 // 全部檔案到齊才換畫面，換裝時不會閃一下沒穿衣服
 async function dollRefresh() {
   const token = ++doll.token;
-  const ids = [2000 + doll.skin, 12000 + doll.skin, doll.face, doll.hair, ...Object.values(doll.worn)];
+  const mixes = ["face", "hair"].map(dollMixId).filter((id) => id != null);
+  const ids = [2000 + doll.skin, 12000 + doll.skin, doll.face, doll.hair, ...Object.values(doll.worn), ...mixes];
   $("doll-state").textContent = "載入中…";
   dollRenderWorn();
   dollRenderMisses();
@@ -3636,7 +3647,7 @@ async function dollRefresh() {
   const failed = results.filter((r) => r.status === "rejected").length;
   results.forEach((r, i) => { if (r.status === "rejected") doll.files.delete(ids[i]); });
   $("doll-state").textContent = failed ? `有 ${failed} 件讀不到` : "";
-  doll.ready = results.map((r, i) => ({ id: ids[i], file: r.status === "fulfilled" ? r.value : null })).filter((x) => x.file);
+  doll.ready = results.map((r, i) => ({ id: ids[i], file: r.status === "fulfilled" ? r.value : null, mix: i >= ids.length - mixes.length })).filter((x) => x.file);
   doll.readyToken = token;
   dollPlay();
 }
@@ -3652,7 +3663,8 @@ function dollParts(entry, action, index) {
   const table = file.w ? file.w[dollArt()] : file.a;
   const rows = table?.[action] ?? table?.default;               // 臉、臉飾只有一張，每個動作都用它
   if (!rows) return [];
-  return (rows[index] ?? rows[0] ?? []).map((n) => ({ file, part: file.p[n] })).filter((x) => x.part);
+  const alpha = entry.mix ? 0.5 : 1;
+  return (rows[index] ?? rows[0] ?? []).map((n) => ({ file, part: file.p[n], alpha })).filter((x) => x.part && !(entry.mix && x.part[6] === "hairShade"));
 }
 // 帽子遮頭髮：客戶端用 vslot 列帽子佔的欄位（H1～H6、Hb…），這裡對應回頭髮的圖層
 function dollHidden(capDrawn) {
@@ -3736,8 +3748,11 @@ function dollDraw() {
   ctx.save();
   ctx.translate(Math.round(px), Math.round(py));
   if (flip) ctx.scale(-1, 1);
-  for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of dollCompose(dollAction(), doll.frame))
+  for (const { file, part: [x, y, w, h, ox, oy], dx, dy, alpha } of dollCompose(dollAction(), doll.frame)) {
+    ctx.globalAlpha = alpha ?? 1;
     ctx.drawImage(file.image, x, y, w, h, dx - ox, dy - oy, w, h);
+  }
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 // 背景：0 是素色（下載的 PNG 透明），1 起是購物商場試穿的背景；第一次用到才載，載好再重畫
@@ -3947,7 +3962,10 @@ function dollSnapshot() {
   const out = document.createElement("canvas");
   out.width = right - left; out.height = bottom - top;
   const ctx = out.getContext("2d");
-  for (const { file, part: [x, y, w, h, ox, oy], dx, dy } of parts) ctx.drawImage(file.image, x, y, w, h, dx - ox - left, dy - oy - top, w, h);
+  for (const { file, part: [x, y, w, h, ox, oy], dx, dy, alpha } of parts) {
+    ctx.globalAlpha = alpha ?? 1;
+    ctx.drawImage(file.image, x, y, w, h, dx - ox - left, dy - oy - top, w, h);
+  }
   return out.toDataURL("image/png");
 }
 function dollApplySlot(i) {
@@ -3965,8 +3983,11 @@ function dollIcon(sheet, ic) {
   return `<i style="background:url(${DOLL_BASE}avatar/${sheet}.png) -${ic % DOLL_COLS * DOLL_CELL}px -${Math.floor(ic / DOLL_COLS) * DOLL_CELL}px"></i>`;
 }
 // 時裝限定性別跟遊戲一樣看編號的千位數：0 限男、1 限女，其他男女都能穿（客戶端沒有另外的欄位）
-function dollSex(id) {
-  const sex = Math.floor(id / 1000) % 10;
+// 髮型、臉型客戶端沒有性別資料，照 maplestory.io（台版）每段編號的 requiredGender；最早那批（髮型 30、31、40、41，臉型 20、21）不限
+const DOLL_STYLE_SEX = { hair: { 33: 0, 35: 0, 36: 0, 43: 0, 45: 0, 46: 0, 63: 0, 34: 1, 37: 1, 38: 1, 44: 1, 47: 1, 48: 1, 64: 1, 68: 1 },
+  face: { 23: 0, 25: 0, 26: 0, 53: 0, 55: 0, 56: 0, 24: 1, 27: 1, 28: 1, 54: 1 } };
+function dollSex(id, kind) {
+  const sex = kind ? DOLL_STYLE_SEX[kind][Math.floor(id / 1000)] : Math.floor(id / 1000) % 10;
   return sex === 0 ? '<span class="doll-sex m" title="限男性">♂</span>' : sex === 1 ? '<span class="doll-sex f" title="限女性">♀</span>' : "";
 }
 function dollRenderGrid() {
@@ -3978,7 +3999,7 @@ function dollRenderGrid() {
     total = list.length;
     cells = list.filter((s) => hit(s.n)).map((s) => {
       const ids = Object.values(s.c);
-      return `<button type="button" data-doll-style="${ids[0]}"${ids.includes(doll[cat]) ? ' class="on"' : ""}>${dollIcon(cat, s.ic)}<b>${esc(s.n)}</b></button>`;
+      return `<button type="button" data-doll-style="${ids[0]}"${ids.includes(doll[cat]) ? ' class="on"' : ""}>${dollSex(ids[0], cat)}${dollIcon(cat, s.ic)}<b>${esc(s.n)}</b></button>`;
     });
   } else if (cat === "skin") {
     const list = doll.index.skins;
@@ -4032,10 +4053,16 @@ function dollRenderColors() {
   const style = cat === "hair" || cat === "face" ? doll.index[cat].find((s) => Object.values(s.c).includes(doll[cat])) : null;
   box.hidden = !style;
   if (!style) return;
-  box.innerHTML = Object.entries(style.c).map(([color, id]) => {
+  const label = (color) => {
     const known = (cat === "hair" ? DOLL_HAIR_COLORS : DOLL_EYE_COLORS)[color];
-    return `<button type="button" data-doll-color="${id}"${id === doll[cat] ? ' class="on"' : ""}>${known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`}</button>`;
-  }).join("");
+    return known ? `<i class="doll-swatch" style="background:${known[1]}"></i>${esc(known[0])}` : `顏色 ${Number(color) + 1}`;
+  };
+  const base = dollColorOf(cat, doll[cat]), mix = dollMixId(cat) == null ? null : doll.mix[cat];
+  const others = Object.keys(style.c).filter((color) => Number(color) !== base);
+  box.innerHTML = `<div class="chips"><span class="doll-colors-label">顏色</span>${Object.entries(style.c).map(([color, id]) =>
+    `<button type="button" data-doll-color="${id}"${id === doll[cat] ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>`
+    + (others.length ? `<div class="chips"><span class="doll-colors-label">混色</span><button type="button" data-doll-mix=""${mix == null ? ' class="on"' : ""}>無</button>${others.map((color) =>
+      `<button type="button" data-doll-mix="${color}"${Number(color) === mix ? ' class="on"' : ""}>${label(color)}</button>`).join("")}</div>` : "");
 }
 function dollWear(id) {
   const item = doll.byId.get(id), worn = doll.worn;
@@ -4079,9 +4106,12 @@ $("doll-grid").addEventListener("click", (e) => {
   dollChanged();
 });
 $("doll-colors").addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-doll-color]");
+  const btn = e.target.closest("[data-doll-color], [data-doll-mix]");
   if (!btn) return;
-  doll[doll.cat] = Number(btn.dataset.dollColor);
+  if (btn.dataset.dollColor) {
+    doll[doll.cat] = Number(btn.dataset.dollColor);
+    if (doll.mix[doll.cat] === dollColorOf(doll.cat, doll[doll.cat])) doll.mix[doll.cat] = null;   // 混同一色等於沒混
+  } else doll.mix[doll.cat] = btn.dataset.dollMix === "" ? null : Number(btn.dataset.dollMix);
   dollChanged();
 });
 $("doll-worn").addEventListener("click", (e) => {
