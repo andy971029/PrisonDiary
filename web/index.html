@@ -560,6 +560,10 @@
   .doll-grid button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .doll-grid i { display: block; width: 36px; height: 36px; flex: none; }
   .doll-grid b { font-weight: 500; overflow-wrap: anywhere; }
+  .doll-grid button { position: relative; }
+  .doll-sex { position: absolute; top: 2px; right: 5px; font: 700 13px/1 var(--body); }
+  .doll-sex.m { color: #2f6fd6; }
+  .doll-sex.f { color: #e0457b; }
   .doll-grid .doll-skin-pic { display: block; height: 64px; image-rendering: pixelated; }
   .wm-layout { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px 20px; align-items: start; }
   @media (max-width: 1000px) { .wm-layout { grid-template-columns: minmax(0, 1fr); } .wm-main { max-width: 640px; } }
@@ -766,7 +770,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.10</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.24.11</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3960,6 +3964,11 @@ function dollIcon(sheet, ic) {
   if (ic == null) return "<i></i>";
   return `<i style="background:url(${DOLL_BASE}avatar/${sheet}.png) -${ic % DOLL_COLS * DOLL_CELL}px -${Math.floor(ic / DOLL_COLS) * DOLL_CELL}px"></i>`;
 }
+// 時裝限定性別跟遊戲一樣看編號的千位數：0 限男、1 限女，其他男女都能穿（客戶端沒有另外的欄位）
+function dollSex(id) {
+  const sex = Math.floor(id / 1000) % 10;
+  return sex === 0 ? '<span class="doll-sex m" title="限男性">♂</span>' : sex === 1 ? '<span class="doll-sex f" title="限女性">♀</span>' : "";
+}
 function dollRenderGrid() {
   const q = $("doll-q").value.trim().toLowerCase(), cat = doll.cat;
   const hit = (name) => !q || name.toLowerCase().includes(q);
@@ -3979,7 +3988,7 @@ function dollRenderGrid() {
   } else {
     const list = doll.index.items[cat];
     total = list.length;
-    cells = list.filter((it) => hit(it.n)).map((it) => `<button type="button" data-doll-item="${it.id}"${doll.worn[cat] === it.id ? ' class="on"' : ""}>${dollIcon("icons", it.ic)}<b>${esc(it.n)}</b></button>`);
+    cells = list.filter((it) => hit(it.n)).map((it) => `<button type="button" data-doll-item="${it.id}"${doll.worn[cat] === it.id ? ' class="on"' : ""}>${dollSex(it.id)}${dollIcon("icons", it.ic)}<b>${esc(it.n)}</b></button>`);
   }
   $("doll-grid").innerHTML = cells.join("") || '<p class="note">找不到符合的項目。</p>';
   $("doll-count").textContent = cells.length === total ? `${total} 項` : `${cells.length} / ${total} 項`;
