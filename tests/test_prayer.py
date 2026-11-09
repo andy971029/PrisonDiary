@@ -295,13 +295,70 @@ class TestPrayerWatch(unittest.TestCase):
         w.feed(6.0, seen=True, yellow=False)        # 重新放了祈禱
         self.assertEqual(w.snapshot(6.0).status, core.LONG)
 
-    def test_icon_gone_mid_way_is_just_lost(self):
-        """還剩很多秒就不見了：多半是被擋住，回去找，不警示。"""
+    def test_icon_gone_mid_way_keeps_counting(self):
+        """還剩很多秒就不見了：多半是被擋住，倒數照走、不丟掉，也還不警示。"""
         w = self.watch()
         w.feed(0.0, seen=True, seconds=40, yellow=True)
         w.feed(1.0, seen=False)
         w.feed(2.0, seen=False)
-        self.assertEqual(w.snapshot(2.0).status, core.SEARCHING)
+        snap = w.snapshot(2.0)
+        self.assertEqual(snap.status, core.COUNTING)
+        self.assertAlmostEqual(snap.remaining, 38.5)
+
+    def test_hidden_until_the_end_still_expires(self):
+        """一直被擋住：數到底就算結束要警示；以前會丟掉倒數、變回找圖示，就不會警示了。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        for t in range(1, 36):
+            w.feed(float(t), seen=False)
+        self.assertEqual(w.snapshot(35.0).status, core.COUNTING)
+        w.feed(36.0, seen=False)
+        self.assertEqual(w.snapshot(36.0).status, core.EXPIRED)
+
+    def test_back_from_hiding_with_unreadable_digits_keeps_counting(self):
+        """擋住後回來、秒數又讀不出來：接著原本的倒數，不會變成顯示不出來。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        w.feed(5.0, seen=False)
+        w.feed(10.0, seen=False)
+        w.feed(15.0, seen=True, seconds=None, yellow=True)
+        snap = w.snapshot(15.0)
+        self.assertEqual(snap.status, core.COUNTING)
+        self.assertAlmostEqual(snap.remaining, 25.5)
+
+    def test_hidden_while_over_a_minute_stays_long(self):
+        """一分鐘以上時被擋住：一分鐘內不可能結束，維持一分鐘以上；超過一分鐘才回去找。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, yellow=False)
+        w.feed(10.0, seen=False)
+        w.feed(20.0, seen=False)
+        self.assertEqual(w.snapshot(20.0).status, core.LONG)
+        w.feed(61.0, seen=False)
+        self.assertEqual(w.snapshot(61.0).status, core.SEARCHING)
+
+    def test_lost_last_digit_on_the_first_yellow_frame_is_ignored(self):
+        """白色剛變黃的那一格，「59」只讀到「5」：以前直接信，一變黃就跳到 5 秒、提早警示。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, yellow=False)
+        w.feed(2.0, seen=True, seconds=5, yellow=True)
+        snap = w.snapshot(2.0)
+        self.assertEqual(snap.status, core.COUNTING)
+        self.assertAlmostEqual(snap.remaining, 59.0)
+
+    def test_misread_on_the_first_yellow_frame_is_not_trusted(self):
+        """剛變黃就讀到很小的數（認錯字）：跟「剛變黃 = 60 秒」差太多，不信。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, yellow=False)
+        w.feed(2.0, seen=True, seconds=8, yellow=True)
+        self.assertAlmostEqual(w.snapshot(2.0).remaining, 59.0)
+
+    def test_scattered_misreads_do_not_add_up(self):
+        """對不上的讀數每次都不一樣（誤讀），湊滿次數也不改；要一直往下數才算。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        for t, sec in ((1.0, 8), (2.0, 15), (3.0, 3), (4.0, 17)):
+            w.feed(t, seen=True, seconds=sec, yellow=True)
+        self.assertAlmostEqual(w.snapshot(4.0).remaining, 36.5)
 
 
 class TestBridgePrayer(unittest.TestCase):

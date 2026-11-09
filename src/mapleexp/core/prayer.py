@@ -9,8 +9,10 @@
 黃色數字讀不出來（字形還沒學到）時，用「白色剛變成黃色」那一刻當基準：
 那時剩下的一定是 60 秒，取上一格與這一格的中間點，誤差不超過半個截圖間隔。
 
-圖示短暫消失（滑鼠移過去跳出說明、特效蓋住）不算結束；連續好幾格都找不到才算。
-找不到時倒數已經數到底（或快到底），就是 buff 真的沒了（寵物沒有重放），要警示。
+圖示找不到（滑鼠移過去跳出說明、特效或視窗蓋住）不代表結束，倒數照走、不丟掉：
+在數秒的話一路數到底，到底了還是找不到，就是 buff 真的沒了（寵物沒有重放），要警示；
+一分鐘以上的話，離上次看到還不到一分鐘就維持「一分鐘以上」，超過才回去找。
+以前找不到兩格就丟掉倒數，之後秒數又讀不出來就一直顯示不出來，真的結束時也不會警示。
 """
 
 from __future__ import annotations
@@ -52,7 +54,9 @@ class PrayerWatch:
         self.status = SEARCHING if self.enabled else OFF
         self._anchor: tuple[float, float] | None = None    # (剩餘秒數, 當時的時間)
         self._anchor_read = False   # 基準是真的讀到的秒數（不是用「白變黃 = 60 秒」推的）
-        self._odd_reads = 0         # 連續幾次讀到跟倒數對不上的秒數
+        self._odd_reads = 0         # 連續幾次讀到跟倒數對不上、但彼此對得上的秒數
+        self._pending: tuple[float, float] | None = None   # 那些對不上的讀數推出來的倒數 (剩餘秒數, 時間)
+        self._guess_slack = GUESS_TOLERANCE_SEC             # 推出來的基準誤差有多大
         self._misses = 0
         self._last_seen: float | None = None
 
@@ -79,10 +83,14 @@ class PrayerWatch:
             if self._misses < LOST_TICKS:
                 return
             left = self.remaining(now)
-            if self.status == COUNTING and left is not None and left <= EXPIRED_MARGIN_SEC:
-                self.status = EXPIRED
-                self._anchor = None
-            elif self.status != EXPIRED:
+            if self.status == COUNTING and left is not None:
+                if left <= EXPIRED_MARGIN_SEC:
+                    self.status = EXPIRED
+                    self._anchor = None
+                return                      # 被擋住而已，倒數照走
+            if self.status == LONG and self._last_seen is not None and now - self._last_seen < FIRST_YELLOW_SEC:
+                return                      # 上次看到還有一分鐘以上，到現在還不可能結束
+            if self.status != EXPIRED:
                 self.status = SEARCHING
                 self._anchor = None
             return
@@ -94,15 +102,22 @@ class PrayerWatch:
             self._anchor = None
             self._anchor_read = False
             self._odd_reads = 0
+            self._pending = None
             return
-        if seconds is not None:
-            if self._believe(now, seconds):
-                self._anchor = (seconds + 0.5, now)
-                self._anchor_read = True
-        elif previous == LONG and last_seen is not None:
-            # 白色剛變黃色：那一刻剩 60 秒，發生在上一格與這一格之間。
-            self._anchor = (FIRST_YELLOW_SEC - (now - last_seen) / 2, now)
-        elif self._anchor is None:
+        if previous == LONG and last_seen is not None:
+            # 白色剛變黃色：那一刻剩 60 秒，發生在上一格與這一格之間。先用這個推出來的倒數，
+            # 這一格讀到的秒數要跟它對得上才信（「59」只讀到「5」不能直接信，不然一變黃就警示）。
+            gap = now - last_seen
+            self._anchor = (FIRST_YELLOW_SEC - gap / 2, now)
+            self._anchor_read = False
+            self._guess_slack = max(GUESS_TOLERANCE_SEC, gap / 2 + 1)
+            self._odd_reads = 0
+            self._pending = None
+            self.status = COUNTING
+        if seconds is not None and self._believe(now, seconds):
+            self._anchor = (seconds + 0.5, now)
+            self._anchor_read = True
+        if self._anchor is None:
             # 一開始就是黃色、又讀不出來：不知道確切秒數，先當作還在找。
             self.status = SEARCHING
             return
@@ -111,17 +126,26 @@ class PrayerWatch:
     def _believe(self, now: float, seconds: int) -> bool:
         """這次讀到的秒數可不可信。跟目前的倒數對得上就信；對不上要連續好幾次才信。"""
         left = self.remaining(now)
-        if self.status == COUNTING and left is not None and self._lost_last_digit(left, seconds):
+        if self.status != COUNTING or left is None:
+            self._odd_reads, self._pending = 0, None
+            return True
+        if self._lost_last_digit(left, seconds):
             return False
-        if self.status != COUNTING or left is None or not self._anchor_read:
-            self._odd_reads = 0
+        slack = READ_TOLERANCE_SEC if self._anchor_read else self._guess_slack
+        if abs(seconds + 0.5 - left) <= slack:
+            self._odd_reads, self._pending = 0, None
             return True
-        if abs(seconds + 0.5 - left) <= READ_TOLERANCE_SEC:
-            self._odd_reads = 0
-            return True
-        self._odd_reads += 1
+        # 對不上：要連續好幾次、而且這幾次彼此對得上（一直往下數）才改用讀到的，
+        # 東一個西一個的誤讀（每次讀錯的字不一樣）不會湊成數
+        if self._pending is not None:
+            sec, at = self._pending
+            same = abs(seconds + 0.5 - (sec - (now - at))) <= READ_TOLERANCE_SEC
+        else:
+            same = False
+        self._odd_reads = self._odd_reads + 1 if same else 1
+        self._pending = (seconds + 0.5, now)
         if self._odd_reads >= CONFIRM_READS:
-            self._odd_reads = 0
+            self._odd_reads, self._pending = 0, None
             return True
         return False
 
@@ -133,7 +157,7 @@ class PrayerWatch:
         """
         if seconds >= 10:
             return False
-        slack = READ_TOLERANCE_SEC if self._anchor_read else GUESS_TOLERANCE_SEC
+        slack = READ_TOLERANCE_SEC if self._anchor_read else self._guess_slack
         low, high = left - 0.5 - slack, left - 0.5 + slack
         if low < 10:
             return False
