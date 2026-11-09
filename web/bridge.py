@@ -693,11 +693,11 @@ class WebSession:
         if zone is None:
             self.prayer.feed(now, seen=False)
             return
-        seconds = self.prayer_reader.read_templates(zone) if zone.has_seconds else None
+        seconds = self.prayer_reader.read_templates(zone)       # 白色（一分鐘以上）或沒切乾淨就是 None
         # 數字沒切乾淨（黏在一起、斷掉）就不問 OCR：位數對不上，教了反而把錯的字形學進去。
         if zone.readable and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
             self._request_prayer(zone)
-        self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.has_seconds)
+        self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.yellow)
 
     def _prayer_key(self, zone) -> str:
         return hashlib.blake2s(zone.shape_key.encode(), digest_size=6).hexdigest()

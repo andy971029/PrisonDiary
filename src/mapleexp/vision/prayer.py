@@ -252,10 +252,6 @@ class TimerZone:
     complete: bool = True           # 每個數字都切得乾淨；False 時 ``digits`` 不可信，不能讀
 
     @property
-    def has_seconds(self) -> bool:
-        return self.yellow
-
-    @property
     def readable(self) -> bool:
         return self.yellow and self.complete and bool(self.digits)
 

@@ -130,21 +130,21 @@ class TestReadTimer(unittest.TestCase):
 
     def test_full_colour_icon_means_over_a_minute(self):
         zone, value = self.read(make_screen(seconds=None))
-        self.assertFalse(zone.has_seconds)
+        self.assertFalse(zone.yellow)
         self.assertIsNone(value)
 
     def test_reads_yellow_seconds(self):
         for seconds in (56, 33, 39, 5):
             with self.subTest(seconds=seconds):
                 zone, value = self.read(make_screen(seconds=seconds, grey_from=10))
-                self.assertTrue(zone.has_seconds)
+                self.assertTrue(zone.yellow)
                 self.assertEqual(value, seconds)
 
     def test_washed_out_stream_colours_still_count_as_yellow(self):
         screen = make_screen(icon_at=None)
         draw_icon(screen, 1180, 1, seconds=56, grey_from=10, colour=WASHED_YELLOW_BGR)
         zone, value = self.read(screen)
-        self.assertTrue(zone.has_seconds)
+        self.assertTrue(zone.yellow)
         self.assertEqual(value, 56)
 
     def test_digit_only_partly_seen_is_not_read(self):
@@ -154,7 +154,7 @@ class TestReadTimer(unittest.TestCase):
         x = 1180 + 1 + digit_mask("5").shape[1] + 1
         screen[1 + 20 : 1 + 23, x + 1, :3] = YELLOW_BGR       # 「1」只剩上面三個像素
         zone, value = self.read(screen)
-        self.assertTrue(zone.has_seconds)
+        self.assertTrue(zone.yellow)
         self.assertFalse(zone.complete)
         self.assertIsNone(value)
 
@@ -163,7 +163,7 @@ class TestReadTimer(unittest.TestCase):
         draw_icon(screen, 1180, 1, seconds=55, grey_from=10)
         screen[1 + 24, 1180 + 6, :3] = YELLOW_BGR             # 兩個 5 中間黏一點
         zone, value = self.read(screen)
-        self.assertTrue(zone.has_seconds)
+        self.assertTrue(zone.yellow)
         self.assertFalse(zone.complete)
         self.assertIsNone(value)
 
@@ -171,12 +171,12 @@ class TestReadTimer(unittest.TestCase):
         screen = make_screen(seconds=None)
         screen[1 + 20 : 1 + 28, 1181:1186, :3] = TAN_BGR
         zone, _ = self.read(screen)
-        self.assertFalse(zone.has_seconds)
+        self.assertFalse(zone.yellow)
 
     def test_unknown_digit_reads_nothing_until_taught(self):
         reader = reader_without("5")
         zone, value = self.read(make_screen(seconds=35, grey_from=10), reader)
-        self.assertTrue(zone.has_seconds)
+        self.assertTrue(zone.yellow)
         self.assertIsNone(value)
         self.assertEqual(reader.teach(zone, 35), 1)
         self.assertEqual(reader.read_templates(zone), 35)
@@ -187,6 +187,12 @@ class TestPrayerWatch(unittest.TestCase):
         w = PrayerWatch()
         w.set_enabled(True)
         return w
+
+    def start(self, w: PrayerWatch, at: float, sec: int) -> None:
+        """讓倒數在 *at* 時剩 *sec*.5 秒：沒有倒數時要先連續兩格讀到對得上的兩位數才信，之後這一格對得上就校正。"""
+        w.feed(at - 11, seen=True, seconds=sec + 11, yellow=True)
+        w.feed(at - 10, seen=True, seconds=sec + 10, yellow=True)
+        w.feed(at, seen=True, seconds=sec, yellow=True)
 
     def test_off_until_enabled(self):
         w = PrayerWatch()
@@ -215,7 +221,7 @@ class TestPrayerWatch(unittest.TestCase):
     def test_one_odd_reading_is_ignored(self):
         """「21」只讀到「2」：跟倒數差太多，不信，倒數照走；下一格讀對就沒事。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=30, yellow=True)
+        self.start(w, 0.0, 30)
         w.feed(9.0, seen=True, seconds=2, yellow=True)
         self.assertAlmostEqual(w.snapshot(9.0).remaining, 21.5)
         w.feed(10.0, seen=True, seconds=20, yellow=True)
@@ -224,7 +230,7 @@ class TestPrayerWatch(unittest.TestCase):
     def test_lost_last_digit_never_wins(self):
         """「29、28、27」連續都只讀到「2」：不管幾次都不信，倒數照走、照樣讀得到之後的秒數。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=30, yellow=True)
+        self.start(w, 0.0, 30)
         for i in range(1, 2 * core.CONFIRM_READS + 1):
             w.feed(float(i), seen=True, seconds=2, yellow=True)
             self.assertAlmostEqual(w.snapshot(float(i)).remaining, 30.5 - i)
@@ -241,14 +247,14 @@ class TestPrayerWatch(unittest.TestCase):
 
     def test_single_digits_are_read_once_the_countdown_gets_there(self):
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=12, yellow=True)
+        self.start(w, 0.0, 12)
         w.feed(3.0, seen=True, seconds=9, yellow=True)
         self.assertAlmostEqual(w.snapshot(3.0).remaining, 9.5)
 
     def test_odd_readings_win_if_they_keep_coming(self):
         """一開始的基準錯了：連續幾次都讀到同一邊，就改用讀到的。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        self.start(w, 0.0, 40)
         for i in range(1, core.CONFIRM_READS):
             w.feed(float(i), seen=True, seconds=30 - i, yellow=True)
             self.assertAlmostEqual(w.snapshot(float(i)).remaining, 40.5 - i)
@@ -275,6 +281,27 @@ class TestPrayerWatch(unittest.TestCase):
         w.feed(8.0, seen=True, seconds=None, yellow=True)
         self.assertAlmostEqual(w.snapshot(8.0).remaining, 54.0)
 
+    def test_first_reading_waits_for_a_second_one(self):
+        """沒有倒數可以對照：一格讀到的不信（可能讀錯），下一格讀到對得上的才開始數。"""
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=50, yellow=True)
+        self.assertEqual(w.snapshot(0.0).status, core.SEARCHING)
+        w.feed(1.0, seen=True, seconds=49, yellow=True)
+        self.assertAlmostEqual(w.snapshot(1.0).remaining, 49.5)
+
+    def test_first_readings_that_disagree_are_not_trusted(self):
+        w = self.watch()
+        w.feed(0.0, seen=True, seconds=50, yellow=True)
+        w.feed(1.0, seen=True, seconds=38, yellow=True)
+        self.assertEqual(w.snapshot(1.0).status, core.SEARCHING)
+
+    def test_single_digit_without_a_countdown_is_never_trusted(self):
+        """沒有倒數可以對照時讀到一位數：多半是「59」只切出「5」，一直讀到也不信，免得一開始就警示。"""
+        w = self.watch()
+        for t in range(4):
+            w.feed(float(t), seen=True, seconds=5, yellow=True)
+        self.assertEqual(w.snapshot(3.0).status, core.SEARCHING)
+
     def test_unreadable_yellow_from_the_start_keeps_searching(self):
         w = self.watch()
         w.feed(0.0, seen=True, seconds=None, yellow=True)
@@ -282,13 +309,13 @@ class TestPrayerWatch(unittest.TestCase):
 
     def test_brief_miss_is_ignored(self):
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=30, yellow=True)
+        self.start(w, 0.0, 30)
         w.feed(1.0, seen=False)
         self.assertEqual(w.snapshot(1.0).status, core.COUNTING)
 
     def test_icon_gone_at_the_end_means_expired(self):
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=3, yellow=True)
+        self.start(w, 0.0, 3)
         w.feed(4.0, seen=False)
         w.feed(5.0, seen=False)
         self.assertEqual(w.snapshot(5.0).status, core.EXPIRED)
@@ -298,7 +325,7 @@ class TestPrayerWatch(unittest.TestCase):
     def test_icon_gone_mid_way_keeps_counting(self):
         """還剩很多秒就不見了：多半是被擋住，倒數照走、不丟掉，也還不警示。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        self.start(w, 0.0, 40)
         w.feed(1.0, seen=False)
         w.feed(2.0, seen=False)
         snap = w.snapshot(2.0)
@@ -308,17 +335,17 @@ class TestPrayerWatch(unittest.TestCase):
     def test_hidden_until_the_end_still_expires(self):
         """一直被擋住：數到底就算結束要警示；以前會丟掉倒數、變回找圖示，就不會警示了。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=40, yellow=True)
-        for t in range(1, 36):
+        self.start(w, 0.0, 40)
+        for t in range(1, 39):
             w.feed(float(t), seen=False)
-        self.assertEqual(w.snapshot(35.0).status, core.COUNTING)
-        w.feed(36.0, seen=False)
-        self.assertEqual(w.snapshot(36.0).status, core.EXPIRED)
+        self.assertEqual(w.snapshot(38.0).status, core.COUNTING)     # 剩 2.5 秒，還在讀數的誤差外
+        w.feed(39.0, seen=False)
+        self.assertEqual(w.snapshot(39.0).status, core.EXPIRED)
 
     def test_back_from_hiding_with_unreadable_digits_keeps_counting(self):
         """擋住後回來、秒數又讀不出來：接著原本的倒數，不會變成顯示不出來。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        self.start(w, 0.0, 40)
         w.feed(5.0, seen=False)
         w.feed(10.0, seen=False)
         w.feed(15.0, seen=True, seconds=None, yellow=True)
@@ -355,7 +382,7 @@ class TestPrayerWatch(unittest.TestCase):
     def test_scattered_misreads_do_not_add_up(self):
         """對不上的讀數每次都不一樣（誤讀），湊滿次數也不改；要一直往下數才算。"""
         w = self.watch()
-        w.feed(0.0, seen=True, seconds=40, yellow=True)
+        self.start(w, 0.0, 40)
         for t, sec in ((1.0, 8), (2.0, 15), (3.0, 3), (4.0, 17)):
             w.feed(t, seen=True, seconds=sec, yellow=True)
         self.assertAlmostEqual(w.snapshot(4.0).remaining, 36.5)
@@ -376,11 +403,12 @@ class TestBridgePrayer(unittest.TestCase):
     def test_reads_seconds_once_enabled(self):
         session = bridge.WebSession(require_bracket=False)
         session.set_prayer(True)
-        clock = iter([10.0, 10.0, 10.0, 10.0])
-        with mock.patch("bridge.time.monotonic", lambda: next(clock)):
-            out = self.tick(session, make_screen(seconds=33, grey_from=10))
+        # 沒有倒數可以對照，要連續兩格讀到對得上的秒數才開始數
+        for now, sec in ((9.0, 36), (10.0, 35)):
+            with mock.patch("bridge.time.monotonic", lambda now=now: now):
+                out = self.tick(session, make_screen(seconds=sec, grey_from=10))
         self.assertEqual(out["prayer"]["status"], "counting")
-        self.assertAlmostEqual(out["prayer"]["remaining"], 33.5)
+        self.assertAlmostEqual(out["prayer"]["remaining"], 35.5)
         self.assertEqual(out["rois"]["prayer"], [1180, 1, 1180 + prayer.ICON_W, 1 + prayer.ICON_H])
 
     def test_windowed_mode_icon_is_found_and_then_tracked(self):
@@ -388,11 +416,11 @@ class TestBridgePrayer(unittest.TestCase):
         session.set_prayer(True)
         screen = make_screen((1000, 106), seconds=33, grey_from=10)
         out = self.tick(session, screen)
-        self.assertEqual(out["prayer"]["status"], "counting")
         self.assertEqual(out["rois"]["prayer"][:2], [1000, 106])
         with mock.patch.object(prayer, "_wide_search", side_effect=AssertionError("不該再大範圍找")):
             out = self.tick(session, screen)
         self.assertEqual(out["rois"]["prayer"][:2], [1000, 106])
+        self.assertEqual(out["prayer"]["status"], "counting")
 
     def test_wide_search_is_rate_limited(self):
         session = bridge.WebSession(require_bracket=False)
@@ -424,7 +452,8 @@ class TestBridgePrayer(unittest.TestCase):
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["kind"], "digits")
         session.ocr_result(requests[0]["id"], json.dumps(["35", "3 5", "35", ""]))
-        out = self.tick(session, screen)
+        self.tick(session, screen)
+        out = self.tick(session, screen)       # 學會之後連續兩格讀到才開始數
         self.assertEqual(out["prayer"]["status"], "counting")
         self.assertEqual(int(out["prayer"]["remaining"]), 35)
 
