@@ -99,6 +99,8 @@ scripts/
 
 圖鑑都是客戶端資料的快照，遊戲改版不會自動更新，要在裝了遊戲的電腦上匯出。更新遊戲後雙擊根目錄的 `update_data.bat`：照順序重跑所有匯出、列出每份圖鑑的數量變化（變少的會警示）、跑測試，輸入 `y` 才升版號、提交並推送到 main，之後自動部署。工作目錄有未提交的修改或不在 main 時不會開始。
 
+部署（`.github/workflows/pages.yml`）會把 `web/mobs/`、`web/npcs/`、`web/minimaps/` 的兩千多張圖用 `scripts/pack_images.py` 併成十幾個 `.bin` 包，網站上只放這些包與記位置的 `packs.json`，網頁用 Range 只抓要的那張：GitHub Pages 檔案一多就常卡在 `syncing_files`。repo 裡還是散檔，本機開發沒有 `packs.json`，網頁就直接讀散檔。
+
 ## 測試
 
 測試都不需要遊戲或瀏覽器：視覺管線用 `src/mapleexp/testfont.py` 的點陣字型合成畫面，

@@ -785,7 +785,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.29.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2281,6 +2281,51 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const fmtInt = (n) => (n == null ? "--" : n.toLocaleString());
 const expPerHp = (m) => (m.hp > 0 && m.exp != null ? m.exp / m.hp : null);
 const mapLabel = (id) => (book.data.maps[id] || ["", ""]).join(" ").trim();
+// 怪物、NPC、小地圖的圖：網站上併成幾個 .bin 包（scripts/pack_images.py，部署時才做；兩千多個散檔會讓 GitHub Pages 部署卡住），
+// packs.json 記每張在哪包哪一段，用 Range 只抓那一段做成 blob 網址；本機開發沒有 packs.json 就直接讀 web/ 裡的散檔。
+// 標籤寫 <img data-pk="mobs/<id>.png">，放進頁面時由下面的 MutationObserver 補上 src；有 loading="lazy" 的等捲到附近才抓。
+const packs = { index: fetch("packs.json").then((res) => res.ok ? res.json() : null).catch(() => null), whole: new Map(), urls: new Map() };
+function packUrl(path) {
+  if (!packs.urls.has(path)) packs.urls.set(path, (async () => {
+    const at = (await packs.index)?.[path];
+    if (!at) return path;
+    const [file, start, length] = at;
+    // 伺服器不認 Range 會回整包（200），那就整包留著自己切，同一包不再下載第二次
+    if (!packs.whole.has(file)) {
+      const res = await fetch(`packs/${file}`, { headers: { Range: `bytes=${start}-${start + length - 1}` } });
+      if (!res.ok) throw new Error(`${file}: ${res.status}`);
+      if (res.status === 206) return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: "image/png" }));
+      packs.whole.set(file, res.arrayBuffer());
+    }
+    const all = await packs.whole.get(file);
+    return URL.createObjectURL(new Blob([all.slice(start, start + length)], { type: "image/png" }));
+  })());
+  return packs.urls.get(path);
+}
+function packFill(img) {
+  const path = img.dataset.pk;
+  if (!path) return;
+  delete img.dataset.pk;
+  packUrl(path).then((url) => { img.src = url; }, () => { packs.urls.delete(path); });
+}
+const packLazy = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) { packLazy.unobserve(e.target); packFill(e.target); }
+}, { rootMargin: "600px" });
+new MutationObserver(async (records) => {
+  const imgs = [];
+  for (const rec of records) for (const node of rec.addedNodes) {
+    if (node.nodeType !== 1) continue;
+    if (node.matches("img[data-pk]")) imgs.push(node);
+    imgs.push(...node.querySelectorAll("img[data-pk]"));
+  }
+  if (!imgs.length) return;
+  const index = await packs.index;
+  for (const img of imgs) {
+    if (!index) { img.src = img.dataset.pk; delete img.dataset.pk; }        // 本機：散檔，lazy 交給瀏覽器
+    else if (img.loading === "lazy") packLazy.observe(img);
+    else packFill(img);
+  }
+}).observe(document.body, { childList: true, subtree: true });
 // 怪物圖是匯出腳本裁好的站姿 PNG（web/mobs/<id>.png），pic 記著原始寬高；外觀借用別隻怪的
 // （活動分身、召喚物）第三個元素是那隻的 ID。縮進指定的框、不放大，寬高先寫進標籤，捲動時圖還沒
 // 載進來列高也不會跳。
@@ -2288,7 +2333,7 @@ function picTag(m, maxW, maxH, extra = "") {
   if (!m.pic) return "";
   const [w, h, source = m.id] = m.pic;
   const k = Math.min(1, maxW / w, maxH / h);
-  return `<img src="mobs/${source}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(m.name)}"${extra}>`;
+  return `<img data-pk="mobs/${source}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(m.name)}"${extra}>`;
 }
 const BOOK_COLS = [
   { label: "怪物", sort: (m) => m.name, html: (m) =>
@@ -2846,7 +2891,7 @@ function npcPicTag(n, maxW, maxH, extra = "") {
   if (!n.pic) return "";
   const [w, h] = n.pic;
   const k = Math.min(1, maxW / w, maxH / h);
-  return `<img src="npcs/${n.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(n.name)}"${extra}>`;
+  return `<img data-pk="npcs/${n.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(n.name)}"${extra}>`;
 }
 const countTag = (n, title = "") => n > 1 ? `<small class="n"${title ? ` title="${title}"` : ""}>×${fmtInt(n)}</small>` : "";
 // 道具 chip：道具圖鑑有的帶圖示、點了彈小卡；沒有的（現金道具之類）只列名字
@@ -2985,7 +3030,7 @@ function miniMapHtml(m) {
   }).join("");
   const npcDots = npcs.map(([id, x, y]) => dot(`${pos(x, y)} data-tip="npc" data-id="${id}"`, npcName(id))).join("");
   return `<div class="mm">
-      <div class="mm-stage" style="width:${w * 2}px"><img src="minimaps/${m.id}.png" width="${w}" height="${h}" alt="${esc(m.name)}的小地圖" decoding="async">${portalDots}${npcDots}</div>
+      <div class="mm-stage" style="width:${w * 2}px"><img data-pk="minimaps/${m.id}.png" width="${w}" height="${h}" alt="${esc(m.name)}的小地圖" decoding="async">${portalDots}${npcDots}</div>
       <div class="mm-key"><span><i></i>NPC</span>${portals.length ? '<span><i class="portal"></i>傳送點</span>' : ""}</div>
     </div>`;
 }

@@ -1,6 +1,7 @@
 # push 到 main 就重新打包並發布到 GitHub Pages。
 # mapleexp.zip 是打包產物、不進 git，所以要在這裡用 build_web.py 現做。
 # 只發布網頁真正會載入的檔案（頁面、資料 JSON、圖片與提示音效），src/、tests/ 這些不必放上網站。
+# 檔案數也要壓低：GitHub Pages 檔案一多就常卡在 syncing_files，所以怪物、NPC、小地圖的圖要先併包（scripts/pack_images.py）。
 # 紙娃娃（web/avatar.json、web/avatar/）不在這裡：太大會讓部署卡住，另外由 scripts/publish_avatar.py 推到 PrisonDiary-avatar。
 name: Deploy to GitHub Pages
 
@@ -42,10 +43,9 @@ jobs:
           cp web/index.html web/bridge.py web/mapvocab.json web/monsterbook.json web/itembook.json web/questbook.json web/npcbook.json web/mapbook.json web/worldmap.json web/mapleexp.zip web/favicon.png web/favicon-32.png _site/
           cp -r web/sounds _site/
           cp -r web/goddess _site/
-          cp -r web/mobs _site/
           cp -r web/icons _site/
-          cp -r web/npcs _site/
-          cp -r web/minimaps _site/
+          # 怪物、NPC、小地圖兩千多張散圖會讓部署卡在 syncing_files，併成十幾個包再放上去
+          python scripts/pack_images.py web _site
           cp -r web/worldmap _site/
 
       - uses: actions/configure-pages@v5
