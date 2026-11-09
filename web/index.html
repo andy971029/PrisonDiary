@@ -785,7 +785,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -946,7 +946,7 @@
         <button role="tab" data-sub="npcs" aria-selected="false" aria-controls="npcbook">NPC</button>
         <button role="tab" data-sub="maps" aria-selected="false" aria-controls="mapbook">地圖</button>
       </nav>
-      <label class="switch here-switch" title="開著、又在分享遊戲畫面而且讀到地圖名稱時，每個分類都只看這張地圖：這裡的怪、牠們會掉的道具與裝備、這裡的 NPC 與他們的任務"><input type="checkbox" id="book-here" autocomplete="off"><i></i>以所在地圖篩選</label>
+      <label class="switch here-switch" title="開著、又在分享遊戲畫面而且讀到地圖名稱時，每個分類都只看這張地圖：這裡的怪、牠們會掉的道具與裝備、這裡的 NPC 與他們的任務"><input type="checkbox" id="book-here" autocomplete="off"><i></i><span id="book-here-label">以所在地圖篩選（尚未分享遊戲畫面）</span></label>
       <span class="sec-sub" id="book-count" data-for="mobs">載入中…</span>
       <span class="sec-sub" id="items-count" data-for="items">載入中…</span>
       <span class="sec-sub" id="equips-count" data-for="equips">載入中…</span>
@@ -2514,7 +2514,7 @@ $("book-body").addEventListener("keydown", (e) => {
 for (const id of ["book-q", "book-lo", "book-hi"]) $(id).addEventListener("input", () => renderBook());
 $("book-all").addEventListener("change", () => renderBook());
 $("book-unreleased").addEventListener("change", () => renderBook());
-$("book-here").addEventListener("change", () => { book.lastHere = hereKey(); renderAllBooks(); });
+$("book-here").addEventListener("change", renderAllBooks);
 
 // 每格叫一次，停止分享時也叫：開著「所在地圖」時，換了地圖或開始、停止分享就全部重篩
 const hereKey = () => `${!!stream}|${$("map-name").textContent}`;
@@ -2522,6 +2522,9 @@ function syncBookTools() {
   const key = hereKey();
   if (key === book.lastHere) return;
   book.lastHere = key;
+  // 開關上寫著現在讀到哪張地圖：沒在分享、或分享了但讀不到（被擋住、分享錯視窗）分開講
+  const name = $("map-name").textContent.trim();
+  $("book-here-label").textContent = `以所在地圖篩選（${!stream ? "尚未分享遊戲畫面" : name && name !== "--" ? name : "讀取地圖名稱失敗"}）`;
   if ($("book-here").checked) renderAllBooks();
 }
 
