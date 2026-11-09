@@ -785,7 +785,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -4117,10 +4117,10 @@ function dollWear(id) {
   if (worn[item.cat] === id) { delete worn[item.cat]; dollChanged(); return; }
   const covers = (it, slot) => (it?.v || "").includes(slot);
   worn[item.cat] = id;
-  // 上下身、武器與盾牌互斥，穿新的就脫掉衝突的
+  // 套服跟上衣、褲子互斥，雙手武器跟盾牌互斥，穿新的就脫掉衝突的。
+  // 上衣的 vslot 寫了 Pn（長版毛衣、甚至有些短袖 T 恤）遊戲裡照樣能穿褲子，褲子照圖層畫在上衣底下
   if (item.cat === "longcoat") { delete worn.coat; delete worn.pants; }
-  if (item.cat === "coat") { delete worn.longcoat; if (covers(item, "Pn")) delete worn.pants; }
-  if (item.cat === "pants") { delete worn.longcoat; if (covers(doll.byId.get(worn.coat), "Pn")) delete worn.coat; }
+  if (item.cat === "coat" || item.cat === "pants") delete worn.longcoat;
   if (item.cat === "weapon" && covers(item, "Si")) delete worn.shield;
   if (item.cat === "shield" && covers(doll.byId.get(worn.weapon), "Si")) delete worn.weapon;
   dollChanged();
