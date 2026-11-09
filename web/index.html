@@ -785,7 +785,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.28.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -4005,9 +4005,10 @@ function dollIcon(sheet, ic) {
   return `<i style="background:url(${DOLL_BASE}avatar/${sheet}.png) -${ic % DOLL_COLS * DOLL_CELL}px -${Math.floor(ic / DOLL_COLS) * DOLL_CELL}px"></i>`;
 }
 // 時裝限定性別跟遊戲一樣看編號的千位數：0 限男、1 限女，其他男女都能穿（客戶端沒有另外的欄位）
-// 髮型、臉型客戶端沒有性別資料，照 maplestory.io（台版）每段編號的 requiredGender；最早那批（髮型 30、31、40、41，臉型 20、21）不限
+// 髮型、臉型客戶端沒有性別資料，照 maplestory.io（台版）每段編號的 requiredGender；最早那批（髮型 30、31、40、41，臉型 20、21）不限。
+// 臉型 26、27 它標反了：26 是 25 的女版（亞當／夏娃、俏魔女、蘿莉），27 是 28 的男版（碳酸少年／少女），照名字改過來
 const DOLL_STYLE_SEX = { hair: { 33: 0, 35: 0, 36: 0, 43: 0, 45: 0, 46: 0, 63: 0, 34: 1, 37: 1, 38: 1, 44: 1, 47: 1, 48: 1, 64: 1, 68: 1 },
-  face: { 23: 0, 25: 0, 26: 0, 53: 0, 55: 0, 56: 0, 24: 1, 27: 1, 28: 1, 54: 1 } };
+  face: { 23: 0, 25: 0, 27: 0, 53: 0, 55: 0, 56: 0, 24: 1, 26: 1, 28: 1, 54: 1 } };
 const dollSexOf = (id, kind) => kind ? DOLL_STYLE_SEX[kind][Math.floor(id / 1000)] : Math.floor(id / 1000) % 10;
 // 列表只留那個性別能用的（限那性別的加上不限的）；doll.sex 是 null 就全列
 const dollSexOk = (id, kind) => { const sex = dollSexOf(id, kind); return doll.sex == null || (sex !== 0 && sex !== 1) || sex === doll.sex; };
