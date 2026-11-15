@@ -97,11 +97,13 @@ MESO_SEARCH_INTERVAL_SEC = 3.0
 MESO_LOST_TICKS = 2
 # 楓幣框裡的數字是黑字白底，跟等級一樣走數字模型、多倍率互相印證。
 MESO_OCR_SCALES = (3, 4, 6, 8)
-# 祈禱秒數只有兩位、8 像素高，放大多一點 OCR 才讀得動。
-PRAYER_OCR_SCALES = (4, 6, 8, 10)
 # 最上面那一排找不到祈禱圖示時（視窗模式，buff 在遊戲視窗頂端而不是畫面頂端），
-# 多久到畫面上半部大範圍找一次。大範圍找很慢，不能每格都做；找到之後就跟著位置走。
+# 多久到畫面上半部大範圍找一次。大範圍找很慢（瀏覽器裡約 0.3 秒，整頁會頓一下），不能每格都做；
+# 找到之後就跟著位置走，圖示不見再出現時也先看原來那一列。
+# 連續這麼多次都沒找到（多半是身上根本沒有祈禱），間隔就每次加倍，最長到上限。
 PRAYER_WIDE_SEARCH_SEC = 5.0
+PRAYER_WIDE_QUICK_TRIES = 3
+PRAYER_WIDE_SEARCH_MAX_SEC = 30.0
 
 
 def _png_data_url(gray: np.ndarray) -> str:
@@ -220,18 +222,20 @@ class WebSession:
         self._meso_last_try = 0.0
         self._meso_raw = ""
 
-        # 神聖祈禱：使用者按了倒數鈕才開始找畫面右上角的 buff 圖示。
+        # 神聖祈禱：開著辨識才會找畫面右上角的 buff 圖示。
         self.prayer = PrayerWatch()
-        self.prayer_reader = prayervision.TimerReader()
-        self._prayer_icon: tuple[int, int] | None = None
+        self._prayer_icon: tuple[int, int] | None = None    # 這一格圖示的左上角，沒找到是 None
+        self._prayer_row: int | None = None                 # 上次找到圖示的那一列；不見再出現時先看這裡
+        self._prayer_size: tuple[int, int] | None = None    # 記下那一列時的畫面大小，變了就作廢
         self._prayer_wide_at = float("-inf")
-        self._prayer_ocr_misses: dict[str, int] = {}
-        self._prayer_last_try = 0.0
+        self._prayer_wide_misses = 0                        # 大範圍搜尋連續幾次沒找到
         self._prayer_read: dict | None = None     # 這一格實際讀到什麼（匯出樣本用），沒找到圖示是 None
+        self._frame_at: float | None = None       # 收到這一格畫面的時間：倒數要照截圖當下算，不是照處理完的時間
 
     # ------------------------------------------------------------------ #
 
     def feed_frame(self, rgba, width: int, height: int) -> None:
+        self._frame_at = time.monotonic()
         self.capturer.set_frame(rgba, width, height)
 
     def set_boost(self, factor: float) -> None:
@@ -259,7 +263,9 @@ class WebSession:
         """開始／停止追蹤神聖祈禱圖示。停止再開會從頭找。"""
         self.prayer.set_enabled(on)
         self._prayer_icon = None
+        self._prayer_row = None
         self._prayer_wide_at = float("-inf")
+        self._prayer_wide_misses = 0
 
     def set_ocr_ready(self, ready: bool) -> None:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
@@ -690,60 +696,47 @@ class WebSession:
         frame = self.capturer.frame
         if frame is None:
             return
-        now = time.monotonic()
-        wide = now - self._prayer_wide_at >= PRAYER_WIDE_SEARCH_SEC
-        found = prayervision.find_icon(frame, hint=self._prayer_icon, wide=wide)
-        if found is None and wide:
-            self._prayer_wide_at = now
+        now = self._frame_at if self._frame_at is not None else time.monotonic()
+        found = self._find_prayer_icon(frame, now)
         if found is None:
             self._prayer_icon = None
             self.prayer.feed(now, seen=False)
             return
         self._prayer_icon = found[:2]
-        zone = prayervision.cut_timer(frame, self._prayer_icon)
-        if zone is None:
+        read = prayervision.read_timer(frame, self._prayer_icon)
+        if read is None:
             self.prayer.feed(now, seen=False)
             return
-        seconds = self.prayer_reader.read_templates(zone)       # 白色（一分鐘以上）或沒切乾淨就是 None
-        # 數字沒切乾淨（黏在一起、斷掉）就不問 OCR：位數對不上，教了反而把錯的字形學進去。
-        if zone.readable and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
-            self._request_prayer(zone)
-        self._prayer_read = {"score": round(found[2], 3), "yellow": zone.yellow, "complete": zone.complete,
-                             "digits": len(zone.digits), "seconds": seconds}
-        self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.yellow)
+        self._prayer_read = {"score": round(found[2], 3), "kind": read.kind, "value": read.value,
+                             "match": round(read.score, 3), "margin": round(read.margin, 3), "yellow": read.yellow}
+        seconds = read.value if read.kind == prayervision.SECONDS else None
+        self.prayer.feed(now, seen=True, kind=read.kind, seconds=seconds, score=read.score)
 
-    def _prayer_key(self, zone) -> str:
-        return hashlib.blake2s(zone.shape_key.encode(), digest_size=6).hexdigest()
+    def _find_prayer_icon(self, frame: np.ndarray, now: float) -> tuple[int, int, float] | None:
+        """上一格的位置 → 上次看到的那一列 → 最上面那一排，都沒有才隔一陣子大範圍找一次。"""
+        size = (int(frame.shape[1]), int(frame.shape[0]))
+        if size != self._prayer_size:       # 視窗大小變了，記下的位置全部作廢
+            self._prayer_size = size
+            self._prayer_icon = self._prayer_row = None
+            self._prayer_wide_at, self._prayer_wide_misses = float("-inf"), 0
+        wide = now - self._prayer_wide_at >= self._prayer_wide_interval()
+        found = prayervision.find_icon(frame, hint=self._prayer_icon, wide=wide, row=self._prayer_row)
+        if found is not None:
+            self._prayer_row = found[1]
+            self._prayer_wide_misses = 0
+        elif wide:
+            self._prayer_wide_at = now
+            self._prayer_wide_misses += 1
+        return found
 
-    def _prayer_may_retry(self, zone) -> bool:
-        if self._prayer_ocr_misses.get(self._prayer_key(zone), 0) < OCR_RETRY_LIMIT:
-            return True
-        return time.monotonic() - self._prayer_last_try >= LEVEL_SLOW_RETRY_SEC
-
-    def _request_prayer(self, zone) -> None:
-        if any(key.startswith("prayer:") for key in self._ocr_inflight):
-            return      # 秒數一直在變，同時只問一件
-        image = prayervision.ocr_image(zone)
-        images = [_png_data_url(ocr.prepare(image, scale=s, bright_text=False))
-                  for s in PRAYER_OCR_SCALES]
-        self._request_ocr(f"prayer:{self._prayer_key(zone)}", "digits", images, {"zone": zone})
-
-    def _finish_prayer(self, zone, texts) -> None:
-        """跟楓幣同一套規矩：位數對的答案至少兩個、而且全部一致、不到 60 才信，信了就教給模板。"""
-        self._prayer_last_try = time.monotonic()
-        expected = len(zone.digits)
-        raw = ["".join((t or "").translate(ident._DIGIT_LOOKALIKES).split()) for t in texts or []]
-        exact = [t for t in raw if t.isdigit() and len(t) == expected]
-        key = self._prayer_key(zone)
-        if len(exact) < 2 or len(set(exact)) != 1 or int(exact[0]) >= 60:
-            self._prayer_ocr_misses[key] = self._prayer_ocr_misses.get(key, 0) + 1
-            return
-        self._prayer_ocr_misses.pop(key, None)
-        self.prayer_reader.teach(zone, int(exact[0]))
+    def _prayer_wide_interval(self) -> float:
+        extra = max(0, self._prayer_wide_misses - PRAYER_WIDE_QUICK_TRIES)
+        return min(PRAYER_WIDE_SEARCH_MAX_SEC, PRAYER_WIDE_SEARCH_SEC * 2 ** min(extra, 6))
 
     def _prayer_payload(self) -> dict:
         snap = self.prayer.snapshot(time.monotonic())
-        # read 只給「匯出祈禱樣本」對照用：這一格模板比對的分數、有沒有黃色數字、切得乾不乾淨、讀到幾秒。
+        # read 只給「匯出祈禱樣本」對照用：這一格圖示比對的分數、讀到的是哪一種（秒數、分鐘、沒數字、
+        # 讀不出來）、數值、數字有多像、比第二像的高多少。
         return {"status": snap.status, "remaining": snap.remaining, "read": self._prayer_read}
 
     def _prayer_rect(self) -> list[int] | None:
@@ -850,8 +843,6 @@ class WebSession:
             self._finish_map_name(ctx, texts)
         elif rid.startswith("meso:"):
             self._finish_meso(ctx["zone"], texts)
-        elif rid.startswith("prayer:"):
-            self._finish_prayer(ctx["zone"], texts)
 
     def _level_may_retry(self, key: str) -> bool:
         """連續讀不出來幾次之後改成慢慢重試，而不是永遠放棄。

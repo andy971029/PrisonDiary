@@ -787,7 +787,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.30.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.31.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1485,6 +1485,7 @@ function tick() {
 
   if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
   frameCtx.drawImage(video, 0, 0, w, h);
+  frameCapturedAt = Date.now();
   const image = frameCtx.getImageData(0, 0, w, h);
 
   let out;
@@ -4436,7 +4437,7 @@ $("set-save").addEventListener("click", () => {
 setBtn("settings", "gear", "設定");
 
 // ---------------------------------------------------------------- 神聖祈禱倒數
-// 預設開著：Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的秒數（vision/prayer.py）。
+// 預設開著：Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的數字（vision/prayer.py），再把每格讀到的換算成結束時刻（core/prayer.py）。
 // 沒用祈禱的人只會看到「—」。按鈕只用來開關提醒（閃爍與音效），倒數本身照跑。
 // 設定裡可以整個關掉（效能吃緊時），關掉後 Python 不找圖示，按鈕也藏起來。
 // 一分鐘以上圖示上是白色的分鐘數、不知道確切秒數，只顯示「1m+」；剩不到一分鐘會變成黃色的秒數，
@@ -4554,6 +4555,7 @@ const SAMPLE_NEAR = { width: 352, height: 48, left: 160, above: 9 };    // 圖�
 const SAMPLE_BLIND = { width: 640, height: 112 };       // 視窗標題列、上下黑邊底下的那一排都還在裡面
 const SAMPLE_LABEL_W = 360;
 const SAMPLE_HEAD_H = 76;
+let frameCapturedAt = 0;        // 這一格畫面是什麼時候截的；辨識要花時間（偶爾超過一秒），樣本要記截圖當下
 let prayerSamples = [];         // { image: ImageData, meta }，舊的在前
 let prayerSampleRect = null;    // 這次分享最後一次看到圖示的位置；被擋住的那幾格照樣存同一塊
 
@@ -4570,7 +4572,7 @@ function recordPrayerSample(out) {
   const x = near ? Math.max(0, Math.min(fw - w, near[0] - SAMPLE_NEAR.left)) : fw - w;
   const y = near ? Math.max(0, Math.min(fh - h, near[1] - SAMPLE_NEAR.above)) : 0;
   const p = out.prayer;
-  const now = Date.now();
+  const now = frameCapturedAt || Date.now();
   prayerSamples.push({
     image: frameCtx.getImageData(x, y, w, h),
     meta: {
@@ -4596,9 +4598,9 @@ function syncSampleNote() {
 function sampleLabel(meta) {
   const time = new Date(meta.at).toLocaleTimeString("zh-Hant", { hour12: false }) + "." + String(meta.at % 1000).padStart(3, "0");
   const r = meta.read;
+  const kind = { seconds: "黃色秒數", minutes: "白色分鐘", blank: "沒有數字", unreadable: "讀不出來" };
   const read = !r ? "沒找到圖示"
-    : !r.yellow ? `找到圖示 ${r.score}，白色（一分鐘以上）`
-    : `找到圖示 ${r.score}，黃色 ${r.digits} 位，讀到 ${r.seconds ?? "？"}${r.complete ? "" : "（沒切乾淨）"}`;
+    : `圖示 ${r.score}，${kind[r.kind] || r.kind}${r.value == null ? "" : ` ${r.value}`}（像 ${r.match}，領先 ${r.margin}）`;
   return [
     `${time}  顯示 ${meta.shown}`,
     `狀態 ${meta.status}${meta.remaining == null ? "" : `  剩 ${meta.remaining.toFixed(2)}`}`,

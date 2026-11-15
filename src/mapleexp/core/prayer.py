@@ -1,49 +1,61 @@
-"""神聖祈禱的剩餘時間：把每格讀到的圖示狀態變成一個連續的倒數。
+"""神聖祈禱的剩餘時間：把每格讀到的東西變成一個「結束時刻」。
 
-畫面只告訴我們兩種事：
+畫面能告訴我們的只有四種事（``vision/prayer.py`` 的 ``read_timer``）：
 
-* 圖示左下角是白色的分鐘數：還有一分鐘以上，不知道確切秒數。
+* 白色的分鐘數：還有一分鐘以上，不知道確切秒數。
 * 黃色的秒數：真正的剩餘秒數（遊戲是無條件捨去，顯示 56 代表 56.x 秒）。
+* 圖示在、上面沒有數字：歸零之後圖示還會閃幾秒才消失。
+* 找不到圖示：結束了，或只是被擋住（滑鼠移過去跳出說明、特效、別的視窗）。
 
-截圖之間（最長 10 秒一張）由網頁自己往下數，每讀到一次黃色秒數就校正一次。
-黃色數字讀不出來（字形還沒學到）時，用「白色剛變成黃色」那一刻當基準：
-那時剩下的一定是 60 秒，取上一格與這一格的中間點，誤差不超過半個截圖間隔。
+整個狀態只有一個數：**祈禱在什麼時候結束**。每讀到一次黃色秒數，就等於有人說
+「現在再過這麼多秒就結束」，是一張票；最近幾張票裡有夠多張說的是同一個時刻才採用。
+讀錯的那一格（29 只讀到 2）算出來的結束時刻跟別張對不上，自然湊不成數，
+不必一條一條規則去猜「這個讀數可不可信」。白色剛變成黃色的那一刻剩下的一定是 60 秒，
+這也是一張票，而且在讀數還不夠多的頭一兩格先頂著用。
 
-圖示找不到（滑鼠移過去跳出說明、特效或視窗蓋住）不代表結束，倒數照走、不丟掉：
-在數秒的話一路數到底，到底了還是找不到，就是 buff 真的沒了（寵物沒有重放），要警示；
-一分鐘以上的話，離上次看到還不到一分鐘就維持「一分鐘以上」，超過才回去找。
-
-讀到的秒數不一定可信：串流糊掉時「29」常只切出「2」、字形也可能認錯，信錯一次就會提早警示。
-所以每個讀數都要先跟目前的倒數對照（:meth:`PrayerWatch._believe`）：
-
-* 對得上（誤差在基準的容許範圍內）就校正。
-* 只讀到十位數（倒數還有兩位數，讀到的一位數剛好是十位數）一律不信。
-* 其他對不上的，要連續好幾次、而且彼此一路往下數才改用讀到的（基準本身錯了的時候）。
-* 沒有倒數可以對照（剛開始、圖示消失太久）時，要連續兩格讀到彼此對得上的兩位數才信，一位數不信。
+有了結束時刻，看不看得到圖示都一樣往下數：被擋住就照數，時間到了還看不到就是結束了。
+沒有數字的圖示只在快結束時才當作「結束了」，它絕對不是「一分鐘以上」。以前把
+「沒有黃色數字」一律當成一分鐘以上，祈禱自然結束（寵物沒重放）時倒數會從 0 跳回 1m+，
+警示也跟著被重置。現在要明確讀到白色的數字才算一分鐘以上。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+# 每一格讀到什麼（``vision/prayer.py`` 的 ``TimerRead.kind``）。
+SECONDS = "seconds"         # 黃色的秒數
+MINUTES = "minutes"         # 白色的分鐘數：還有一分鐘以上
+BLANK = "blank"             # 圖示上沒有數字：歸零之後、消失之前那幾秒
+UNREADABLE = "unreadable"   # 有東西但認不出來（被擋住一半、畫面太糊）
+
 # 黃色秒數第一次出現時的剩餘秒數。
 FIRST_YELLOW_SEC = 60.0
-# 連續這麼多格找不到圖示才算不見了（一格沒找到常常只是被特效閃過）。
-LOST_TICKS = 2
-# 讀到的秒數跟讀出來的倒數差 2 秒以上就是讀錯（誤差只有截圖時間的抖動）。
-READ_TOLERANCE_SEC = 2.0
-# 「白變黃 = 60 秒」推出來的倒數，誤差是兩格間隔的一半（截圖最長 10 秒一張）；至少給這麼多。
-GUESS_TOLERANCE_SEC = 6.0
-# 對不上的讀數連續這麼多次、而且彼此一路往下數，才改用讀到的。
-CONFIRM_READS = 3
-# 沒有倒數可以對照時，連續這麼多次對得上的讀數才信。
-FIRST_CONFIRM_READS = 2
+# 白色與黃色之間隔了這麼久以上（中間被擋住），就不知道是哪一刻變黃的，不拿來推。截圖最長 10 秒一張。
+TURN_MAX_GAP_SEC = 12.0
+# 看最近幾張票、其中幾張一致才採用、差多少以內算一致。每張票本身有 ±0.5 秒的誤差
+# （遊戲無條件捨去），所以同一個結束時刻的票彼此最多差 1 秒。
+VOTES = 5
+AGREE = 3
+AGREE_SEC = 1.5
+# 新算出來的結束時刻跟目前的差不到這麼多就不動它，免得倒數前後跳。往後調（倒數變多）的門檻
+# 比往前調高：同一個結束時刻的票最多差 1 秒，差不到 1 秒就往後調只會讓數字跳回去；寧可早一點提醒。
+EARLIER_STEADY_SEC = 0.6
+LATER_STEADY_SEC = 1.0
+# 圖示上沒有數字：離結束這麼近以內，就是已經歸零、正在消失。
+BLANK_END_SEC = 5.0
+# 歸零後圖示還會閃這麼久才消失。從快結束到這段時間過完，底圖上沒有數字，偶爾會有幾分像某個白色的字；
+# 這段時間裡的「白色分鐘數」要像到這個程度才信（真的重放時白字實測 0.87 以上，沒有數字的圖示最高 0.54）。
+BLINK_SEC = 8.0
+SURE_SCORE = 0.8
+# 上次看到的是一分鐘以上：之後看不到圖示，一分鐘內不可能結束；超過就不知道走到哪了。
+LONG_HOLD_SEC = 60.0
 
 OFF = "off"             # 沒在追蹤
 SEARCHING = "searching" # 正在找圖示，或看到了但還不知道剩幾秒
 LONG = "long"           # 一分鐘以上
-COUNTING = "counting"   # 不到一分鐘，有倒數（讀到的，或白變黃推的）
-EXPIRED = "expired"     # 圖示不見了，而且倒數已經到底
+COUNTING = "counting"   # 不到一分鐘，有倒數
+EXPIRED = "expired"     # 結束了：時間到了而且看不到圖示，或圖示上已經沒有數字
 
 
 @dataclass(frozen=True)
@@ -53,7 +65,7 @@ class PrayerSnapshot:
 
 
 class PrayerWatch:
-    """狀態只有 COUNTING 時有倒數（``_anchor``），其他狀態一定是 None。"""
+    """狀態是 COUNTING 時一定有結束時刻（``_end``），其他狀態一定沒有。"""
 
     def __init__(self) -> None:
         self.enabled = False
@@ -61,111 +73,103 @@ class PrayerWatch:
 
     def reset(self) -> None:
         self.status = SEARCHING if self.enabled else OFF
-        self._last_seen: float | None = None    # 上次看到圖示的時間
-        self._misses = 0                        # 連續幾格沒看到圖示
-        self._drop_anchor()
+        self._last_long: float | None = None    # 上次讀到白色分鐘數的時間
+        self._expired_at: float | None = None   # 什麼時候判定結束的
+        self._forget()
 
-    def _drop_anchor(self) -> None:
-        self._anchor: tuple[float, float] | None = None    # (剩餘秒數, 當時的時間)
-        self._slack = READ_TOLERANCE_SEC                    # 這個倒數的誤差：讀到的 2 秒，推的看間隔
-        self._pending: tuple[float, float] | None = None    # 跟倒數對不上的讀數 (剩餘秒數, 時間)
-        self._pending_count = 0                             # 連續幾次讀到彼此對得上的這種讀數
+    def _forget(self) -> None:
+        self._end: float | None = None                  # 估出來的結束時刻
+        self._votes: list[tuple[float, float]] = []     # (投票的時間, 它說的結束時刻)，舊的在前
 
     def set_enabled(self, on: bool) -> None:
         self.enabled = bool(on)
         self.reset()
 
     def remaining(self, now: float) -> float | None:
-        if self._anchor is None:
-            return None
-        sec, at = self._anchor
-        return sec - (now - at)
+        return None if self._end is None else self._end - now
 
-    def feed(self, now: float, seen: bool, seconds: int | None = None, yellow: bool = False) -> None:
+    def feed(self, now: float, seen: bool, kind: str | None = None, seconds: int | None = None,
+             score: float = 1.0) -> None:
         """每格呼叫一次。
 
-        ``seen``：找到圖示了沒。``yellow``：左下角有沒有黃色數字。
-        ``seconds``：讀出來的黃色秒數（讀不出來給 None）。
+        ``seen``：找到圖示了沒。``kind``：左下角讀到什麼（上面那四種）。
+        ``seconds``：``kind`` 是 SECONDS 時的秒數。``score``：讀到的東西有多像（``TimerRead.score``）。
         """
         if not self.enabled:
             return
-        if not seen:
-            self._lost(now)
+        if not seen or kind is None:
+            self._unseen(now)
             return
-        self._misses = 0
-        previous, last_seen = self.status, self._last_seen
-        self._last_seen = now
-        if not yellow:
+        if kind == MINUTES and self._blinking(now) and score < SURE_SCORE:
+            kind = UNREADABLE       # 正在消失的圖示上「好像有白色的字」：不夠像就不算
+        if kind == MINUTES:
             self.status = LONG
-            self._drop_anchor()
+            self._last_long = now
+            self._expired_at = None
+            self._forget()
             return
-        if previous == LONG:
-            # 白色剛變黃色：那一刻剩 60 秒，發生在上一格與這一格之間。先用這個推出來的倒數，
-            # 這一格讀到的秒數要跟它對得上才信（「59」只讀到「5」不能直接信，不然一變黃就警示）。
-            gap = now - last_seen
-            self._drop_anchor()
-            self._anchor = (FIRST_YELLOW_SEC - gap / 2, now)
-            self._slack = max(GUESS_TOLERANCE_SEC, gap / 2 + 1)
-        if seconds is not None and self._believe(now, seconds):
-            self._anchor = (seconds + 0.5, now)
-            self._slack = READ_TOLERANCE_SEC
-            self._pending, self._pending_count = None, 0
-        # 黃色卻沒有倒數：一開始（或消失太久後）就是黃色、還沒讀到可信的秒數
-        self.status = COUNTING if self._anchor is not None else SEARCHING
+        if self.status == LONG and kind == SECONDS:
+            self._turned_yellow(now)
+        if kind == SECONDS and seconds is not None:
+            self._vote(now, now + seconds + 0.5)
+        elif kind == BLANK and self._end is not None and now >= self._end - BLANK_END_SEC:
+            self._expire(now)
 
-    def _lost(self, now: float) -> None:
-        self._misses += 1
-        if self._misses < LOST_TICKS:
-            return
-        if self.status == COUNTING:
-            # 被擋住而已，倒數照走；數到底（誤差範圍內）還是看不到，就是 buff 沒了
-            if self.remaining(now) <= self._slack:
-                self.status = EXPIRED
-                self._drop_anchor()
-        elif self.status == LONG:
-            # 上次看到還有一分鐘以上，一分鐘內不可能結束；超過一分鐘不知道走到哪了，回去找
-            if now - self._last_seen >= FIRST_YELLOW_SEC:
-                self.status = SEARCHING
+    def _blinking(self, now: float) -> bool:
+        """是不是在「快結束～歸零後圖示閃完」這段時間裡。"""
+        if self._end is not None:
+            return self._end - BLANK_END_SEC <= now <= self._end + BLINK_SEC
+        return self._expired_at is not None and now <= self._expired_at + BLINK_SEC
 
-    def _believe(self, now: float, seconds: int) -> bool:
-        """這次讀到的秒數可不可信。"""
-        left = self.remaining(now)
-        if left is None:
-            # 沒有倒數可以對照：一位數多半是只讀到十位數，不信；兩位數要連續兩格對得上
-            return seconds >= 10 and self._confirm(now, seconds, FIRST_CONFIRM_READS)
-        if self._lost_last_digit(left, seconds):
-            return False
-        if abs(seconds + 0.5 - left) <= self._slack:
-            return True
-        return self._confirm(now, seconds, CONFIRM_READS)
+    def _turned_yellow(self, now: float) -> None:
+        """白色剛變黃色：那一刻剩 60 秒，發生在上一次看到白色與這一格之間，取中間點。"""
+        gap = now - self._last_long
+        self._forget()
+        self.status = SEARCHING
+        if gap <= TURN_MAX_GAP_SEC:
+            self._vote(now, now - gap / 2 + FIRST_YELLOW_SEC)
+            self._end = self._votes[-1][1]      # 還沒有別的票可以對照，先用這一張
+            self.status = COUNTING
 
-    def _confirm(self, now: float, seconds: int, need: int) -> bool:
-        """跟倒數對不上（或沒有倒數）的讀數：連續 *need* 次、而且彼此一路往下數才信。
-        東一個西一個的誤讀（每次讀錯的字不一樣）不會湊成數。"""
-        value = seconds + 0.5
-        if self._pending is not None:
-            sec, at = self._pending
-            same = abs(value - (sec - (now - at))) <= READ_TOLERANCE_SEC
-        else:
-            same = False
-        self._pending_count = self._pending_count + 1 if same else 1
-        self._pending = (value, now)
-        return self._pending_count >= need
+    def _vote(self, now: float, end: float) -> None:
+        # 票不會過期：它說的是一個固定的時刻，隔多久都一樣準（10 秒一張時三張票就隔了 20 秒）。
+        self._votes = (self._votes + [(now, end)])[-VOTES:]
+        agreed = self._agreed()
+        if agreed is not None and (self._end is None or agreed < self._end - EARLIER_STEADY_SEC
+                                   or agreed > self._end + LATER_STEADY_SEC):
+            self._end = agreed
+        if self._end is not None:
+            self.status = COUNTING
+            self._expired_at = None
+        elif self.status != EXPIRED:
+            self.status = SEARCHING     # 看到黃色了，但還沒有夠多張票
 
-    def _lost_last_digit(self, left: float, seconds: int) -> bool:
-        """倒數明明還有兩位數，卻只讀到一個數字、而且剛好是十位數：個位數沒切出來（「29」讀成「2」）。
+    def _agreed(self) -> float | None:
+        """最近的票裡最多張同意的那個結束時刻（取中位數）；不到 ``AGREE`` 張就是 None。"""
+        ends = sorted(end for _, end in self._votes)
+        best: list[float] = []
+        for index, low in enumerate(ends):
+            group = [end for end in ends[index:] if end - low <= AGREE_SEC]
+            if len(group) > len(best):      # 一樣多張時留比較早的那一組：寧可早一點提醒
+                best = group
+        if len(best) < AGREE:
+            return None
+        middle = len(best) // 2
+        return best[middle] if len(best) % 2 else (best[middle - 1] + best[middle]) / 2
 
-        串流糊掉時同一個位置常常好幾秒都切不出個位數，連續讀錯也不會變對，所以這種一律不信，
-        也不算進「連續對不上」的次數；倒數真的走到個位數時自然就讀得到了。
-        """
-        if seconds >= 10:
-            return False
-        low, high = left - 0.5 - self._slack, left - 0.5 + self._slack
-        if low < 10:
-            return False
-        return any(n // 10 == seconds for n in range(int(low), int(high) + 1))
+    def _unseen(self, now: float) -> None:
+        if self._end is not None:
+            if now >= self._end:        # 被擋住時倒數照走；數到底還是看不到，就是真的結束了
+                self._expire(now)
+        elif self.status == LONG and now - self._last_long >= LONG_HOLD_SEC:
+            self.status = SEARCHING
+
+    def _expire(self, now: float) -> None:
+        self.status = EXPIRED
+        self._expired_at = now
+        self._forget()
 
     def snapshot(self, now: float) -> PrayerSnapshot:
-        if self.status != COUNTING:
+        if self._end is None:
             return PrayerSnapshot(status=self.status, remaining=None)
-        return PrayerSnapshot(status=self.status, remaining=max(0.0, self.remaining(now)))
+        return PrayerSnapshot(status=self.status, remaining=max(0.0, self._end - now))

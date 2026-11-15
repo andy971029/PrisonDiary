@@ -1,4 +1,4 @@
-"""讀畫面右上角的神聖祈禱 buff 圖示，取得剩餘秒數。
+"""讀畫面右上角的神聖祈禱 buff 圖示，取得剩餘時間。
 
 buff 圖示一定排在畫面最上面那一排、從右邊往左排；有幾個 buff、誰先誰後會變，
 所以位置不寫死，只在「最上面幾十列、右半邊」這條帶狀區域裡找。
@@ -6,13 +6,21 @@ buff 圖示一定排在畫面最上面那一排、從右邊往左排；有幾個
 **找圖示**：用亮度模板比對，但每一列各自正規化（每列各算一次相關係數再加權平均）。
 buff 快結束時圖示會從下往上蓋一層灰，灰掉的部分只是整體變暗、對比變低，輪廓還在，
 而且灰色的交界一定是水平的：同一列裡要嘛全灰、要嘛全彩，對每一列來說都只是
-「亮度乘一個數再加一個數」，正規化之後就抵消了。左下角的秒數每格都在變，比對時不看。
+「亮度乘一個數再加一個數」，正規化之後就抵消了。左下角的數字每格都在變，比對時不看。
 
-**讀秒數**：圖示左下角的數字。白色代表「分鐘」（白色 1 = 還有一分多鐘），
-剩不到一分鐘才變成黃色的秒數。所以只讀黃色：
-沒有黃色數字就是一分鐘以上，有就是真正的剩餘秒數。
-黃色非常飽和（藍色分量幾乎是 0），圖示本身楓葉外框的土黃色藍色分量高得多，不會混到。
-數字用模板比對讀，內建從實際畫面取下的 3、5、6、9，其他的由 OCR 教（跟楓幣同一招）。
+**讀數字**：圖示左下角的數字。白色代表「分鐘」（白色 1 = 還有一分多鐘），
+剩不到一分鐘才變成黃色的秒數；歸零之後圖示還會留幾秒、上面沒有數字，一閃一閃地消失。
+
+數字是固定的點陣字（六欄寬、八列高，有深色描邊），所以不切字、不做文字辨識：
+0～59 每個數字在這一小塊裡該長什麼樣，用內建的十個字形排出來，整塊拿去跟畫面比亮度，
+看哪一個最像（:func:`read_timer`）。以前的做法是「挑出黃色像素、依空白欄切成一個個字、
+逐字比對」，實測真實畫面（原生解析度、很清楚）就有近兩成的格子兩個數字黏成一塊切不開，
+畫面一糊還會只切出十位數，「29」變成「2」。整塊比對沒有「切」這一步：
+「2」這個答案要求右邊那一格沒有字，右邊有個糊掉的 9 它就不像了。
+
+形狀只看亮度，顏色只用來分辨是白色的分鐘還是黃色的秒數：分享畫面的串流色彩解析度可能只有
+亮度的一半，五個像素寬的黃字顏色會糊開，亮度不會。字形取自分享串流的實際畫面，十個數字都內建，
+不必像以前那樣在使用者的瀏覽器裡靠文字辨識現學。
 """
 
 from __future__ import annotations
@@ -21,10 +29,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .preprocess import despeckle, to_luma
-from .segment import segment
-from .templates import TemplateSet
-
+from ..core.prayer import BLANK, MINUTES, SECONDS, UNREADABLE
+from .preprocess import to_luma
 # 只在畫面最上面這麼多列、右邊這個比例的寬度裡找（buff 一定在第一排、從右邊排起）。
 SEARCH_ROWS = 48
 SEARCH_RIGHT_FRACTION = 0.6
@@ -40,33 +46,8 @@ WIDE_PROBE_ROWS = 4             # 粗篩用幾列模板（只從上半個圖示�
 WIDE_CANDIDATES = 8
 WIDE_MIN_PROBE = 0.45
 
-# 左下角數字區（相對於圖示左上角）：比對圖示時跳過，讀秒數時只看這裡。
-DIGIT_TOP, DIGIT_BOTTOM = 17, 30
-DIGIT_RIGHT = 16
-# 比對時從第幾列開始、左邊幾欄不看（數字蓋住的範圍再寬鬆一點）。
+# 比對圖示時從第幾列開始、左邊幾欄不看（左下角的數字蓋住的範圍，再寬鬆一點）。
 SKIP_FROM_ROW, SKIP_COLS = 19, 15
-
-# 黃色數字的判斷：夠亮、而且紅色明顯高於藍色。原圖的數字約 (210,170,8)，但分享視窗的串流
-# 會把顏色洗淡，實測變成 (190,172,91) 左右，所以門檻要放寬。放寬後會連圖示上楓葉的土黃色
-# (204,146,88) 一起抓到；不過那只出現在圖示還是全彩、也就是一分鐘以上的時候，
-# 這時左下角一定有白色的分鐘數，先看到白色就不算秒數。
-YELLOW_MIN_RED = 130
-YELLOW_MIN_GREEN = 100
-YELLOW_MIN_RED_OVER_BLUE = 60
-# 白色分鐘數：三個分量都夠亮而且差不多。灰掉的圖示最亮只到 140 左右。
-WHITE_MIN = 190
-WHITE_MAX_SPREAD = 40
-WHITE_MIN_INK = 6
-# 黃色像素少於這個數就當作沒有黃色數字（雜點）。一個數字至少十幾個像素。
-YELLOW_MIN_INK = 8
-DIGIT_MIN_HEIGHT = 6
-# 一個數字約 5 欄寬；比這更寬就是兩個數字黏在一起（串流糊掉時常見），不能當成一個數字讀。
-DIGIT_MAX_WIDTH = 7
-# 切出來的數字以外還剩這麼多黃色像素，就是有數字沒切出來（例如細細的「1」被串流洗淡、斷成幾截）。
-# 這時只讀到一部分，「21」會變成「2」，寧可這格不讀。
-LEFTOVER_MAX_INK = 3
-MATCH_DIGIT_MIN_SCORE = 0.85
-MATCH_DIGIT_MIN_MARGIN = 0.03
 
 # 1920x1080 實際畫面上全彩的祈禱圖示亮度（每格 = 亮度 // 16），30x30。
 TEMPLATE_ROWS = (
@@ -103,33 +84,6 @@ TEMPLATE_ROWS = (
 )
 TEMPLATE = np.array([[int(c, 16) * 16 + 8 for c in row] for row in TEMPLATE_ROWS], dtype=np.float32)
 ICON_H, ICON_W = TEMPLATE.shape
-
-# 從實際畫面取下的黃色數字（8 列高）。同一個數字因為次像素位置不同，會有兩種樣子。
-SEED_DIGITS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "3": (
-        ("####.", "...#.", "...#.", ".###.", "...#.", "...##", "...##", "####."),
-        ("####.", "...#.", "...#.", ".##..", "...#.", "...##", "...##", "####."),
-    ),
-    "5": (
-        ("####.", "#....", "#....", "####.", "...##", "...##", "...#.", "####."),
-        ("####.", "#....", "#....", "####.", "...##", "....#", "...#.", "####."),
-    ),
-    "6": (
-        (".####", "#....", "#....", "####.", "#..##", "#...#", "#...#", ".###."),
-        (".####", "#....", "#....", "####.", "#...#", "#...#", "#..##", ".###."),
-    ),
-    "9": (
-        ("####.", "#..#.", "#...#", "#..##", "#####", "...#.", "...#.", "####."),
-    ),
-}
-
-
-def seed_templates() -> TemplateSet:
-    templates = TemplateSet()
-    for char, variants in SEED_DIGITS.items():
-        for rows in variants:
-            templates.add(char, np.array([[c == "#" for c in row] for row in rows], dtype=bool))
-    return templates
 
 
 # --------------------------------------------------------------------------- #
@@ -182,10 +136,12 @@ def score_map(luma: np.ndarray, plan=None) -> np.ndarray:
 
 
 def find_icon(frame: np.ndarray, hint: tuple[int, int] | None = None,
-              wide: bool = False) -> tuple[int, int, float] | None:
+              wide: bool = False, row: int | None = None) -> tuple[int, int, float] | None:
     """祈禱圖示左上角 (left, top, score)；找不到回傳 None。``hint`` 是上次的位置，先看附近。
 
-    ``wide``：最上面那一排也找不到時，再到畫面上半部找（視窗模式）。比較慢。
+    ``row``：上次看到圖示的那一列（左上角的 y）。圖示不見之後再出現（寵物重放）幾乎都在同一列，
+    先看那一列，就不用等大範圍搜尋。
+    ``wide``：都找不到時，再到畫面上半部找（視窗模式）。比較慢。
     """
     height, width = frame.shape[:2]
     if hint is not None:
@@ -197,6 +153,11 @@ def find_icon(frame: np.ndarray, hint: tuple[int, int] | None = None,
         if found is not None:
             return found
     x0 = int(width * (1 - SEARCH_RIGHT_FRACTION))
+    if row is not None:
+        y0 = max(0, row - TRACK_RADIUS)
+        found = _best(to_luma(frame[y0 : min(height, row + ICON_H + TRACK_RADIUS), x0:]), x0, y0)
+        if found is not None:
+            return found
     found = _best(to_luma(frame[: min(height, SEARCH_ROWS), x0:]), x0, 0)
     if found is not None or not wide:
         return found
@@ -237,96 +198,188 @@ def _best(luma: np.ndarray, x0: int, y0: int) -> tuple[int, int, float] | None:
 
 
 # --------------------------------------------------------------------------- #
-# 讀秒數
+# 讀左下角的數字
 # --------------------------------------------------------------------------- #
 
+# 十個數字的字形：每格是那個像素有多少是字（0～f），取自分享串流的實際畫面（1920x1080）。
+# 字的本體不透明，外面一圈是深色描邊。
+GLYPHS: dict[str, tuple[str, ...]] = {
+    "0": ("06eca0", "0f00c4", "3c0089", "4a006b", "6c006b", "4d0088", "1f00d4", "09eeb0"),
+    "1": ("05cf00", "015f00", "002f00", "001f00", "001f00", "002f00", "002f00", "0ffffa"),
+    "2": ("0dcea0", "0200f1", "0000e2", "0000f0", "000c70", "009a00", "09b000", "0ffff0"),
+    "3": ("0dcdb0", "0000e2", "0000f1", "00be60", "0036e1", "0000a8", "0000c7", "0defb0"),
+    "4": ("000de0", "007be0", "00e2e0", "0c30e0", "6c03e0", "adcdfb", "0000e0", "0000e0"),
+    "5": ("0dfff0", "0d0000", "0f0000", "0ebcd1", "0000c7", "000098", "0000d5", "0defa0"),
+    "6": ("02ece0", "0d3000", "1e0000", "3caed2", "5e0089", "2d004c", "1e2089", "06edc2"),
+    "7": ("7ffefa", "0000d0", "000870", "000e00", "003c00", "008900", "00b600", "00d700"),
+    "8": ("08dbc1", "0f00a4", "0f00a3", "03f8a0", "1c37e1", "5a0079", "6c008a", "2becd2"),
+    "9": ("0bcd80", "4c00d3", "690087", "3d00c9", "0aeb99", "000096", "0000e1", "0eee70"),
+}
+GLYPH_H, GLYPH_W = 8, 6
+# 數字靠左排，第二個數字固定往右六欄（相對於圖示左上角的欄）。
+DIGIT_LEFT, DIGIT_ADVANCE = 0, 6
+# 字的上緣在第幾列：整串裡只要有上下是圓的數字（0、3、5、6、8、9）就高一列，
+# 只有 1、2、4、7 時低一列（「11」比「10」低一列）。遊戲是照整串字的外框對齊的。
+DIGIT_TOP_ROUND, DIGIT_TOP_FLAT = 20, 21
+ROUND_DIGITS = frozenset("035689")
+# 比對的範圍（相對於圖示左上角）：字加上描邊，四周再留一點。
+ZONE_TOP, ZONE_BOTTOM = 17, 30
+ZONE_LEFT, ZONE_RIGHT = -2, 16
+ZONE_H, ZONE_W = ZONE_BOTTOM - ZONE_TOP, ZONE_RIGHT - ZONE_LEFT
+# 圖示的位置可能差一個像素，每個答案上下左右各挪一格都試，取最像的。
+SHIFTS = tuple((dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+# 每個答案另外準備一份糊掉的版本：串流糊掉時字的邊緣會暈開，拿清楚的字形去比分數會掉。
+TEMPLATE_BLURS = (0.0, 0.8)
+# 字的本體（透明度這麼高以上）權重 1，緊貼著的那一圈描邊權重低一點：描邊是半透明的，會透出底下的圖。
+FILL_MIN_ALPHA = 0.35
+RING_WEIGHT = 0.6
 
-@dataclass
-class TimerZone:
-    """圖示左下角的數字。白色（一分鐘以上）時 ``yellow`` 是 False、``digits`` 是空的。"""
-
-    image: np.ndarray               # 數字區的原圖（BGRA），給 OCR 用
-    mask: np.ndarray                # 黃色像素
-    digits: list[np.ndarray]
-    yellow: bool = False            # 有黃色數字（不到一分鐘）
-    complete: bool = True           # 每個數字都切得乾淨；False 時 ``digits`` 不可信，不能讀
-
-    @property
-    def readable(self) -> bool:
-        return self.yellow and self.complete and bool(self.digits)
-
-    @property
-    def shape_key(self) -> str:
-        return "|".join(f"{d.shape[0]}x{d.shape[1]}:{np.packbits(d).tobytes().hex()}" for d in self.digits)
-
-
-def yellow_mask(pixels: np.ndarray) -> np.ndarray:
-    """黃色數字的像素。``pixels`` 是 BGRA／BGR。"""
-    blue = pixels[..., 0].astype(np.int16)
-    green = pixels[..., 1].astype(np.int16)
-    red = pixels[..., 2].astype(np.int16)
-    return (red >= YELLOW_MIN_RED) & (green >= YELLOW_MIN_GREEN) & (red - blue >= YELLOW_MIN_RED_OVER_BLUE)
+# 最像的答案至少要這麼像才算讀到。實測真實畫面 0.94 以上；模糊加上色彩減半後 0.86 以上；
+# 沒有數字的圖示最高 0.53。
+READ_MIN_SCORE = 0.62
+# 低於這個就是根本沒有數字。
+BLANK_MAX_SCORE = 0.5
+# 黃色秒數要比同位數裡第二像的高出這麼多才信（實測最接近的是 56 與 55，差 0.07；模糊後 0.044）。
+READ_MIN_MARGIN = 0.03
+# 兩位數的答案跟一位數的差不多像時，取兩位數：「5」這個答案只看左邊那個字，畫面是「56」時它一樣很像，
+# 但畫面真的是一位數時，任何兩位數的答案都會因為右邊沒有字而明顯不像（實測差 0.19 以上）；
+# 畫面是兩位數時，兩邊最多差 0.07。
+TWO_DIGIT_TIE = 0.11
+# 顏色：黃色程度 = (紅 + 綠) / 2 − 藍，取字的本體的平均。黃色秒數實測 78～139，
+# 換成各種背景、色彩減半再糊掉最低 35；白色分鐘數是 0 上下，背景偏黃又糊掉時最高 9。
+# 比白色還偏藍很多的不是數字（歸零後半透明的圖示，背景的藍天透上來）。
+YELLOW_FILL_MIN = 20.0
+WHITE_FILL_MAX_TINT = 20.0
+# 白色的字要比緊貼著它的描邊亮這麼多（亮度）。沒有數字的底圖偶爾也會有幾分像某個數字，
+# 但不會剛好是「亮的字、暗的邊」：真的白字實測差 134 以上，糊掉（0.7）之後 50。
+WHITE_MIN_CONTRAST = 40.0
+# 數字區裡夠黃又夠亮的像素有這麼多個，就當作有黃色的東西（數字讀不出來時用）。
+YELLOW_PIXEL_MIN, YELLOW_PIXEL_MIN_LUMA, YELLOW_PIXELS = 30.0, 90.0, 6
 
 
-def white_ink(pixels: np.ndarray) -> int:
-    """白色（分鐘數）像素的數量。"""
-    channels = pixels[..., :3].astype(np.int16)
-    low, high = channels.min(axis=-1), channels.max(axis=-1)
-    return int(((low >= WHITE_MIN) & (high - low <= WHITE_MAX_SPREAD)).sum())
+@dataclass(frozen=True)
+class TimerRead:
+    kind: str
+    value: int | None       # 秒數（SECONDS）或分鐘數（MINUTES），其他是 None
+    score: float            # 最像的那個答案有多像（-1～1）
+    margin: float           # 比同位數裡第二像的高多少
+    yellow: bool            # 數字區有沒有黃色
 
 
-def cut_timer(frame: np.ndarray, icon: tuple[int, int]) -> TimerZone | None:
+def digit_alpha(value: int) -> np.ndarray:
+    """``value``（0～59）在比對範圍裡的樣子：每個像素有多少是字（0～1）。"""
+    text = str(value)
+    top = DIGIT_TOP_ROUND if ROUND_DIGITS & set(text) else DIGIT_TOP_FLAT
+    alpha = np.zeros((ZONE_H, ZONE_W), dtype=np.float32)
+    for index, char in enumerate(text):
+        glyph = np.array([[int(c, 16) / 15 for c in row] for row in GLYPHS[char]], dtype=np.float32)
+        r, c = top - ZONE_TOP, DIGIT_LEFT + index * DIGIT_ADVANCE - ZONE_LEFT
+        cell = alpha[r : r + GLYPH_H, c : c + GLYPH_W]
+        np.maximum(cell, glyph, out=cell)
+    return alpha
+
+
+def _dilate(mask: np.ndarray) -> np.ndarray:
+    padded = np.pad(mask, 1)
+    h, w = mask.shape
+    return np.any([padded[dy : dy + h, dx : dx + w] for dy in range(3) for dx in range(3)], axis=0)
+
+
+def _blur(image: np.ndarray, sigma: float) -> np.ndarray:
+    if sigma <= 0:
+        return image
+    kernel = np.exp(-0.5 * (np.arange(-2, 3) / sigma) ** 2)
+    kernel /= kernel.sum()
+    h, w = image.shape
+    padded = np.pad(image, 2, mode="edge")
+    rows = sum(kernel[i] * padded[i : i + h] for i in range(5))
+    return sum(kernel[i] * rows[:, i : i + w] for i in range(5))
+
+
+def _build_answers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """0～59 每個答案的比對資料，一列一個（每個答案有清楚與糊掉兩份，連著排）。
+
+    回傳 (權重, 權重 × 去平均的字形, 字形的變異數, 字的本體)。加權相關係數要的三個和
+    都是畫面亮度的線性式，所以六十個答案、九種位移可以用三次矩陣乘法一次算完。
+    """
+    weights, products, variances, fills = [], [], [], []
+    for value in range(60):
+        alpha = digit_alpha(value)
+        fill = alpha >= FILL_MIN_ALPHA
+        weight = np.where(fill, 1.0, np.where(_dilate(fill), RING_WEIGHT, 0.0)).ravel()
+        weight /= weight.sum()
+        for sigma in TEMPLATE_BLURS:
+            shape = _blur(alpha, sigma).ravel()
+            centred = shape - float((weight * shape).sum())
+            weights.append(weight)
+            products.append(weight * centred)
+            variances.append(float((weight * centred * centred).sum()))
+        fills.append(fill)
+    return (np.array(weights, dtype=np.float64), np.array(products, dtype=np.float64),
+            np.array(variances, dtype=np.float64), np.array(fills))
+
+
+_WEIGHTS, _PRODUCTS, _VARIANCES, _FILLS = _build_answers()
+_RINGS = np.array([_dilate(fill) & ~fill for fill in _FILLS])      # 緊貼著字的那一圈描邊
+
+
+def _zone(frame: np.ndarray, icon: tuple[int, int]) -> np.ndarray | None:
+    """比對範圍外加一圈（給位移用）的像素，BGR、浮點數。超出畫面的部分用邊緣補。"""
     left, top = icon
     height, width = frame.shape[:2]
-    y0, y1 = top + DIGIT_TOP, min(height, top + DIGIT_BOTTOM)
-    x0, x1 = max(0, left - 1), min(width, left + DIGIT_RIGHT)
-    if y1 <= y0 or x1 <= x0:
+    y0, y1 = top + ZONE_TOP - 1, top + ZONE_BOTTOM + 1
+    x0, x1 = left + ZONE_LEFT - 1, left + ZONE_RIGHT + 1
+    cy0, cy1, cx0, cx1 = max(0, y0), min(height, y1), max(0, x0), min(width, x1)
+    if cy1 - cy0 < ZONE_H or cx1 - cx0 < ZONE_W:
         return None
-    pixels = frame[y0:y1, x0:x1]
-    mask = yellow_mask(pixels)
-    if white_ink(pixels) >= WHITE_MIN_INK or int(mask.sum()) < YELLOW_MIN_INK:
-        return TimerZone(image=pixels.copy(), mask=mask, digits=[])
-    glyphs = segment(mask, min_width=1, min_height=3, split_wide=False, min_ink=3)
-    kept = [g for g in glyphs if g.height >= DIGIT_MIN_HEIGHT]
-    covered = np.zeros(mask.shape[1], dtype=bool)
-    for g in kept:
-        covered[g.left : g.right] = True
-    leftover = int(despeckle(mask)[:, ~covered].sum())
-    complete = (bool(kept) and leftover < LEFTOVER_MAX_INK
-                and all(g.right - g.left <= DIGIT_MAX_WIDTH for g in kept))
-    return TimerZone(image=pixels.copy(), mask=mask, digits=[g.mask for g in kept],
-                     yellow=True, complete=complete)
+    pixels = frame[cy0:cy1, cx0:cx1, :3].astype(np.float64)
+    pad = ((cy0 - y0, y1 - cy1), (cx0 - x0, x1 - cx1), (0, 0))
+    return np.pad(pixels, pad, mode="edge") if any(a or b for a, b in pad[:2]) else pixels
 
 
-def ocr_image(zone: TimerZone) -> np.ndarray:
-    """給 OCR 看的版本：白底黑字，只留黃色數字。"""
-    image = np.full(zone.mask.shape + (4,), 255, dtype=np.uint8)
-    image[zone.mask, :3] = 0
-    return image
+def answer_scores(luma: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``luma`` 是比對範圍外加一圈的亮度。回傳 0～59 各自的分數（-1～1），與各自最像時的位移編號。"""
+    views = np.stack([luma[1 + dy : 1 + dy + ZONE_H, 1 + dx : 1 + dx + ZONE_W].ravel() for dy, dx in SHIFTS], axis=1)
+    mean = _WEIGHTS @ views
+    variance = _WEIGHTS @ (views * views) - mean * mean
+    covariance = _PRODUCTS @ views
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scores = covariance / np.sqrt(np.maximum(variance * _VARIANCES[:, None], 1e-9))
+    scores = np.where(variance > 4.0, scores, 0.0)      # 這一塊幾乎是平的：相關係數沒有意義
+    flat = scores.reshape(60, len(TEMPLATE_BLURS) * len(SHIFTS))
+    return flat.max(axis=1), flat.argmax(axis=1) % len(SHIFTS)
 
 
-class TimerReader:
-    """模板優先、認不出才請 OCR 教。"""
+def read_timer(frame: np.ndarray, icon: tuple[int, int]) -> TimerRead | None:
+    """讀圖示左下角的數字。``frame`` 是 BGRA／BGR，``icon`` 是圖示左上角。範圍超出畫面回傳 None。"""
+    pixels = _zone(frame, icon)
+    if pixels is None:
+        return None
+    blue, green, red = pixels[..., 0], pixels[..., 1], pixels[..., 2]
+    luma = 0.114 * blue + 0.587 * green + 0.299 * red
+    yellowness = (red + green) / 2 - blue
+    yellow = int(((yellowness >= YELLOW_PIXEL_MIN) & (luma >= YELLOW_PIXEL_MIN_LUMA)).sum()) >= YELLOW_PIXELS
 
-    def __init__(self, templates: TemplateSet | None = None) -> None:
-        self.templates = templates if templates is not None else seed_templates()
+    scores, shifts = answer_scores(luma)
+    one, two = int(np.argmax(scores[:10])), 10 + int(np.argmax(scores[10:]))
+    value = two if scores[two] >= scores[one] - TWO_DIGIT_TIE else one
+    score = float(scores[value])
+    rivals = np.sort(scores[10:] if value >= 10 else scores[:10])
+    margin = float(score - rivals[-2])
 
-    def read_templates(self, zone: TimerZone) -> int | None:
-        if not zone.readable:
-            return None
-        chars = []
-        for digit in zone.digits:
-            match = self.templates.match(
-                digit, min_score=MATCH_DIGIT_MIN_SCORE, min_margin=MATCH_DIGIT_MIN_MARGIN
-            )
-            if not match.char or not match.char.isdigit():
-                return None
-            chars.append(match.char)
-        value = int("".join(chars))
-        return value if value < 60 else None    # 黃色的一定是不到一分鐘的秒數
-
-    def teach(self, zone: TimerZone, value: int) -> int:
-        text = str(value)
-        if not zone.readable or len(text) != len(zone.digits):
-            return 0
-        return sum(1 for char, mask in zip(text, zone.digits) if self.templates.add(char, mask))
+    if score < BLANK_MAX_SCORE:
+        return TimerRead(BLANK, None, score, margin, yellow)
+    if score < READ_MIN_SCORE:
+        return TimerRead(UNREADABLE, None, score, margin, yellow)
+    dy, dx = SHIFTS[int(shifts[value])]
+    fill = _FILLS[value]
+    here = (slice(1 + dy, 1 + dy + ZONE_H), slice(1 + dx, 1 + dx + ZONE_W))
+    tint = float(yellowness[here][fill].mean())
+    if tint >= YELLOW_FILL_MIN:
+        if margin >= READ_MIN_MARGIN:
+            return TimerRead(SECONDS, value, score, margin, True)
+        return TimerRead(UNREADABLE, None, score, margin, True)
+    contrast = float(luma[here][fill].mean() - luma[here][_RINGS[value]].mean())
+    if tint > -WHITE_FILL_MAX_TINT and contrast >= WHITE_MIN_CONTRAST:
+        return TimerRead(MINUTES, value, score, margin, yellow)
+    return TimerRead(UNREADABLE, None, score, margin, yellow)
