@@ -441,19 +441,38 @@ class TestBridgePrayer(unittest.TestCase):
         self.assertEqual(out["prayer"]["status"], "long")
         self.assertIsNone(out["prayer"]["remaining"])
 
+    def test_payload_carries_this_frames_raw_read(self):
+        """匯出樣本要對照「這一格實際讀到什麼」：跟倒數信不信無關，讀到幾就是幾。"""
+        session = bridge.WebSession(require_bracket=False)
+        session.set_prayer(True)
+        out = self.tick(session, make_screen(seconds=35, grey_from=10))
+        read = out["prayer"]["read"]
+        self.assertEqual((read["seconds"], read["yellow"], read["complete"], read["digits"]), (35, True, True, 2))
+        self.assertGreater(read["score"], prayer.MATCH_MIN_SCORE)
+        self.assertNotEqual(out["prayer"]["status"], "counting")       # 第一格還不信，但讀到的照樣回報
+        read = self.tick(session, make_screen(seconds=None))["prayer"]["read"]
+        self.assertEqual((read["seconds"], read["yellow"], read["digits"]), (None, False, 0))
+        self.assertIsNone(self.tick(session, make_screen(None))["prayer"]["read"])
+
     def test_unknown_digit_goes_to_ocr_and_is_learned(self):
         session = bridge.WebSession(require_bracket=False)
         session.prayer_reader = reader_without("5")
         session.set_ocr_ready(True)
         session.set_prayer(True)
         screen = make_screen(seconds=35, grey_from=10)
-        out = self.tick(session, screen)
+
+        def tick_at(now: float) -> dict:
+            # 時間固定住：用真的時鐘，機器慢的時候一格超過半秒，倒數就多扣一秒
+            with mock.patch("bridge.time.monotonic", lambda: now):
+                return self.tick(session, screen)
+
+        out = tick_at(10.0)
         requests = [r for r in out["ocr"] if r["id"].startswith("prayer:")]
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["kind"], "digits")
         session.ocr_result(requests[0]["id"], json.dumps(["35", "3 5", "35", ""]))
-        self.tick(session, screen)
-        out = self.tick(session, screen)       # 學會之後連續兩格讀到才開始數
+        tick_at(10.5)
+        out = tick_at(11.0)       # 學會之後連續兩格讀到才開始數
         self.assertEqual(out["prayer"]["status"], "counting")
         self.assertEqual(int(out["prayer"]["remaining"]), 35)
 

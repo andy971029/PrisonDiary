@@ -227,6 +227,7 @@ class WebSession:
         self._prayer_wide_at = float("-inf")
         self._prayer_ocr_misses: dict[str, int] = {}
         self._prayer_last_try = 0.0
+        self._prayer_read: dict | None = None     # 這一格實際讀到什麼（匯出樣本用），沒找到圖示是 None
 
     # ------------------------------------------------------------------ #
 
@@ -674,6 +675,7 @@ class WebSession:
     # ---------------------------------------------------------------- 神聖祈禱
 
     def _scan_prayer(self) -> None:
+        self._prayer_read = None
         if not self.prayer.enabled:
             return
         frame = self.capturer.frame
@@ -697,6 +699,8 @@ class WebSession:
         # 數字沒切乾淨（黏在一起、斷掉）就不問 OCR：位數對不上，教了反而把錯的字形學進去。
         if zone.readable and seconds is None and self._ocr_ready and self._prayer_may_retry(zone):
             self._request_prayer(zone)
+        self._prayer_read = {"score": round(found[2], 3), "yellow": zone.yellow, "complete": zone.complete,
+                             "digits": len(zone.digits), "seconds": seconds}
         self.prayer.feed(now, seen=True, seconds=seconds, yellow=zone.yellow)
 
     def _prayer_key(self, zone) -> str:
@@ -730,7 +734,8 @@ class WebSession:
 
     def _prayer_payload(self) -> dict:
         snap = self.prayer.snapshot(time.monotonic())
-        return {"status": snap.status, "remaining": snap.remaining}
+        # read 只給「匯出祈禱樣本」對照用：這一格模板比對的分數、有沒有黃色數字、切得乾不乾淨、讀到幾秒。
+        return {"status": snap.status, "remaining": snap.remaining, "read": self._prayer_read}
 
     def _prayer_rect(self) -> list[int] | None:
         if self._prayer_icon is None:

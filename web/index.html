@@ -146,6 +146,8 @@
     font: 700 13px var(--body); letter-spacing: .08em; color: var(--accent); }
   dialog.settings h3:first-of-type { margin-top: 8px; }
   .field output { font: 700 13px var(--mono); color: var(--accent); min-width: 64px; }
+  .field button { padding: 4px 12px; font-size: 13px; }
+  dialog.settings .note { margin-top: 6px; }
   .opt { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-left: 12px; }
   .opt select { flex: 1; min-width: 0; font: 500 14px var(--body); padding: 4px 6px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
@@ -785,7 +787,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.29.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.30.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1124,6 +1126,10 @@
     <output id="set-volume-val"></output>
   </div>
   <label class="field"><span>警示時長</span><input type="number" id="set-alert" min="1" max="30" step="1" required> 秒</label>
+  <div class="field" title="工具會留著最近 2 分鐘畫面右上角 buff 那一排的截圖，連同每一格讀到的秒數；按下去存成一張圖">
+    <span>倒數不準時回報</span><button id="set-sample" class="secondary">匯出樣本</button>
+  </div>
+  <p class="note" id="set-sample-note"></p>
   </div>
   <div class="btns">
     <button id="set-default" class="secondary lead">恢復預設</button>
@@ -1185,6 +1191,7 @@ const frameCtx = frame.getContext("2d", { willReadFrequently: true });
 let pyodide = null;
 let session = null;
 let stream = null;
+let shareSettings = null;   // 這次分享的串流設定（解析度、分享的是視窗還是螢幕）；匯出祈禱樣本時附上
 let timer = null;
 let lastMessage = "";
 let ocr = null;          // { text, digits }：兩個 Tesseract worker
@@ -1382,6 +1389,8 @@ async function share(media = navigator.mediaDevices) {
   const track = stream.getVideoTracks()[0];
   track.addEventListener("ended", () => stopAndSettle(true));
   const settings = track.getSettings();
+  shareSettings = settings;
+  prayerSampleRect = null;      // 換了分享的視窗，上次的圖示位置不能沿用
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
     $("hint").hidden = false;
@@ -1850,6 +1859,7 @@ function render(out, elapsedMs) {
   renderMeso(out.meso);
   drawSpecimen("prayer", rois.prayer, prayerSpecimenText(out.prayer));
   updatePrayer(out.prayer);
+  recordPrayerSample(out);
 
   if (!out.state_key) {
     setState(out.state, "");
@@ -4402,6 +4412,7 @@ $("set-preview").addEventListener("click", () => playSound($("set-sound-pick").v
 
 $("settings").addEventListener("click", () => {
   fillSettings(prefs);
+  syncSampleNote();
   $("settings-dlg").showModal();
 });
 $("set-default").addEventListener("click", () => fillSettings(DEFAULT_SETTINGS));
@@ -4451,6 +4462,7 @@ function setPrayer(on) {
   prayerInfo = { status: on ? "searching" : "off", remaining: null, at: performance.now() };
   prayerAlertAt = null;
   prayerSoundKey = "";
+  if (!on) { prayerSamples = []; prayerSampleRect = null; }
   if (session) session.set_prayer(on);
   if (on && !prayerTimer) prayerTimer = setInterval(renderPrayer, PRAYER_FRAME_MS);
   if (!on && prayerTimer) { clearInterval(prayerTimer); prayerTimer = null; }
@@ -4462,6 +4474,11 @@ function updatePrayer(p) {
   if (!prayerOn || !p) return;
   prayerInfo = { status: p.status, remaining: p.remaining, at: performance.now() };
   if (p.status === "long" || p.status === "searching") prayerAlertAt = null;
+}
+
+// 按鈕上的字。shown 是無條件捨去後的秒數，只有倒數中才有。
+function prayerText(status, shown) {
+  return { off: "—", searching: "—", long: "1m+", expired: "0" }[status] ?? String(shown ?? "—");
 }
 
 function prayerState(now = performance.now()) {
@@ -4476,7 +4493,7 @@ function prayerState(now = performance.now()) {
   if (warn && prayerAlertAt === null) prayerAlertAt = now;
   const since = prayerAlertAt === null ? Infinity : now - prayerAlertAt;
   const alert = prefs.prayerAlertOn && warn && since < prefs.alertSec * 1000;
-  const text = { off: "—", searching: "—", long: "1m+", expired: "0" }[status] ?? String(shown ?? "—");
+  const text = prayerText(status, shown);
   return {
     status,
     text,
@@ -4524,6 +4541,154 @@ function renderPrayer() {
   }
   doc.body.style.background = st.flash && prefs.flashOn ? prefs.flashColor : "";
 }
+
+// ---------------------------------------------------------------- 祈禱樣本（倒數不準時回報用）
+// 每格把 buff 那一排的原始像素留下來，連同這一格讀到什麼、按鈕上顯示什麼，只留最近兩分鐘。
+// 覺得不準時到設定按「匯出樣本」，下載一張 PNG：每格一列，左邊是文字、右邊是沒放大也沒壓縮的像素；
+// 同一份資料另外以 JSON 放在 PNG 的 tEXt 區塊（關鍵字 prayer-samples），可以直接拿來重播、當測試資料。
+// 這次分享看到過圖示，就只存那一列附近；還沒看到過就存畫面右上角一大塊，
+// 「明明有祈禱卻找不到圖示」才查得出原因，身上沒有祈禱也能拿別的技能錄倒數數字。
+const SAMPLE_KEEP_MS = 120000;
+const SAMPLE_MAX = 130;         // 最快一秒一格，兩分鐘不會超過這個數；時鐘被往回調時靠這個擋住
+const SAMPLE_NEAR = { width: 352, height: 48, left: 160, above: 9 };    // 圖示 30×30，左右各留五格 buff
+const SAMPLE_BLIND = { width: 640, height: 112 };       // 視窗標題列、上下黑邊底下的那一排都還在裡面
+const SAMPLE_LABEL_W = 360;
+const SAMPLE_HEAD_H = 76;
+let prayerSamples = [];         // { image: ImageData, meta }，舊的在前
+let prayerSampleRect = null;    // 這次分享最後一次看到圖示的位置；被擋住的那幾格照樣存同一塊
+
+function recordPrayerSample(out) {
+  if (!prayerOn || !out.prayer || !frame.width || !frame.height) return;
+  const fw = frame.width, fh = frame.height;
+  const last = prayerSamples[prayerSamples.length - 1];
+  if (last && (last.meta.frame[0] !== fw || last.meta.frame[1] !== fh)) prayerSampleRect = null;   // 視窗大小變了
+  const icon = out.rois?.prayer || null;
+  if (icon) prayerSampleRect = icon;
+  const near = prayerSampleRect;
+  const w = Math.min(fw, near ? SAMPLE_NEAR.width : SAMPLE_BLIND.width);
+  const h = Math.min(fh, near ? SAMPLE_NEAR.height : SAMPLE_BLIND.height);
+  const x = near ? Math.max(0, Math.min(fw - w, near[0] - SAMPLE_NEAR.left)) : fw - w;
+  const y = near ? Math.max(0, Math.min(fh - h, near[1] - SAMPLE_NEAR.above)) : 0;
+  const p = out.prayer;
+  const now = Date.now();
+  prayerSamples.push({
+    image: frameCtx.getImageData(x, y, w, h),
+    meta: {
+      at: now, x, y, w, h, frame: [fw, fh], icon,
+      status: p.status,
+      remaining: p.remaining == null ? null : Math.round(p.remaining * 100) / 100,
+      shown: prayerText(p.status, p.remaining == null ? null : Math.floor(p.remaining)),
+      read: p.read || null,
+    },
+  });
+  while (prayerSamples.length > SAMPLE_MAX || now - prayerSamples[0].meta.at > SAMPLE_KEEP_MS) prayerSamples.shift();
+  if ($("settings-dlg").open) syncSampleNote();
+}
+
+function syncSampleNote() {
+  const n = prayerSamples.length;
+  $("set-sample").disabled = !n;
+  $("set-sample-note").textContent = n
+    ? `目前留著 ${n} 格（約 ${Math.round((prayerSamples[n - 1].meta.at - prayerSamples[0].meta.at) / 1000)} 秒）。覺得不準時馬上按，把下載的圖用「原檔」傳給作者。圖裡只有畫面右上角 buff 那一排，傳之前可以先打開看。`
+    : "分享畫面後會自動留著最近 2 分鐘 buff 那一排的截圖。覺得倒數不準時回來這裡按匯出。";
+}
+
+function sampleLabel(meta) {
+  const time = new Date(meta.at).toLocaleTimeString("zh-Hant", { hour12: false }) + "." + String(meta.at % 1000).padStart(3, "0");
+  const r = meta.read;
+  const read = !r ? "沒找到圖示"
+    : !r.yellow ? `找到圖示 ${r.score}，白色（一分鐘以上）`
+    : `找到圖示 ${r.score}，黃色 ${r.digits} 位，讀到 ${r.seconds ?? "？"}${r.complete ? "" : "（沒切乾淨）"}`;
+  return [
+    `${time}  顯示 ${meta.shown}`,
+    `狀態 ${meta.status}${meta.remaining == null ? "" : `  剩 ${meta.remaining.toFixed(2)}`}`,
+    read,
+  ];
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    let c = (crc ^ bytes[i]) & 0xff;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crc = (crc >>> 8) ^ c;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// 在 PNG 最後的 IEND 區塊前面插一個 tEXt 區塊。text 只能是 ASCII。
+async function pngWithText(blob, keyword, text) {
+  const png = new Uint8Array(await blob.arrayBuffer());
+  const end = png.length - 12;
+  if (end < 8 || String.fromCharCode(...png.subarray(end + 4, end + 8)) !== "IEND") return blob;
+  const body = new TextEncoder().encode(`tEXt${keyword}\0${text}`);      // 區塊類型 + 資料，CRC 算這一段
+  const chunk = new Uint8Array(body.length + 8);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, body.length - 4);
+  chunk.set(body, 4);
+  view.setUint32(body.length + 4, crc32(body));
+  return new Blob([png.subarray(0, end), chunk, png.subarray(end)], { type: "image/png" });
+}
+
+async function exportPrayerSamples() {
+  const rows = prayerSamples.slice();
+  if (!rows.length) return;
+  let bottom = SAMPLE_HEAD_H;
+  const tops = rows.map((row) => { const top = bottom; bottom += row.meta.h + 1; return top; });
+  const sheet = document.createElement("canvas");
+  sheet.width = SAMPLE_LABEL_W + Math.max(...rows.map((row) => row.meta.w));
+  sheet.height = bottom;
+  const ctx = sheet.getContext("2d");
+  ctx.fillStyle = "#14181d";
+  ctx.fillRect(0, 0, sheet.width, sheet.height);
+  ctx.font = '12px Consolas, "Microsoft JhengHei", monospace';
+  ctx.textBaseline = "top";
+  const s = shareSettings || {};
+  const newest = rows[rows.length - 1].meta;
+  const stamp = new Date(newest.at);
+  const version = $("app-version").textContent;
+  const head = [
+    `服刑日誌 ${version} 神聖祈禱樣本  ${stamp.toLocaleString("zh-Hant", { hour12: false })}  共 ${rows.length} 格`,
+    `串流 ${s.width ?? "?"}×${s.height ?? "?"} ${s.displaySurface || "?"}  畫面 ${newest.frame.join("×")}  每 ${prefs.intervalSec} 秒一格  警示倒數 ${prefs.warnSec} 秒`,
+    "每一列是一格：左邊是當時顯示與讀到的內容，右邊是那一格的原始像素（沒有放大）。",
+    "請傳這個檔案的原檔，不要用會壓縮圖片的方式傳。",
+  ];
+  ctx.fillStyle = "#e6e6e6";
+  head.forEach((line, i) => ctx.fillText(line, 6, 6 + i * 16));
+  rows.forEach((row, i) => {
+    ctx.putImageData(row.image, SAMPLE_LABEL_W, tops[i]);
+    ctx.fillStyle = row.meta.read ? "#e6e6e6" : "#ff9a8a";
+    sampleLabel(row.meta).forEach((line, k) => ctx.fillText(line, 6, tops[i] + 3 + k * 14));
+  });
+  const info = {
+    app: version,
+    exportedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    devicePixelRatio: window.devicePixelRatio,
+    stream: { width: s.width ?? null, height: s.height ?? null, frameRate: s.frameRate ?? null, displaySurface: s.displaySurface ?? null },
+    settings: { intervalSec: prefs.intervalSec, warnSec: prefs.warnSec, alertSec: prefs.alertSec },
+    labelWidth: SAMPLE_LABEL_W,
+    samples: rows.map((row, i) => ({ ...row.meta, sheetY: tops[i] })),
+  };
+  const ascii = JSON.stringify(info).replace(/[^\x20-\x7e]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  const plain = await new Promise((resolve) => sheet.toBlob(resolve, "image/png"));
+  if (!plain) throw new Error("瀏覽器沒有產生圖片");
+  const blob = await pngWithText(plain, "prayer-samples", ascii);
+  const pad = (n) => String(n).padStart(2, "0");
+  const name = `prayer-sample-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}`
+    + `-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.png`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  log(`已匯出祈禱樣本 ${name}：${rows.length} 格。請傳原檔，不要用會壓縮圖片的方式傳。`);
+  return blob;
+}
+
+$("set-sample").addEventListener("click", () => {
+  exportPrayerSamples().catch((err) => log("匯出祈禱樣本失敗：" + err.message));
+});
 
 // 只存這一項，不經過 applySettings（那會重排截圖計時器、寫一行設定紀錄）。
 $("prayer").addEventListener("click", () => {
