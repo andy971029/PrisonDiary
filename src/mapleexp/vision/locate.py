@@ -48,6 +48,11 @@ ROW_MARGIN = 2
 LEFT_REACH = 160
 RIGHT_REACH = 30
 
+# 只在已知位置附近找（讀得到時的定期檢查）時，上下左右各看多遠。左右要比欄位長回來的
+# 幅度寬得多：被遮住時定位到的那一截可能只剩「%」附近，完整的欄位還會往左右各伸出去。
+NEAR_PAD_X = 220
+NEAR_PAD_Y = 12
+
 # 要嘗試的亮度門檻。自動建議值會排在最前面。
 CANDIDATE_THRESHOLDS = (126, 110, 150, 170, 190)
 
@@ -96,8 +101,15 @@ def locate_exp_field(
     client_bgra: np.ndarray,
     templates: TemplateSet,
     anchor: str = DEFAULT_ANCHOR,
+    near: tuple[int, int, int, int] | None = None,
+    first_try: tuple[int, bool] | None = None,
 ) -> LocateResult | None:
-    """在 client area 畫面中找出經驗值欄位。找不到回傳 None。"""
+    """在 client area 畫面中找出經驗值欄位。找不到回傳 None。
+
+    ``near`` 給欄位目前的位置 (left, top, right, bottom) 時，只在它附近找：視窗大小沒變，
+    欄位就不會跑掉，定期確認「有沒有更寬」不必重掃整個畫面下方（1920 寬的畫面要半秒以上，
+    瀏覽器裡更久，整頁會卡住）。``first_try`` 是目前讀得到的 (threshold, invert)，排在最前面試。
+    """
     height, width = client_bgra.shape[:2]
     if height < 40 or width < 80:
         return None
@@ -106,12 +118,20 @@ def locate_exp_field(
     if not anchor_masks:
         return None
 
-    band_top = int(height * (1.0 - SEARCH_BAND_RATIO))
-    band = client_bgra[band_top:, :]
+    if near is None:
+        band_top, band_left = int(height * (1.0 - SEARCH_BAND_RATIO)), 0
+        band = client_bgra[band_top:, :]
+    else:
+        band_top, band_left = max(0, near[1] - NEAR_PAD_Y), max(0, near[0] - NEAR_PAD_X)
+        band = client_bgra[band_top : min(height, near[3] + NEAR_PAD_Y), band_left : min(width, near[2] + NEAR_PAD_X)]
+        if band.shape[0] < 8 or band.shape[1] < 16:
+            return None
 
-    suggested, suggested_invert = suggest_binarization(band)
-    attempts: list[tuple[int, bool]] = [(suggested, suggested_invert)]
-    attempts.extend((t, False) for t in CANDIDATE_THRESHOLDS if t != suggested)
+    suggested = suggest_binarization(band)
+    attempts: list[tuple[int, bool]] = [first_try] if first_try is not None else []
+    if suggested not in attempts:
+        attempts.append(suggested)
+    attempts.extend((t, False) for t in CANDIDATE_THRESHOLDS if t != suggested[0] and (t, False) not in attempts)
 
     fallback: LocateResult | None = None
     for threshold, invert in attempts:
@@ -126,6 +146,7 @@ def locate_exp_field(
                     anchor_height=anchor_mask.shape[0],
                     anchor_width=anchor_mask.shape[1],
                     band_top=band_top,
+                    band_left=band_left,
                     width=width,
                     height=height,
                     threshold=threshold,
@@ -293,6 +314,7 @@ def _read_around_anchor(
     threshold: int,
     invert: bool,
     anchor: str,
+    band_left: int = 0,
 ) -> LocateResult | None:
     top = max(0, anchor_y - ROW_MARGIN)
     bottom = min(mask.shape[0], anchor_y + anchor_height + ROW_MARGIN)
@@ -326,9 +348,9 @@ def _read_around_anchor(
 
     chosen = glyphs[start:end]
     rect = (
-        max(0, left + min(g.left for g in chosen) - PADDING_X),
+        max(0, band_left + left + min(g.left for g in chosen) - PADDING_X),
         max(0, band_top + top + min(g.top for g in chosen) - PADDING_Y),
-        min(width, left + max(g.right for g in chosen) + PADDING_X),
+        min(width, band_left + left + max(g.right for g in chosen) + PADDING_X),
         min(height, band_top + top + max(g.bottom for g in chosen) + PADDING_Y),
     )
     if rect[2] - rect[0] < 8 or rect[3] - rect[1] < 5:

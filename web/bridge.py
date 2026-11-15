@@ -427,15 +427,24 @@ class WebSession:
 
         ``require_wider``：只接受更寬的（讀得到時的定期檢查）。不要求更寬時改成要求
         看得到綠色 ``]``，代表找到的是完整的欄位而不是被擋住的一截。
+
+        定期檢查只看目前欄位附近：讀得到就表示欄位還在原地，要確認的只是左右有沒有更寬。
+        整個畫面下方重掃一次在瀏覽器裡要一秒多，每 10 秒整頁就卡一下（祈禱倒數也跟著停）。
+        讀不到時（``require_wider=False``）欄位可能真的跑掉了，才整個重找。
         """
         frame = self.capturer.frame
         roi = self.cfg.reader.exp_roi
         if frame is None or not roi.is_set():
             return False
-        found = locate_exp_field(frame, self.templates)
+        current = self._current_rect()
+        if require_wider and current is not None:
+            found = locate_exp_field(frame, self.templates, near=current,
+                                     first_try=(self.cfg.reader.threshold, self.cfg.reader.invert))
+        else:
+            found = locate_exp_field(frame, self.templates)
         if found is None or not found.confident:
             return False
-        left, _top, right, _bottom = self._current_rect() or (0, 0, 0, 0)
+        left, _top, right, _bottom = current or (0, 0, 0, 0)
         if require_wider:
             if found.rect[2] - found.rect[0] <= right - left:
                 return False

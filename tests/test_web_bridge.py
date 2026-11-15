@@ -130,6 +130,18 @@ class TestWebSession(FeedMixin, unittest.TestCase):
         self.assertGreaterEqual(grown.w, full.w - 2)
         self.assertEqual(session._current_rect()[2] - session._current_rect()[0], grown.w)
 
+    def test_widen_check_only_searches_near_the_field(self):
+        """讀得到時每 10 秒的檢查不能重掃整個畫面下方（瀏覽器裡要一秒多，整頁會卡住）。"""
+        session = self.make_session()
+        self.feed(session, "623456[12.34%]")
+        rect = tuple(session._current_rect())
+        calls = []
+        real = bridge.locate_exp_field
+        session._widen_checked_at = 0.0
+        with mock.patch.object(bridge, "locate_exp_field", lambda *a, **kw: calls.append(kw) or real(*a, **kw)):
+            self.feed(session, "623456[12.34%]")
+        self.assertEqual([tuple(kw.get("near") or ()) for kw in calls], [rect])
+
     def test_widen_check_never_shrinks_the_roi(self):
         session = self.make_session()
         self.feed(session, "623456[12.34%]")

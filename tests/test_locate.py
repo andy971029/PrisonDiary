@@ -7,11 +7,13 @@ HP 的括號欄位），確認定位只會鎖定真正的經驗值欄位。
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 import helpers  # noqa: F401
 import numpy as np
 
 from mapleexp import testfont
+from mapleexp.vision import locate
 from mapleexp.vision.locate import _exp_span, locate_exp_field
 
 
@@ -180,6 +182,44 @@ class TestLabelRefine(unittest.TestCase):
         full = locate_exp_field(screen, self.templates).rect
         screen[rect[1] : rect[3], rect[0] : rect[0] + 12, :3] = 90     # 滑鼠遮住開頭幾位
         self.assertEqual(locate_exp_field(screen, self.templates).rect, full)
+
+
+class TestLocateNear(unittest.TestCase):
+    """讀得到時的定期檢查只看欄位附近，結果要跟整張重找一樣。"""
+
+    def setUp(self):
+        self.templates = testfont.build_template_set()
+
+    def test_same_result_as_the_full_search(self):
+        for size in ((420, 300), (1280, 720)):
+            with self.subTest(size=size):
+                screen = make_screen(width=size[0], height=size[1], text_x=size[0] // 2, text_y=size[1] - 30)
+                full = locate_exp_field(screen, self.templates)
+                near = locate_exp_field(screen, self.templates, near=full.rect,
+                                        first_try=(full.threshold, full.invert))
+                self.assertEqual(near.rect, full.rect)
+                self.assertEqual(near.roi, full.roi)
+                self.assertEqual(near.text, full.text)
+
+    def test_finds_the_whole_field_from_a_shrunk_rect(self):
+        """被遮住時定位到的只是一截；之後從那一截附近找，要找回完整的欄位。"""
+        screen = make_screen()
+        full = locate_exp_field(screen, self.templates)
+        left, top, right, bottom = full.rect
+        near = locate_exp_field(screen, self.templates, near=(left + 20, top, right - 6, bottom))
+        self.assertEqual(near.rect, full.rect)
+
+    def test_only_looks_around_the_given_rect(self):
+        """附近沒有欄位（視窗變了、欄位跑到別處）就回 None，不會跑去別的地方找。"""
+        screen = make_screen(width=1280, height=720, text_x=640, text_y=690)
+        self.assertIsNone(locate_exp_field(screen, self.templates, near=(180, 40, 260, 51)))
+        calls = []
+        real = locate.suggest_binarization
+        with mock.patch.object(locate, "suggest_binarization", lambda band, *a: calls.append(band.shape) or real(band, *a)):
+            locate_exp_field(screen, self.templates, near=locate_exp_field(screen, self.templates).rect)
+        height, width = calls[-1][:2]
+        self.assertLessEqual(height, 11 + 2 * locate.NEAR_PAD_Y + 6)
+        self.assertLess(width, screen.shape[1])
 
 
 if __name__ == "__main__":
