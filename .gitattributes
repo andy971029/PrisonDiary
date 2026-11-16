@@ -1,0 +1,2 @@
+# server/ 的檔案會直接複製到 Linux 主機上跑，Windows 這邊也維持 LF（systemd 的設定檔不吃 CRLF）。
+server/** text eol=lf

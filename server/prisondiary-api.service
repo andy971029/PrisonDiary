@@ -1,0 +1,26 @@
+# 服刑日誌後端的 systemd「使用者」服務，不需要 root：
+#   mkdir -p ~/prisondiary-api ~/.config/systemd/user
+#   cp app.py ~/prisondiary-api/
+#   cp prisondiary-api.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now prisondiary-api
+#   loginctl enable-linger
+# 最後一行讓服務開機就起來、不用等這個使用者登入（Raspberry Pi OS 上不需要 sudo）。
+# 看狀態：systemctl --user status prisondiary-api；看 log：journalctl --user -u prisondiary-api
+[Unit]
+Description=PrisonDiary API (records and leaderboard)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/prisondiary-api
+Environment=PYTHONUNBUFFERED=1
+# 0.0.0.0：區網裡的電腦可以直接連來看；對外一律經過通道（Tailscale Funnel 或 Cloudflare Tunnel）
+ExecStart=/usr/bin/python3 %h/prisondiary-api/app.py --host 0.0.0.0 --port 8787 --db %h/prisondiary-api/data/records.db
+Restart=always
+RestartSec=10
+# 同一台機器上還有別的服務，記憶體只有 1 GB：這個後端平常用不到 30 MB，超過就是出事了
+MemoryHigh=64M
+MemoryMax=96M
+
+[Install]
+WantedBy=default.target

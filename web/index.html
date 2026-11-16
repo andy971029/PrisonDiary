@@ -138,6 +138,7 @@
   dialog.doll-palette { width: min(720px, 94vw); }
   .field { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 700; }
   .field span { flex: 1; }
+  .field[hidden] { display: none; }
   .field input { width: 72px; font: 700 15px var(--mono); text-align: right; padding: 4px 6px;
     color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
   dialog.settings .btns { margin-top: 20px; }
@@ -787,7 +788,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.31.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.32.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -873,6 +874,7 @@
     <summary class="hist-head">
       <h2>歷史紀錄</h2>
       <span class="note" id="hist-note"></span>
+      <button class="secondary" id="hist-board" hidden>排行榜</button>
       <button class="secondary" id="hist-export">匯出 JSON</button>
       <button class="secondary" id="hist-clear">全部清除</button>
     </summary>
@@ -1103,6 +1105,9 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
+  <div class="field" id="set-upload-row" hidden title="開著時，結算存檔的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 傳到排行榜的伺服器；關掉之後結算的就只存在這個瀏覽器">
+    <span>上傳紀錄到排行榜</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
+  </div>
   <h3>神聖祈禱（掛7）設定</h3>
   <div class="field" title="每格都要到畫面右上角找祈禱圖示；電腦比較吃力或沒在用祈禱時可以關掉，按鈕也會一起藏起來">
     <span>辨識神聖祈禱</span><label class="switch"><input type="checkbox" id="set-prayer"><i></i>開啟</label>
@@ -1145,6 +1150,7 @@
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
   <p>確認要把這次的紀錄存進歷史嗎？</p>
+  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 上傳到排行榜；不想上傳可以到「設定」關掉。</p>
   <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
   <div class="btns">
     <button id="dlg-cancel" class="secondary" hidden>取消</button>
@@ -1164,6 +1170,7 @@ const DEFAULT_SETTINGS = {
   flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
   prayerOn: true,           // 關掉就完全不找祈禱圖示，省效能
   prayerAlertOn: true,      // 祈禱鈕切換；不在設定對話框裡
+  uploadOn: true,           // 結算的紀錄另外上傳排行榜；沒設後端網址（SYNC_API）時這一項沒有作用
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
 const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
@@ -1594,10 +1601,13 @@ function commitPending() {
   const done = pendingSegments();
   discardPending();
   if (!done.length) return;
+  // 有 uid 的才會上傳：開著上傳時結算的才配，讀不到角色名字的排行榜用不到、不配。
+  if (uploadOn) for (const seg of done) if (seg.character !== UNKNOWN_CHAR) seg.uid = crypto.randomUUID?.();
   records.push(...done);
   if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
   else log(`已儲存 ${done.length} 段修練紀錄。`);
   renderHistory();
+  syncRecords();
 }
 
 function discardPending() {
@@ -1665,8 +1675,13 @@ function renderHistory() {
   });
   const body = $("hist-body");
   body.textContent = "";
+  const waiting = records.filter((r) => r.uid && !r.sync).length;
+  const sent = records.filter((r) => r.sync === "ok").length;
+  let where = "只存在這個瀏覽器";
+  if (uploadOn) where = `存在這個瀏覽器，結算時另外上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}`;
+  else if (sent) where = `存在這個瀏覽器，其中 ${sent} 段已上傳排行榜`;
   $("hist-note").textContent = rows.length
-    ? `共 ${records.length} 段，只存在這個瀏覽器。`
+    ? `共 ${records.length} 段，${where}。`
     : "還沒有紀錄。按「停止分享並結算」或重置，確認儲存後才會出現在這裡。";
   for (const { seg: r, live: isLive } of rows) {
     const tr = document.createElement("tr");
@@ -1686,6 +1701,7 @@ function renderHistory() {
       btn.textContent = "刪除";
       btn.addEventListener("click", () => {
         records = records.filter((x) => x.id !== r.id);
+        dropFromBoard([r]);
         writeRecords();
         renderHistory();
       });
@@ -1697,6 +1713,115 @@ function renderHistory() {
   fitHistoryHeight();
 }
 buildHistoryHead();
+
+// ---------------------------------------------------------------- 上傳到排行榜
+// 結算存檔的紀錄另外傳一份到後端（server/app.py）。後端只收、只算排行榜：沒有登入，也不能把紀錄抓回來，
+// 所以這不是備份，歷史紀錄還是以這個瀏覽器存的為準。
+// 開著上傳時結算的紀錄會配一個隨機的 uid：同一筆重傳不會變兩筆，在這裡刪掉時也靠它叫後端一起刪。
+// 沒有 uid 的不會上傳：這個功能上線前就存著的舊紀錄（當時說好只存在這個瀏覽器）、關著上傳時結算的、讀不到角色名字的。
+// sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
+const SYNC_API = "";                             // 後端網址；空的就是整個功能關著，設定裡的開關也不會出現
+const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
+const SYNC_DELETE_KEY = "mapleexp.syncDeletes";  // 這裡刪掉了、還沒叫後端刪的 uid
+const SYNC_BATCH = 50;
+const SYNC_RETRY_MS = 5 * 60 * 1000;
+const syncApi = (() => {
+  // 只有本機開的頁面能改後端網址，免得有人拿一條動過手腳的連結把別人的紀錄導到別處
+  if (!["localhost", "127.0.0.1"].includes(location.hostname)) return SYNC_API;
+  try {
+    const fromUrl = new URLSearchParams(location.search).get("api");
+    if (fromUrl != null) localStorage.setItem(SYNC_API_KEY, fromUrl);
+    return localStorage.getItem(SYNC_API_KEY) || SYNC_API;
+  } catch { return SYNC_API; }
+})().replace(/\/+$/, "");
+let uploadOn = false;      // 後端網址有設、設定也開著才是 true；設定在後面才載入，載入後由 setUpload 更新
+let syncBusy = false;
+let syncFailed = false;    // 上一次失敗了；只在第一次失敗時寫一行 log，後端停機時不會每五分鐘洗一次
+let syncTimer = null;
+
+$("hist-board").hidden = $("set-upload-row").hidden = !syncApi;
+$("hist-board").addEventListener("click", () => window.open(syncApi + "/", "_blank", "noopener"));
+
+function setUpload(on) {
+  uploadOn = Boolean(syncApi) && on;
+  renderHistory();
+  syncRecords();
+}
+
+function loadDeletes() {
+  try {
+    const list = JSON.parse(localStorage.getItem(SYNC_DELETE_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
+
+function saveDeletes(list) {
+  try { localStorage.setItem(SYNC_DELETE_KEY, JSON.stringify(list)); } catch { /* 存不了就只能這次刪 */ }
+}
+
+// 這裡刪掉的紀錄如果傳過（或正在傳），記下來叫後端一起刪；後端沒有那一筆也無妨。
+function dropFromBoard(list) {
+  const uids = list.filter((r) => r.uid && r.sync !== "no").map((r) => r.uid);
+  if (!syncApi || !uids.length) return;
+  saveDeletes([...new Set([...loadDeletes(), ...uids])]);
+  syncRecords();
+}
+
+const syncPayload = (r) => ({
+  uid: r.uid, character: r.character, job: r.job, level: r.level, mapId: r.mapId, mapName: r.mapName,
+  startAt: r.startAt, endAt: r.endAt, cumNet: r.cumNet, activeSec: r.activeSec, idleSec: r.idleSec,
+});
+
+// keepalive：關分頁時自動結算的那一批，頁面走了請求也照樣送完；回應收不到沒關係，下次開頁重傳，後端認得 uid。
+async function syncFetch(path, options) {
+  const res = await fetch(syncApi + path, { ...options, keepalive: true });
+  if (!res.ok && !(options.method === "DELETE" && res.status === 404)) throw new Error(`HTTP ${res.status}`);
+  return res;
+}
+
+// 先送刪除、再送還沒傳的紀錄。失敗（後端停機、沒網路）就五分鐘後再試，開頁與恢復連線時也會試。
+async function syncRecords() {
+  if (!syncApi || syncBusy) return;
+  syncBusy = true;
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  try {
+    for (let uid; (uid = loadDeletes()[0]);) {
+      await syncFetch(`/api/records/${encodeURIComponent(uid)}`, { method: "DELETE" });
+      saveDeletes(loadDeletes().filter((x) => x !== uid));     // 等回應的時候可能又多刪了幾筆，重讀再存
+    }
+    while (uploadOn) {
+      const batch = records.filter((r) => r.uid && !r.sync).slice(0, SYNC_BATCH);
+      if (!batch.length) break;
+      const res = await syncFetch("/api/records", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: batch.map(syncPayload) }),
+      });
+      const out = await res.json();
+      const ok = new Set(out.accepted);
+      const no = new Map((out.rejected || []).map((x) => [x.uid, x.reason]));
+      for (const r of batch) {
+        if (ok.has(r.uid)) r.sync = "ok";
+        else if (no.has(r.uid)) { r.sync = "no"; log(`排行榜不收 ${r.character} 的一段紀錄：${no.get(r.uid)}`); }
+      }
+      if (!batch.some((r) => r.sync)) throw new Error("後端的回應看不懂");
+      writeRecords();
+      renderHistory();
+      const count = batch.filter((r) => r.sync === "ok").length;
+      if (count) log(`已上傳 ${count} 段紀錄到排行榜。`);
+    }
+    syncFailed = false;
+  } catch (err) {
+    if (!syncFailed) log(`排行榜上傳失敗，稍後會自動再試：${err.message}`);
+    syncFailed = true;
+    syncTimer = setTimeout(syncRecords, SYNC_RETRY_MS);
+  } finally {
+    syncBusy = false;
+  }
+  // 傳到一半時被刪掉的紀錄：刪除那一輪已經過了，再跑一次把它從後端拿掉
+  if (!syncFailed && loadDeletes().length) syncRecords();
+}
+window.addEventListener("online", syncRecords);
 
 // 可以收合的區塊預設打開，使用者收起來或打開後記在瀏覽器裡，下次照上次的樣子。
 function rememberFold(id, key, onOpen) {
@@ -1749,6 +1874,7 @@ function openSettle(cancelable, done) {
   const segs = pendingSegments();
   if (!segs.length) { discardPending(); done("empty"); return; }
   fillSettleTable(segs);
+  $("dlg-upload").hidden = !uploadOn;
   const dlg = $("settle-dlg");
   $("dlg-cancel").hidden = !cancelable;
   const finish = (choice) => {
@@ -1785,7 +1911,9 @@ for (const btn of $("boost").querySelectorAll("[data-boost]")) {
   });
 }
 $("hist-clear").addEventListener("click", () => {
-  if (!confirm("確定清除所有已結算的歷史紀錄？")) return;
+  const onBoard = records.some((r) => r.uid && r.sync !== "no");
+  if (!confirm("確定清除所有已結算的歷史紀錄？" + (onBoard ? "\n上傳過排行榜的也會一起從排行榜刪掉。" : ""))) return;
+  dropFromBoard(records);
   records = [];
   writeRecords();
   renderHistory();
@@ -4360,6 +4488,7 @@ function loadSettings() {
 }
 
 let prefs = loadSettings();
+setUpload(prefs.uploadOn);      // 順便把上次沒傳成功的紀錄再傳一次
 
 // 套用馬上生效：閒置門檻下一格就照新的算（已累計的不回頭改），分享中就用新間隔重排計時器。
 function applySettings(next) {
@@ -4370,6 +4499,7 @@ function applySettings(next) {
   log(`設定：每 ${prefs.intervalSec} 秒截圖一次，經驗停 ${prefs.idleSec} 秒算閒置${prefs.idleSec ? "" : "（不判定）"}。`);
   if (prefs.prayerOn !== prayerOn) setPrayer(prefs.prayerOn);
   renderPrayer();
+  setUpload(prefs.uploadOn);
 }
 
 function fillSettings(values) {
@@ -4383,6 +4513,7 @@ function fillSettings(values) {
   $("set-sound-pick").value = values.sound;
   $("set-volume").value = values.volume;
   $("set-prayer").checked = values.prayerOn;
+  $("set-upload").checked = values.uploadOn;
   syncSettingsForm();
 }
 
@@ -4431,6 +4562,7 @@ $("set-save").addEventListener("click", () => {
     volume: $("set-volume").value,
     prayerOn: $("set-prayer").checked,
     prayerAlertOn: prefs.prayerAlertOn,
+    uploadOn: $("set-upload").checked,
   }));
   $("settings-dlg").close();
 });
