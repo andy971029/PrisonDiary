@@ -98,6 +98,11 @@ class StoreTest(unittest.TestCase):
         self.assertFalse(self.store.delete(uid(1)))
         self.assertEqual(self.store.count(), 1)
 
+    def test_delete_many(self):
+        self.store.add([record(1), record(2), record(3)], "::1", NOW)
+        self.assertEqual(self.store.delete_many([uid(1), uid(3), uid(9)]), 2)
+        self.assertEqual(self.store.count(), 1)
+
     def test_full_store_refuses(self):
         import tempfile
 
@@ -233,6 +238,24 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.call("DELETE", f"/api/records/{uid(1)}")[0], 204)
         self.assertEqual(self.store.count(), 0)
 
+    def test_resend_is_ignored_and_batch_delete(self):
+        # 網頁每次開啟都整批重傳：同樣的 uid 再來幾次都只有一筆，回應照樣說收下了
+        now = app.time.time() * 1000
+        batch = {"records": [record(n, startAt=now - HOUR, endAt=now) for n in (1, 2, 3)]}
+        for _ in range(3):
+            status, _headers, raw = self.call("POST", "/api/records", batch, {"Content-Type": "application/json"})
+            self.assertEqual((status, json.loads(raw)["accepted"]), (200, [uid(1), uid(2), uid(3)]))
+        self.assertEqual(self.store.count(), 3)
+
+        # 一次刪一批；格式不對的、沒有的都略過，不讓整批失敗
+        status, _headers, raw = self.call("POST", "/api/records/delete", {"uids": [uid(1), "not-a-uid", 7, uid(9), uid(3)]},
+                                          {"Content-Type": "application/json"})
+        self.assertEqual((status, raw), (204, b""))
+        self.assertEqual(self.store.count(), 1)
+        for bad in ({"uids": []}, {"uids": "x"}, {"records": [record(1)]}, [uid(2)]):
+            self.assertEqual(self.call("POST", "/api/records/delete", bad, {"Content-Type": "application/json"})[0], 400)
+        self.assertEqual(self.store.count(), 1)
+
     def test_preflight(self):
         status, headers, _ = self.call("OPTIONS", "/api/records", headers={
             "Origin": "https://andy971029.github.io", "Access-Control-Request-Method": "POST",
@@ -247,7 +270,12 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/records", {"records": []})[0], 400)
         self.assertEqual(self.call("POST", "/api/records", {"records": [record(1)] * (app.MAX_BATCH + 1)})[0], 400)
         self.assertEqual(self.call("POST", "/api/records", ["x"])[0], 400)
-        self.assertEqual(self.call("POST", "/api/records", b"x" * (app.MAX_BODY + 1))[0], 413)
+        # 太大的內容後端不讀、回 413 就斷線；用戶端有時還在送就被斷，連回應都收不到，兩種都算擋下來了
+        try:
+            self.assertEqual(self.call("POST", "/api/records", b"x" * (app.MAX_BODY + 1))[0], 413)
+        except OSError:
+            pass
+        self.assertEqual(self.store.count(), 0)
         self.assertEqual(self.call("POST", "/api/nope", {"records": [record(1)]})[0], 404)
         self.assertEqual(self.call("GET", "/api/leaderboard?days=abc")[0], 400)
         self.assertEqual(self.call("GET", "/api/leaderboard?limit=100000")[0], 400)

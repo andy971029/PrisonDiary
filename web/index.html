@@ -788,7 +788,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.32.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.33.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1105,8 +1105,8 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <div class="field" id="set-upload-row" hidden title="開著時，結算存檔的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 傳到排行榜的伺服器；關掉之後結算的就只存在這個瀏覽器">
-    <span>上傳紀錄到排行榜</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
+  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；關掉就不再傳，已經傳上去的不會因此刪掉">
+    <span>自動上傳紀錄到排行榜</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
   </div>
   <h3>神聖祈禱（掛7）設定</h3>
   <div class="field" title="每格都要到畫面右上角找祈禱圖示；電腦比較吃力或沒在用祈禱時可以關掉，按鈕也會一起藏起來">
@@ -1150,7 +1150,7 @@
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
   <p>確認要把這次的紀錄存進歷史嗎？</p>
-  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 上傳到排行榜；不想上傳可以到「設定」關掉。</p>
+  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；不想上傳可以到「設定」關掉「自動上傳紀錄到排行榜」。</p>
   <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
   <div class="btns">
     <button id="dlg-cancel" class="secondary" hidden>取消</button>
@@ -1170,7 +1170,7 @@ const DEFAULT_SETTINGS = {
   flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
   prayerOn: true,           // 關掉就完全不找祈禱圖示，省效能
   prayerAlertOn: true,      // 祈禱鈕切換；不在設定對話框裡
-  uploadOn: true,           // 結算的紀錄另外上傳排行榜；沒設後端網址（SYNC_API）時這一項沒有作用
+  uploadOn: true,           // 開頁與儲存時自動把歷史紀錄上傳排行榜；沒設後端網址（SYNC_API）時這一項沒有作用
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
 const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
@@ -1601,8 +1601,7 @@ function commitPending() {
   const done = pendingSegments();
   discardPending();
   if (!done.length) return;
-  // 有 uid 的才會上傳：開著上傳時結算的才配，讀不到角色名字的排行榜用不到、不配。
-  if (uploadOn) for (const seg of done) if (seg.character !== UNKNOWN_CHAR) seg.uid = crypto.randomUUID?.();
+  if (uploadOn) ensureUids(done);
   records.push(...done);
   if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
   else log(`已儲存 ${done.length} 段修練紀錄。`);
@@ -1678,7 +1677,7 @@ function renderHistory() {
   const waiting = records.filter((r) => r.uid && !r.sync).length;
   const sent = records.filter((r) => r.sync === "ok").length;
   let where = "只存在這個瀏覽器";
-  if (uploadOn) where = `存在這個瀏覽器，結算時另外上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}`;
+  if (uploadOn) where = `存在這個瀏覽器，另外自動上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}`;
   else if (sent) where = `存在這個瀏覽器，其中 ${sent} 段已上傳排行榜`;
   $("hist-note").textContent = rows.length
     ? `共 ${records.length} 段，${where}。`
@@ -1715,16 +1714,19 @@ function renderHistory() {
 buildHistoryHead();
 
 // ---------------------------------------------------------------- 上傳到排行榜
-// 結算存檔的紀錄另外傳一份到後端（server/app.py）。後端只收、只算排行榜：沒有登入，也不能把紀錄抓回來，
+// 歷史紀錄另外傳一份到後端（server/app.py）。後端只收、只算排行榜：沒有登入，也不能把紀錄抓回來，
 // 所以這不是備份，歷史紀錄還是以這個瀏覽器存的為準。
-// 開著上傳時結算的紀錄會配一個隨機的 uid：同一筆重傳不會變兩筆，在這裡刪掉時也靠它叫後端一起刪。
-// 沒有 uid 的不會上傳：這個功能上線前就存著的舊紀錄（當時說好只存在這個瀏覽器）、關著上傳時結算的、讀不到角色名字的。
+// 開著上傳時，每次開頁把手上的紀錄整批傳一次（這個功能上線前存的、關著上傳時結算的也一起），儲存紀錄時再傳新的那幾筆。
+// 後端只靠 uid 認重複，同一個 uid 再傳不會多存一筆；在這裡刪掉時也靠它叫後端一起刪。
+// uid 是從紀錄內容算出來的（recordUid），不是亂數：同一筆不管第幾次開頁、在哪個分頁算，都是同一個。
+// 讀不到角色名字的排行榜用不到，不配 uid、不上傳。
 // sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
 // 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
 const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
 const SYNC_DELETE_KEY = "mapleexp.syncDeletes";  // 這裡刪掉了、還沒叫後端刪的 uid
 const SYNC_BATCH = 50;
+const SYNC_DELETE_BATCH = 100;                   // 後端一次最多收 100 個（MAX_BATCH）
 const SYNC_RETRY_MS = 5 * 60 * 1000;
 const syncApi = (() => {
   // 只有本機開的頁面能改後端網址，免得有人拿一條動過手腳的連結把別人的紀錄導到別處
@@ -1739,12 +1741,44 @@ let uploadOn = false;      // 後端網址有設、設定也開著才是 true；
 let syncBusy = false;
 let syncFailed = false;    // 上一次失敗了；只在第一次失敗時寫一行 log，後端停機時不會每五分鐘洗一次
 let syncTimer = null;
+const syncSeen = new Set();   // 這次開頁後端已經確認收下的 uid；開頁時是空的，所以每次開頁都會整批重傳一次
+
+// 128 位元的內容指紋，排成 UUID 的樣子（後端只收這個格式）。材料是結算後就不會再變的欄位；
+// 起訖時間到毫秒、外面看不到，所以別人猜不出 uid，沒辦法拿它來刪別人的紀錄。
+function recordUid(r) {
+  const text = [r.id, r.character, r.startAt, r.endAt, r.cumNet].join("|");
+  let hex = "";
+  for (const seed of [1, 2]) {
+    let a = 0xdeadbeef ^ seed, b = 0x41c6ce57 ^ seed;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text.charCodeAt(i);
+      a = Math.imul(a ^ ch, 2654435761);
+      b = Math.imul(b ^ ch, 1597334677);
+    }
+    a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+    b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+    hex += (a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0");
+  }
+  return hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+}
+
+// 幫還沒有 uid 的紀錄配上；回傳配了幾筆。已經有的不動（v0.32 配的亂數 uid 後端已經認得）。
+function ensureUids(list) {
+  let added = 0;
+  for (const r of list) {
+    if (r.uid || r.character === UNKNOWN_CHAR) continue;
+    r.uid = recordUid(r);
+    added++;
+  }
+  return added;
+}
 
 $("hist-board").hidden = $("set-upload-row").hidden = !syncApi;
 $("hist-board").addEventListener("click", () => window.open(syncApi + "/", "_blank", "noopener"));
 
 function setUpload(on) {
   uploadOn = Boolean(syncApi) && on;
+  if (uploadOn && ensureUids(records)) writeRecords();    // 存不了也沒關係，下次算出來的 uid 還是同一個
   renderHistory();
   syncRecords();
 }
@@ -1776,23 +1810,26 @@ const syncPayload = (r) => ({
 // keepalive：關分頁時自動結算的那一批，頁面走了請求也照樣送完；回應收不到沒關係，下次開頁重傳，後端認得 uid。
 async function syncFetch(path, options) {
   const res = await fetch(syncApi + path, { ...options, keepalive: true });
-  if (!res.ok && !(options.method === "DELETE" && res.status === 404)) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res;
 }
 
-// 先送刪除、再送還沒傳的紀錄。失敗（後端停機、沒網路）就五分鐘後再試，開頁與恢復連線時也會試。
+// 先送刪除、再送這次開頁後端還沒確認過的紀錄（開頁第一次就是全部）。失敗（後端停機、沒網路）就五分鐘後再試，恢復連線時也會試。
 async function syncRecords() {
   if (!syncApi || syncBusy) return;
   syncBusy = true;
   clearTimeout(syncTimer);
   syncTimer = null;
   try {
-    for (let uid; (uid = loadDeletes()[0]);) {
-      await syncFetch(`/api/records/${encodeURIComponent(uid)}`, { method: "DELETE" });
-      saveDeletes(loadDeletes().filter((x) => x !== uid));     // 等回應的時候可能又多刪了幾筆，重讀再存
+    for (let uids; (uids = loadDeletes().slice(0, SYNC_DELETE_BATCH)).length;) {
+      await syncFetch("/api/records/delete", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uids }),
+      });
+      const gone = new Set(uids);
+      saveDeletes(loadDeletes().filter((x) => !gone.has(x)));     // 等回應的時候可能又多刪了幾筆，重讀再存
     }
     while (uploadOn) {
-      const batch = records.filter((r) => r.uid && !r.sync).slice(0, SYNC_BATCH);
+      const batch = records.filter((r) => r.uid && r.sync !== "no" && !syncSeen.has(r.uid)).slice(0, SYNC_BATCH);
       if (!batch.length) break;
       const res = await syncFetch("/api/records", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1801,15 +1838,20 @@ async function syncRecords() {
       const out = await res.json();
       const ok = new Set(out.accepted);
       const no = new Map((out.rejected || []).map((x) => [x.uid, x.reason]));
+      let fresh = 0, refused = 0;      // 這次才第一次收下的、這次被拒絕的；之前傳過的重傳不算，也不用重寫存檔
       for (const r of batch) {
-        if (ok.has(r.uid)) r.sync = "ok";
-        else if (no.has(r.uid)) { r.sync = "no"; log(`排行榜不收 ${r.character} 的一段紀錄：${no.get(r.uid)}`); }
+        if (ok.has(r.uid)) {
+          syncSeen.add(r.uid);
+          if (r.sync !== "ok") { r.sync = "ok"; fresh++; }
+        } else if (no.has(r.uid)) {
+          r.sync = "no";
+          refused++;
+          log(`排行榜不收 ${r.character} 的一段紀錄：${no.get(r.uid)}`);
+        }
       }
-      if (!batch.some((r) => r.sync)) throw new Error("後端的回應看不懂");
-      writeRecords();
-      renderHistory();
-      const count = batch.filter((r) => r.sync === "ok").length;
-      if (count) log(`已上傳 ${count} 段紀錄到排行榜。`);
+      if (!batch.some((r) => syncSeen.has(r.uid) || r.sync === "no")) throw new Error("後端的回應看不懂");
+      if (fresh || refused) { writeRecords(); renderHistory(); }
+      if (fresh) log(`已上傳 ${fresh} 段紀錄到排行榜。`);
     }
     syncFailed = false;
   } catch (err) {
@@ -4489,7 +4531,7 @@ function loadSettings() {
 }
 
 let prefs = loadSettings();
-setUpload(prefs.uploadOn);      // 順便把上次沒傳成功的紀錄再傳一次
+setUpload(prefs.uploadOn);      // 開著的話，開頁就把既有的歷史紀錄整批上傳一次
 
 // 套用馬上生效：閒置門檻下一格就照新的算（已累計的不回頭改），分享中就用新間隔重排計時器。
 function applySettings(next) {

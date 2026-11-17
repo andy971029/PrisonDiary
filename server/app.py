@@ -1,9 +1,10 @@
-"""服刑日誌的後端：收網頁結算後上傳的修練紀錄，存進 SQLite，算排行榜。
+"""服刑日誌的後端：收網頁上傳的修練紀錄，存進 SQLite，算排行榜。
 
 只用標準函式庫，放在記憶體與空間都很小的機器（Raspberry Pi 3）上跑：不用裝套件，
 資料就是一個 SQLite 檔，備份時複製那個檔就好。
 
-沒有登入也沒有帳號：一筆紀錄靠網頁產生的隨機 uid 辨認，同一筆重傳不會變兩筆，
+沒有登入也沒有帳號：一筆紀錄只靠網頁給的 uid 辨認，內容不比對。網頁每次開啟都會把手上的
+紀錄整批重傳，已經有的 uid 不會再存一次（uid 是網頁從紀錄內容算出來的指紋，同一筆永遠同一個）。
 知道 uid 的人（也就是存著那筆紀錄的瀏覽器）才能刪掉它。uid 與上傳者的 IP 只存不對外，
 排行榜的回應裡不會出現。
 
@@ -11,6 +12,7 @@
 
 路徑：
     POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}]}
+    POST   /api/records/delete {"uids": [...]}，刪一批，有沒有那些都回 204（清除全部歷史時一次送，不用一筆一個請求）
     DELETE /api/records/<uid>  刪一筆，有沒有那筆都回 204
     GET    /api/leaderboard    ?days=7&limit=50，回三個榜（總經驗、最高效率、等級）
     GET    /api/health         {"ok": true, "records": 筆數}
@@ -201,6 +203,14 @@ class Store:
     def delete(self, uid: str) -> bool:
         with self._lock:
             done = self._db.execute("DELETE FROM records WHERE uid = ?", (uid,)).rowcount > 0
+            self._db.commit()
+            if done:
+                self._boards.clear()
+        return done
+
+    def delete_many(self, uids: list[str]) -> int:
+        with self._lock:
+            done = self._db.executemany("DELETE FROM records WHERE uid = ?", [(uid,) for uid in uids]).rowcount
             self._db.commit()
             if done:
                 self._boards.clear()
@@ -452,7 +462,8 @@ class Handler(BaseHTTPRequestHandler):
         ip = self._guard()
         if ip is None:
             return
-        if urlsplit(self.path).path != "/api/records":
+        path = urlsplit(self.path).path
+        if path not in ("/api/records", "/api/records/delete"):
             self._error(404, "沒有這個路徑")
             return
         try:
@@ -467,6 +478,15 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
         except (ValueError, UnicodeDecodeError):
             self._error(400, "不是合法的 JSON")
+            return
+        if path == "/api/records/delete":
+            uids = data.get("uids") if isinstance(data, dict) else None
+            if not isinstance(uids, list) or not 0 < len(uids) <= MAX_BATCH:
+                self._error(400, f"uids 要是 1 到 {MAX_BATCH} 筆的陣列")
+                return
+            # 格式不對的直接略過：反正不會有那一筆，不必讓整批失敗
+            self.store.delete_many([uid for uid in uids if isinstance(uid, str) and UID.match(uid)])
+            self._send(204)
             return
         records = data.get("records") if isinstance(data, dict) else None
         if not isinstance(records, list) or not 0 < len(records) <= MAX_BATCH:
