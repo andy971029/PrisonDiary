@@ -413,6 +413,19 @@
   .rank-list .who b { font-size: 14px; }
   .rank-list .val { text-align: right; font: 500 15px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   #rank-train table.hist td b { font: 500 15px var(--mono); }
+  /* 載入中的遮罩：向後端抓資料的時候蓋住整張排行榜卡片，抓到（或失敗）就拿掉；有快取、不用等的時候不會出現。
+     卡片留一個最小高度，練功排行榜沒幾列的時候遮罩裡的字才不會掉到卡片外面 */
+  .rank-card { position: relative; min-height: 300px; }
+  .rank-mask { position: absolute; inset: 0; z-index: 3; display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 140px; background: color-mix(in srgb, var(--surface) 78%, transparent); animation: rank-fade .12s ease-out; }
+  .rank-mask[hidden] { display: none; }
+  .rank-mask > div { display: flex; align-items: center; gap: 12px; padding: 12px 22px; font: 700 14px var(--body); letter-spacing: .1em;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 24px rgb(0 0 0 / .18); }
+  .rank-mask i { width: 20px; height: 20px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+    animation: rank-spin .8s linear infinite; }
+  @keyframes rank-spin { to { transform: rotate(360deg); } }
+  @keyframes rank-fade { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .rank-mask, .rank-mask i { animation: none; } }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
@@ -833,7 +846,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1041,6 +1054,7 @@
       </div>
       <p class="note" id="rank-train-none">還沒有符合的紀錄。</p>
     </section>
+    <div class="rank-mask" id="rank-mask" role="status" hidden><div><i aria-hidden="true"></i>載入中…</div></div>
   </div>
 
   <div id="tab-book" class="tab-panel book-card" role="tabpanel" aria-labelledby="tab-btn-book" data-sub="mobs" hidden>
@@ -4655,6 +4669,12 @@ async function rankGet(path, force) {
   return fresh;
 }
 
+// 抓資料的時候把整張卡片蓋起來，上面寫「載入中」
+function rankBusy(on) {
+  $("rank-mask").hidden = !on;
+  $("tab-rank").setAttribute("aria-busy", String(on));
+}
+
 async function rankLoad(force = false) {
   const turn = ++rank.turn;       // 連著切幾次時只認最後一次，前面慢到的回應不蓋掉新的
   const days = rank.days ? `&days=${rank.days}` : "";
@@ -4662,6 +4682,7 @@ async function rankLoad(force = false) {
     ? `/api/leaderboard?limit=50${days}`
     : `/api/training?limit=200${days}${rank.job ? `&job=${encodeURIComponent(rank.job)}` : ""}${rank.level ? `&level=${rank.level}` : ""}`;
   $("rank-state").textContent = "載入中…";
+  rankBusy(true);       // 有快取時下一行馬上就回來，畫面還來不及畫，遮罩不會閃一下
   try {
     const hit = await rankGet(path, force);
     if (turn !== rank.turn) return;
@@ -4675,6 +4696,7 @@ async function rankLoad(force = false) {
     $("rank-state").textContent = "讀取失敗";
     $("rank-error").textContent = `連不上排行榜的伺服器（${err.message}），稍後再按「重新整理」。`;
   }
+  rankBusy(false);      // 走到這裡的一定是最後一次查詢；被後面的查詢取代的那幾次在上面就 return 了，遮罩留給最後那次收
 }
 
 function setBoard(id) {
