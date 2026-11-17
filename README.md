@@ -116,7 +116,7 @@ ssh <使用者>@<主機> systemctl --user restart prisondiary-api
 
 第一次安裝照 `server/prisondiary-api.service` 開頭的說明做（使用者服務，不需要 root）。服務聽 8787 埠，瀏覽器開 `http://<主機>:8787/` 就是排行榜頁面，`/api/health` 回目前筆數。資料檔在 `~/prisondiary-api/data/records.db`，備份就是複製它（服務跑著的時候用 `sqlite3 records.db ".backup 備份檔"`，或連同 `-wal` 檔一起複製）。
 
-網站是 HTTPS，瀏覽器不讓它呼叫 HTTP 的後端，所以後端要經過通道（Tailscale Funnel 或 Cloudflare Tunnel）拿到一個 HTTPS 網址，再把那個網址填進 `web/index.html` 的 `SYNC_API`。`SYNC_API` 空著時整個上傳功能是關的。本機開發時不用改程式：開 `http://localhost:8765/?api=http://<主機>:8787` 就會指到那個後端（記在瀏覽器裡，`?api=` 取消）。
+網站是 HTTPS，瀏覽器不讓它呼叫 HTTP 的後端，所以後端要經過通道拿到一個 HTTPS 網址，再把那個網址填進 `web/index.html` 的 `SYNC_API`。目前用 Tailscale Funnel（在主機上 `tailscale funnel --bg 8787`，重開機後會自己恢復），網址是 `https://prisondiary.tailcfc41e.ts.net`，直接開就是排行榜頁面。`SYNC_API` 改成空字串時整個上傳功能是關的。本機開發時不用改程式：開 `http://localhost:8765/?api=http://<主機>:8787` 就會指到那個後端（記在瀏覽器裡，`?api=` 取消）。
 
 通道從本機連進來，真正的來源位址在 `CF-Connecting-IP` 或 `X-Forwarded-For` 標頭裡；只有連線來自本機時後端才信這兩個標頭。每個 IP 每分鐘最多 120 個請求，資料檔超過 200 MB 或磁碟剩不到 100 MB 就不再收新紀錄。
 

@@ -788,7 +788,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.32.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.32.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1720,7 +1720,8 @@ buildHistoryHead();
 // 開著上傳時結算的紀錄會配一個隨機的 uid：同一筆重傳不會變兩筆，在這裡刪掉時也靠它叫後端一起刪。
 // 沒有 uid 的不會上傳：這個功能上線前就存著的舊紀錄（當時說好只存在這個瀏覽器）、關著上傳時結算的、讀不到角色名字的。
 // sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
-const SYNC_API = "";                             // 後端網址；空的就是整個功能關著，設定裡的開關也不會出現
+// 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
+const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
 const SYNC_DELETE_KEY = "mapleexp.syncDeletes";  // 這裡刪掉了、還沒叫後端刪的 uid
 const SYNC_BATCH = 50;
