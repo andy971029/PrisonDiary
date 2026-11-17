@@ -368,6 +368,51 @@
   .gq-card .gq-wh { flex: none; height: auto; flex-direction: column; align-items: center; padding: 0 8px; }
   .gq-card .gq-wh .gq-map { height: 640px; }
   .gq-card .gq-tower { flex: none; min-height: 0; max-width: 400px; margin: 0 auto; }
+  /* ---------- 排行榜：資料從後端抓。個人排行榜三塊並排，每塊上面是前三名的頒獎台、下面是完整名單；練功排行榜是一張表 ---------- */
+  .rank-card .rank-days { margin-right: auto; }
+  .rank-card .sec-head > button { padding: 4px 12px; font-size: 12px; }
+  .rank-card .rank-error { color: var(--bad); margin: 0 0 14px; }
+  .rank-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+  @media (max-width: 900px) { .rank-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; } }
+  .rank-block { min-width: 0; }
+  .rank-block h3 { margin: 0; font: 700 16px var(--body); letter-spacing: .08em; }
+  .rank-block h3 + .note { margin: 2px 0 0; }
+  /* 頒獎台：名單裡的順序是 1、2、3，畫面上排成 2、1、3，中間最高 */
+  .podium { --gold: #e0b23c; --silver: #b7c2c7; --bronze: #c98d5b;
+    list-style: none; margin: 18px 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px; align-items: end; }
+  .podium li { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+  .podium .p1 { order: 2; }
+  .podium .p2 { order: 1; }
+  .podium .p3 { order: 3; }
+  /* 角色模型的位置：現在是空的剪影，之後自訂角色模型畫在這一格裡 */
+  .podium-doll { width: 68px; height: 88px; display: grid; place-items: center; color: var(--line);
+    border: 1px dashed var(--line); border-radius: 3px; }
+  .podium-doll svg { width: 44px; height: 64px; }
+  .podium-name { max-width: 100%; margin-top: 6px; font-weight: 700; font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .podium .none .podium-name { font-weight: 400; color: var(--muted); }
+  .podium-val { max-width: 100%; font: 500 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .podium-step { width: 100%; margin-top: 8px; display: grid; place-items: center; border-radius: 3px 3px 0 0;
+    font: 800 26px var(--display); line-height: 1; color: #1a1204; }
+  .podium .p1 .podium-step { height: 68px; background: var(--gold); }
+  .podium .p2 .podium-step { height: 48px; background: var(--silver); }
+  .podium .p3 .podium-step { height: 34px; background: var(--bronze); }
+  /* 完整名單：名次、角色（下面一行小字是職業等級）、數值（下面一行小字是補充） */
+  .rank-list { list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--line); }
+  .rank-list:empty { display: none; }
+  .rank-list li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+    padding: 7px 0; border-top: 1px solid var(--line); }
+  .rank-list .no { font: 500 14px var(--mono); color: var(--muted); text-align: right; }
+  .rank-list li:nth-child(-n+3) .no { color: var(--accent); }
+  .rank-list .who { min-width: 0; }
+  .rank-list b, .rank-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank-list small { font: 400 12px var(--body); color: var(--muted); }
+  .rank-list small:empty { display: none; }
+  .rank-list .who b { font-size: 14px; }
+  .rank-list .val { text-align: right; font: 500 15px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #rank-train table.hist td b { font: 500 15px var(--mono); }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
@@ -788,7 +833,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.33.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -803,6 +848,8 @@
     <nav class="tabs" role="tablist" aria-label="功能">
       <button role="tab" id="tab-btn-train" aria-selected="true" aria-controls="tab-train" data-tab="train">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>練功助手</button>
+      <button role="tab" id="tab-btn-rank" aria-selected="false" aria-controls="tab-rank" data-tab="rank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>排行榜</button>
       <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>圖鑑</button>
       <button role="tab" id="tab-btn-doll" aria-selected="false" aria-controls="tab-doll" data-tab="doll">
@@ -874,7 +921,6 @@
     <summary class="hist-head">
       <h2>歷史紀錄</h2>
       <span class="note" id="hist-note"></span>
-      <button class="secondary" id="hist-board" hidden>排行榜</button>
       <button class="secondary" id="hist-export">匯出 JSON</button>
       <button class="secondary" id="hist-clear">全部清除</button>
     </summary>
@@ -938,6 +984,63 @@
       <div id="log"></div>
     </div>
   </details>
+  </div>
+
+  <!-- 排行榜：資料是大家上傳的練功紀錄，後端算好、這裡抓來畫（見下面的「排行榜」那一段程式）。後端網址沒設時整個頁籤會被拿掉 -->
+  <div id="tab-rank" class="tab-panel book-card rank-card" role="tabpanel" aria-labelledby="tab-btn-rank" hidden>
+    <div class="sec-head">
+      <nav class="subtabs" role="tablist" aria-label="排行榜分類">
+        <button role="tab" data-board="people" aria-selected="true" aria-controls="rank-people">個人排行榜</button>
+        <button role="tab" data-board="train" aria-selected="false" aria-controls="rank-train">練功排行榜</button>
+      </nav>
+      <div class="boost rank-days" id="rank-days" role="radiogroup" aria-label="統計期間" title="只算結束時間在這段期間內的紀錄">
+        <button class="secondary on" role="radio" aria-checked="true" data-days="">全部</button>
+        <button class="secondary" role="radio" aria-checked="false" data-days="30">近 30 天</button>
+        <button class="secondary" role="radio" aria-checked="false" data-days="7">近 7 天</button>
+      </div>
+      <span class="sec-sub" id="rank-state">--</span>
+      <button class="secondary" id="rank-reload">重新整理</button>
+    </div>
+    <p class="note rank-error" id="rank-error" role="alert"></p>
+    <section id="rank-people" class="sub-panel" role="tabpanel" aria-label="個人排行榜">
+      <div class="rank-grid">
+        <article class="rank-block" id="rank-exp">
+          <h3>總累計經驗</h3>
+          <p class="note">每個角色所有上傳紀錄的經驗加起來</p>
+          <ol class="podium" aria-label="總累計經驗前三名"></ol>
+          <ol class="rank-list" aria-label="總累計經驗名單"></ol>
+          <p class="note rank-none">還沒有紀錄。</p>
+        </article>
+        <article class="rank-block" id="rank-rate">
+          <h3>最高效率</h3>
+          <p class="note">所有上傳的紀錄裡，EXP / hr 最高的那一段</p>
+          <ol class="podium" aria-label="最高效率前三名"></ol>
+          <ol class="rank-list" aria-label="最高效率名單"></ol>
+          <p class="note rank-none">還沒有紀錄。</p>
+        </article>
+        <article class="rank-block" id="rank-level">
+          <h3>等級</h3>
+          <p class="note">上傳的紀錄裡讀到的最高等級</p>
+          <ol class="podium" aria-label="等級前三名"></ol>
+          <ol class="rank-list" aria-label="等級名單"></ol>
+          <p class="note rank-none">還沒有紀錄。</p>
+        </article>
+      </div>
+    </section>
+    <section id="rank-train" class="sub-panel" role="tabpanel" aria-label="練功排行榜" hidden>
+      <div class="book-tools">
+        <select id="rank-pick-job" aria-label="職業"><option value="">全部職業</option></select>
+        <select id="rank-pick-level" aria-label="等級區間"><option value="">全部等級</option></select>
+        <span class="note" style="margin:0">同一張地圖、同一個職業、同一個 10 級區間的紀錄合起來算：總經驗 ÷ 總活躍時間。角色數少的參考就好。</span>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist">
+          <thead><tr><th class="num">名次</th><th>地圖</th><th>職業</th><th>等級區間</th><th class="num">平均 EXP / hr</th><th class="num">累計活躍</th><th class="num">角色數</th><th class="num">紀錄數</th></tr></thead>
+          <tbody id="rank-train-body"></tbody>
+        </table>
+      </div>
+      <p class="note" id="rank-train-none">還沒有符合的紀錄。</p>
+    </section>
   </div>
 
   <div id="tab-book" class="tab-panel book-card" role="tabpanel" aria-labelledby="tab-btn-book" data-sub="mobs" hidden>
@@ -1105,8 +1208,8 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；關掉就不再傳，已經傳上去的不會因此刪掉">
-    <span>自動上傳紀錄到排行榜</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
+  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；活躍不滿 10 分鐘、讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來">
+    <span>上傳練功紀錄</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
   </div>
   <h3>神聖祈禱（掛7）設定</h3>
   <div class="field" title="每格都要到畫面右上角找祈禱圖示；電腦比較吃力或沒在用祈禱時可以關掉，按鈕也會一起藏起來">
@@ -1150,7 +1253,7 @@
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
   <p>確認要把這次的紀錄存進歷史嗎？</p>
-  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；不想上傳可以到「設定」關掉「自動上傳紀錄到排行榜」。</p>
+  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字、活躍滿 10 分鐘的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；上傳後在這裡刪掉紀錄，排行榜上的不會跟著刪。不想上傳可以到「設定」關掉「上傳練功紀錄」。</p>
   <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
   <div class="btns">
     <button id="dlg-cancel" class="secondary" hidden>取消</button>
@@ -1674,7 +1777,7 @@ function renderHistory() {
   });
   const body = $("hist-body");
   body.textContent = "";
-  const waiting = records.filter((r) => r.uid && !r.sync).length;
+  const waiting = records.filter((r) => r.uid && !r.sync && canUpload(r)).length;
   const sent = records.filter((r) => r.sync === "ok").length;
   let where = "只存在這個瀏覽器";
   if (uploadOn) where = `存在這個瀏覽器，另外自動上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}`;
@@ -1700,7 +1803,6 @@ function renderHistory() {
       btn.textContent = "刪除";
       btn.addEventListener("click", () => {
         records = records.filter((x) => x.id !== r.id);
-        dropFromBoard([r]);
         writeRecords();
         renderHistory();
       });
@@ -1717,16 +1819,15 @@ buildHistoryHead();
 // 歷史紀錄另外傳一份到後端（server/app.py）。後端只收、只算排行榜：沒有登入，也不能把紀錄抓回來，
 // 所以這不是備份，歷史紀錄還是以這個瀏覽器存的為準。
 // 開著上傳時，每次開頁把手上的紀錄整批傳一次（這個功能上線前存的、關著上傳時結算的也一起），儲存紀錄時再傳新的那幾筆。
-// 後端只靠 uid 認重複，同一個 uid 再傳不會多存一筆；在這裡刪掉時也靠它叫後端一起刪。
+// 後端只靠 uid 認重複，同一個 uid 再傳不會多存一筆。傳上去的就留在後端：在這裡刪掉紀錄只是這個瀏覽器不再存，排行榜上的不會跟著刪。
 // uid 是從紀錄內容算出來的（recordUid），不是亂數：同一筆不管第幾次開頁、在哪個分頁算，都是同一個。
-// 讀不到角色名字的排行榜用不到，不配 uid、不上傳。
+// 讀不到角色名字的排行榜用不到，活躍不滿 10 分鐘的太短、後端也不收：這兩種不配 uid、不上傳，只留在這個瀏覽器。
 // sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
 // 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
 const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
-const SYNC_DELETE_KEY = "mapleexp.syncDeletes";  // 這裡刪掉了、還沒叫後端刪的 uid
 const SYNC_BATCH = 50;
-const SYNC_DELETE_BATCH = 100;                   // 後端一次最多收 100 個（MAX_BATCH）
+const SYNC_MIN_SEC = 600;                        // 活躍不滿 10 分鐘的不上傳；跟後端的 MIN_ACTIVE_SEC 一樣
 const SYNC_RETRY_MS = 5 * 60 * 1000;
 const syncApi = (() => {
   // 只有本機開的頁面能改後端網址，免得有人拿一條動過手腳的連結把別人的紀錄導到別處
@@ -1743,8 +1844,7 @@ let syncFailed = false;    // 上一次失敗了；只在第一次失敗時寫�
 let syncTimer = null;
 const syncSeen = new Set();   // 這次開頁後端已經確認收下的 uid；開頁時是空的，所以每次開頁都會整批重傳一次
 
-// 128 位元的內容指紋，排成 UUID 的樣子（後端只收這個格式）。材料是結算後就不會再變的欄位；
-// 起訖時間到毫秒、外面看不到，所以別人猜不出 uid，沒辦法拿它來刪別人的紀錄。
+// 128 位元的內容指紋，排成 UUID 的樣子（後端只收這個格式）。材料是結算後就不會再變的欄位。
 function recordUid(r) {
   const text = [r.id, r.character, r.startAt, r.endAt, r.cumNet].join("|");
   let hex = "";
@@ -1762,43 +1862,30 @@ function recordUid(r) {
   return hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
 }
 
-// 幫還沒有 uid 的紀錄配上；回傳配了幾筆。已經有的不動（v0.32 配的亂數 uid 後端已經認得）。
+// 這一筆會不會上傳：要讀得到角色名字，活躍也要滿 10 分鐘
+function canUpload(r) {
+  return r.character !== UNKNOWN_CHAR && r.activeSec >= SYNC_MIN_SEC;
+}
+
+// 幫會上傳、還沒有 uid 的紀錄配上；回傳配了幾筆。已經有的不動（v0.32 配的亂數 uid 後端已經認得）。
 function ensureUids(list) {
   let added = 0;
   for (const r of list) {
-    if (r.uid || r.character === UNKNOWN_CHAR) continue;
+    if (r.uid || !canUpload(r)) continue;
     r.uid = recordUid(r);
     added++;
   }
   return added;
 }
 
-$("hist-board").hidden = $("set-upload-row").hidden = !syncApi;
-$("hist-board").addEventListener("click", () => window.open(syncApi + "/", "_blank", "noopener"));
+$("set-upload-row").hidden = !syncApi;
+// v0.33 以前刪紀錄會叫後端一起刪，還沒送出去的待刪清單記在這個 key；現在不刪了，清單直接丟掉
+try { localStorage.removeItem("mapleexp.syncDeletes"); } catch { /* 清不掉也無妨，沒有人會再讀它 */ }
 
 function setUpload(on) {
   uploadOn = Boolean(syncApi) && on;
   if (uploadOn && ensureUids(records)) writeRecords();    // 存不了也沒關係，下次算出來的 uid 還是同一個
   renderHistory();
-  syncRecords();
-}
-
-function loadDeletes() {
-  try {
-    const list = JSON.parse(localStorage.getItem(SYNC_DELETE_KEY) || "[]");
-    return Array.isArray(list) ? list : [];
-  } catch { return []; }
-}
-
-function saveDeletes(list) {
-  try { localStorage.setItem(SYNC_DELETE_KEY, JSON.stringify(list)); } catch { /* 存不了就只能這次刪 */ }
-}
-
-// 這裡刪掉的紀錄如果傳過（或正在傳），記下來叫後端一起刪；後端沒有那一筆也無妨。
-function dropFromBoard(list) {
-  const uids = list.filter((r) => r.uid && r.sync !== "no").map((r) => r.uid);
-  if (!syncApi || !uids.length) return;
-  saveDeletes([...new Set([...loadDeletes(), ...uids])]);
   syncRecords();
 }
 
@@ -1814,22 +1901,15 @@ async function syncFetch(path, options) {
   return res;
 }
 
-// 先送刪除、再送這次開頁後端還沒確認過的紀錄（開頁第一次就是全部）。失敗（後端停機、沒網路）就五分鐘後再試，恢復連線時也會試。
+// 送這次開頁後端還沒確認過的紀錄（開頁第一次就是全部）。失敗（後端停機、沒網路）就五分鐘後再試，恢復連線時也會試。
 async function syncRecords() {
-  if (!syncApi || syncBusy) return;
+  if (!uploadOn || syncBusy) return;
   syncBusy = true;
   clearTimeout(syncTimer);
   syncTimer = null;
   try {
-    for (let uids; (uids = loadDeletes().slice(0, SYNC_DELETE_BATCH)).length;) {
-      await syncFetch("/api/records/delete", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uids }),
-      });
-      const gone = new Set(uids);
-      saveDeletes(loadDeletes().filter((x) => !gone.has(x)));     // 等回應的時候可能又多刪了幾筆，重讀再存
-    }
     while (uploadOn) {
-      const batch = records.filter((r) => r.uid && r.sync !== "no" && !syncSeen.has(r.uid)).slice(0, SYNC_BATCH);
+      const batch = records.filter((r) => r.uid && canUpload(r) && r.sync !== "no" && !syncSeen.has(r.uid)).slice(0, SYNC_BATCH);
       if (!batch.length) break;
       const res = await syncFetch("/api/records", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1851,7 +1931,10 @@ async function syncRecords() {
       }
       if (!batch.some((r) => syncSeen.has(r.uid) || r.sync === "no")) throw new Error("後端的回應看不懂");
       if (fresh || refused) { writeRecords(); renderHistory(); }
-      if (fresh) log(`已上傳 ${fresh} 段紀錄到排行榜。`);
+      if (fresh) {
+        log(`已上傳 ${fresh} 段紀錄到排行榜。`);
+        rank.cache.clear();       // 排行榜頁籤下次打開時重抓，才看得到剛傳的
+      }
     }
     syncFailed = false;
   } catch (err) {
@@ -1861,8 +1944,6 @@ async function syncRecords() {
   } finally {
     syncBusy = false;
   }
-  // 傳到一半時被刪掉的紀錄：刪除那一輪已經過了，再跑一次把它從後端拿掉
-  if (!syncFailed && loadDeletes().length) syncRecords();
 }
 window.addEventListener("online", syncRecords);
 
@@ -1954,9 +2035,7 @@ for (const btn of $("boost").querySelectorAll("[data-boost]")) {
   });
 }
 $("hist-clear").addEventListener("click", () => {
-  const onBoard = records.some((r) => r.uid && r.sync !== "no");
-  if (!confirm("確定清除所有已結算的歷史紀錄？" + (onBoard ? "\n上傳過排行榜的也會一起從排行榜刪掉。" : ""))) return;
-  dropFromBoard(records);
+  if (!confirm("確定清除所有已結算的歷史紀錄？")) return;
   records = [];
   writeRecords();
   renderHistory();
@@ -4480,9 +4559,136 @@ $("doll-group").addEventListener("change", (e) => {
   dollSave();
   dollRefresh();
 });
+// ---------------------------------------------------------------- 排行榜
+// 資料是大家上傳的練功紀錄，由後端（server/app.py）算好，這裡只抓來畫。後端網址沒設（SYNC_API 是空的）就把整個頁籤拿掉。
+// 個人排行榜：總累計經驗、最高效率、等級三塊，每塊上面是前三名的頒獎台，下面是完整名單。
+// 練功排行榜：同一張地圖 × 職業 × 10 級區間的紀錄合起來算平均效率，看哪裡好練。
+// 切到這個頁籤才抓；同一個查詢一分鐘內不重抓（後端自己也快取一分鐘），按「重新整理」才強迫重抓。
+// 網址 #rank 直接開這個頁籤，#rank/train 直接開練功排行榜。
+const RANK_KEY = "mapleexp.rank-board";
+const RANK_TTL = 60 * 1000;
+const RANK_BAND = 10;      // 等級區間的寬度，跟後端的 LEVEL_BAND 一樣
+const rank = { board: "people", days: "", job: "", level: "", cache: new Map(), turn: 0 };
+// 頒獎台上的角色模型先放一個空的剪影。之後做自訂角色模型時畫在 .podium-doll 裡，data-character 是那個角色的名字。
+const RANK_DOLL = '<svg viewBox="0 0 44 64" fill="currentColor" aria-hidden="true"><circle cx="22" cy="14" r="11"/><path d="M8 62V41a14 14 0 0 1 28 0v21z"/></svg>';
+const rankNum = (n) => Math.round(n).toLocaleString();
+const rankJoin = (...parts) => parts.filter(Boolean).join(" · ");
+const rankLv = (level) => (level ? `Lv.${level}` : "");
+// 每一塊：top 是頒獎台上名字底下那行，who 是名單裡名字底下的小字，val 與 sub 是名單右邊的數值與小字
+const RANK_BOARDS = [
+  { id: "exp", top: (r) => rankNum(r.exp), who: (r) => rankJoin(r.job, rankLv(r.level)),
+    val: (r) => rankNum(r.exp), sub: (r) => `活躍 ${fmtDuration(r.activeSec)} · ${r.records} 段` },
+  { id: "rate", top: (r) => `${rankNum(r.rate)} / hr`, who: (r) => rankJoin(r.job, rankLv(r.level), r.mapName),
+    val: (r) => rankNum(r.rate), sub: (r) => `活躍 ${fmtDuration(r.activeSec)}` },
+  { id: "level", top: (r) => rankLv(r.level), who: (r) => r.job, val: (r) => rankLv(r.level), sub: () => "" },
+];
+
+function renderPeople(data) {
+  for (const board of RANK_BOARDS) {
+    const rows = data?.[board.id] || [];
+    const box = $(`rank-${board.id}`);
+    // 不滿三個人時空位照樣留著，寫「從缺」
+    box.querySelector(".podium").innerHTML = [0, 1, 2].map((i) => {
+      const r = rows[i];
+      return `<li class="p${i + 1}${r ? "" : " none"}"><div class="podium-doll"${r ? ` data-character="${esc(r.character)}"` : ""}>${RANK_DOLL}</div>`
+        + `<b class="podium-name"${r ? ` title="${esc(r.character)}"` : ""}>${r ? esc(r.character) : "從缺"}</b>`
+        + `<span class="podium-val">${r ? esc(board.top(r)) : "--"}</span><div class="podium-step" aria-label="第 ${i + 1} 名">${i + 1}</div></li>`;
+    }).join("");
+    box.querySelector(".rank-list").innerHTML = rows.map((r, i) =>
+      `<li><span class="no">${i + 1}</span><span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small></span>`
+      + `<span class="val">${esc(board.val(r))}<small>${esc(board.sub(r))}</small></span></li>`).join("");
+    box.querySelector(".rank-none").hidden = rows.length > 0;
+  }
+}
+
+function renderTraining(data) {
+  // 選項是後端說這段期間有資料的職業與區間；目前選的就算不在裡面也留著，下拉選單才不會跟實際的篩選對不上
+  const fill = (id, all, list, current, label) => {
+    const values = list.map(String);
+    if (current && !values.includes(current)) values.push(current);
+    $(id).innerHTML = `<option value="">${all}</option>`
+      + values.map((v) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(label(v))}</option>`).join("");
+  };
+  fill("rank-pick-job", "全部職業", data?.jobs || [], rank.job, (v) => v);
+  fill("rank-pick-level", "全部等級", data?.levels || [], rank.level, (v) => `Lv.${v} – ${Number(v) + RANK_BAND - 1}`);
+  const rows = data?.rows || [];
+  $("rank-train-body").innerHTML = rows.map((r, i) =>
+    `<tr><td class="num">${i + 1}</td><td>${esc(r.mapName)}</td><td>${esc(r.job)}</td><td>Lv.${r.levelFrom} – ${r.levelTo}</td>`
+    + `<td class="num"><b>${rankNum(r.rate)}</b></td><td class="num">${fmtDuration(r.activeSec)}</td>`
+    + `<td class="num">${r.characters}</td><td class="num">${r.records}</td></tr>`).join("");
+  $("rank-train-none").hidden = rows.length > 0;
+}
+
+async function rankGet(path, force) {
+  const hit = rank.cache.get(path);
+  if (hit && !force && Date.now() - hit.at < RANK_TTL) return hit;
+  const res = await fetch(syncApi + path, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const fresh = { at: Date.now(), data: await res.json() };
+  rank.cache.set(path, fresh);
+  return fresh;
+}
+
+async function rankLoad(force = false) {
+  const turn = ++rank.turn;       // 連著切幾次時只認最後一次，前面慢到的回應不蓋掉新的
+  const days = rank.days ? `&days=${rank.days}` : "";
+  const path = rank.board === "people"
+    ? `/api/leaderboard?limit=50${days}`
+    : `/api/training?limit=200${days}${rank.job ? `&job=${encodeURIComponent(rank.job)}` : ""}${rank.level ? `&level=${rank.level}` : ""}`;
+  $("rank-state").textContent = "載入中…";
+  try {
+    const hit = await rankGet(path, force);
+    if (turn !== rank.turn) return;
+    (rank.board === "people" ? renderPeople : renderTraining)(hit.data);
+    const at = new Date(hit.at);
+    $("rank-state").textContent = `更新於 ${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+    $("rank-error").textContent = "";
+  } catch (err) {
+    if (turn !== rank.turn) return;
+    // 畫面上原本的名單留著，只在上面說一聲
+    $("rank-state").textContent = "讀取失敗";
+    $("rank-error").textContent = `連不上排行榜的伺服器（${err.message}），稍後再按「重新整理」。`;
+  }
+}
+
+function setBoard(id) {
+  if (!["people", "train"].includes(id)) id = "people";
+  rank.board = id;
+  for (const btn of document.querySelectorAll("#tab-rank [data-board]")) btn.setAttribute("aria-selected", String(btn.dataset.board === id));
+  $("rank-people").hidden = id !== "people";
+  $("rank-train").hidden = id !== "train";
+  try { localStorage.setItem(RANK_KEY, id); } catch { /* 存不了就算了 */ }
+  if (!$("tab-rank").hidden) {
+    history.replaceState(null, "", id === "people" ? "#rank" : `#rank/${id}`);
+    rankLoad();
+  }
+}
+
+if (syncApi) {
+  for (const btn of document.querySelectorAll("#tab-rank [data-board]")) btn.addEventListener("click", () => setBoard(btn.dataset.board));
+  for (const btn of $("rank-days").querySelectorAll("[data-days]")) {
+    btn.addEventListener("click", () => {
+      rank.days = btn.dataset.days;
+      for (const b of $("rank-days").querySelectorAll("[data-days]")) {
+        b.classList.toggle("on", b === btn);
+        b.setAttribute("aria-checked", String(b === btn));
+      }
+      rankLoad();
+    });
+  }
+  $("rank-reload").addEventListener("click", () => rankLoad(true));
+  $("rank-pick-job").addEventListener("change", (e) => { rank.job = e.target.value; rankLoad(); });
+  $("rank-pick-level").addEventListener("change", (e) => { rank.level = e.target.value; rankLoad(); });
+  try { rank.board = localStorage.getItem(RANK_KEY) || "people"; } catch { /* 讀不到就用預設 */ }
+  renderPeople(null);       // 還沒抓到資料前先把空的頒獎台畫出來，版面不會跳
+} else {
+  $("tab-btn-rank").remove();
+  $("tab-rank").remove();
+}
+
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
-// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備），網址上的優先於記住的。
+// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備；#rank、#rank/train 是排行榜），網址上的優先於記住的。
 const TAB_KEY = "mapleexp.tab";
 const hasTab = (id) => !!document.querySelector(`.tabs [data-tab="${id}"]`);
 function setTab(id) {
@@ -4493,6 +4699,7 @@ function setTab(id) {
   if (id === "train") fitHistoryHeight();     // 藏著的時候量不到列高，切回來再量
   if (id === "book") { loadWorld(); setSub(ibook.sub); }   // 連道具、任務、地圖資料一起載：怪物的掉落物要縮圖、出現地圖要小卡
   if (id === "doll") dollOpen();
+  if (id === "rank") setBoard(rank.board);
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
 {
@@ -4500,6 +4707,7 @@ for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventLis
   try { saved = localStorage.getItem(TAB_KEY) || ""; } catch { /* 讀不到就用預設 */ }
   const [fromUrl, sub] = location.hash.slice(1).split("/");
   if (fromUrl === "book" && sub) ibook.sub = sub;
+  if (fromUrl === "rank" && sub) rank.board = sub;
   setTab(hasTab(fromUrl) ? fromUrl : hasTab(saved) ? saved : "train");
 }
 

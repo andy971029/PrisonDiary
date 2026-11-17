@@ -5,18 +5,21 @@
 
 沒有登入也沒有帳號：一筆紀錄只靠網頁給的 uid 辨認，內容不比對。網頁每次開啟都會把手上的
 紀錄整批重傳，已經有的 uid 不會再存一次（uid 是網頁從紀錄內容算出來的指紋，同一筆永遠同一個）。
-知道 uid 的人（也就是存著那筆紀錄的瀏覽器）才能刪掉它。uid 與上傳者的 IP 只存不對外，
-排行榜的回應裡不會出現。
+活躍不滿 10 分鐘的紀錄不收（網頁也不會傳）。收下的紀錄不會因為使用者在網頁上刪掉而消失：沒有對外的刪除功能，要拿掉只能直接改資料檔。
+uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 
 數字是瀏覽器自己算好傳上來的，這裡只擋格式不對與明顯不可能的值，擋不了有心造假。
 
+這裡只出資料，畫面在網站的「排行榜」頁籤（web/index.html）。
+
 路徑：
     POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}]}
-    POST   /api/records/delete {"uids": [...]}，刪一批，有沒有那些都回 204（清除全部歷史時一次送，不用一筆一個請求）
-    DELETE /api/records/<uid>  刪一筆，有沒有那筆都回 204
-    GET    /api/leaderboard    ?days=7&limit=50，回三個榜（總經驗、最高效率、等級）
+    GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級）
+    GET    /api/training       ?days=7&job=法師&level=35&limit=100，回練功榜：地圖 × 職業 × 等級區間的平均效率
     GET    /api/health         {"ok": true, "records": 筆數}
-    GET    /                   直接看排行榜的簡單頁面
+    GET    /                   轉去網站的排行榜頁籤
+    POST   /api/records/delete、DELETE /api/records/<uid>
+                               舊版網頁刪紀錄時會叫的；現在不刪了，照樣回 204，舊網頁才不會卡著一直重試
 """
 
 from __future__ import annotations
@@ -41,9 +44,11 @@ MAX_DB_BYTES = 200 * 1024 * 1024  # 資料檔長到這麼大就不再收，免�
 MIN_FREE_BYTES = 100 * 1024 * 1024
 RATE_LIMIT = 120                  # 每個 IP 每分鐘幾個請求
 RATE_WINDOW = 60.0
-RATE_MIN_SEC = 600                # 效率榜只算活躍滿 10 分鐘的紀錄，免得打幾隻怪就衝上榜
+MIN_ACTIVE_SEC = 600              # 活躍不滿 10 分鐘的紀錄不收：太短的效率不準，打幾隻怪就能衝上榜
 BOARD_TTL = 60.0
 MAX_LIMIT = 200
+LEVEL_BAND = 10                   # 練功榜的等級區間：1–10、11–20…
+SITE = "https://andy971029.github.io/PrisonDiary/"
 
 UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是壞資料
@@ -119,6 +124,9 @@ def validate(raw: object, now_ms: int) -> dict:
     cum_net = round(_number(raw, "cumNet", 0, MAX_EXP))
     if cum_net <= 0:
         raise Invalid("cumNet 不是正數")
+    active_sec = float(_number(raw, "activeSec", 0, MAX_SEC))
+    if active_sec < MIN_ACTIVE_SEC:
+        raise Invalid("活躍時間不滿 10 分鐘")
     return {
         "uid": uid,
         "character": _text(raw, "character", 24, required=True),
@@ -129,7 +137,7 @@ def validate(raw: object, now_ms: int) -> dict:
         "start_at": start_at,
         "end_at": end_at,
         "cum_net": cum_net,
-        "active_sec": float(_number(raw, "activeSec", 0, MAX_SEC)),
+        "active_sec": active_sec,
         "idle_sec": float(_number(raw, "idleSec", 0, MAX_SEC)),
     }
 
@@ -153,6 +161,8 @@ class Store:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
         self._db.executescript(SCHEMA)
+        # 門檻是後來才加的：之前收下的短紀錄在啟動時清掉
+        self._db.execute("DELETE FROM records WHERE active_sec < ?", (MIN_ACTIVE_SEC,))
         self._db.commit()
 
     def close(self) -> None:
@@ -200,22 +210,6 @@ class Store:
                 self._boards.clear()
         return accepted, rejected
 
-    def delete(self, uid: str) -> bool:
-        with self._lock:
-            done = self._db.execute("DELETE FROM records WHERE uid = ?", (uid,)).rowcount > 0
-            self._db.commit()
-            if done:
-                self._boards.clear()
-        return done
-
-    def delete_many(self, uids: list[str]) -> int:
-        with self._lock:
-            done = self._db.executemany("DELETE FROM records WHERE uid = ?", [(uid,) for uid in uids]).rowcount
-            self._db.commit()
-            if done:
-                self._boards.clear()
-        return done
-
     def count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM records").fetchone()[0]
@@ -242,9 +236,9 @@ class Store:
             rate = self._db.execute(
                 "SELECT character, job, level, map_name, MAX(cum_net * 3600.0 / active_sec) AS best,"
                 " active_sec, end_at"
-                " FROM records r WHERE end_at >= ? AND active_sec >= ?"
+                " FROM records r WHERE end_at >= ?"
                 " GROUP BY character ORDER BY best DESC, character LIMIT ?",
-                (since, RATE_MIN_SEC, limit),
+                (since, limit),
             ).fetchall()
             level = self._db.execute(
                 f"SELECT character, {job}, MAX(level) AS top, MIN(end_at)"
@@ -265,6 +259,56 @@ class Store:
                 ],
                 "level": [{"character": c, "job": j or "", "level": top} for c, j, top, _ in level],
             }
+            self._boards[key] = (now, out)
+            return out
+
+    def training(self, days: int | None = None, job: str | None = None, level: int | None = None,
+                 limit: int = 100, now_ms: int | None = None) -> dict:
+        """練功榜：同一張地圖、同一個職業、同一個等級區間的紀錄合起來，總經驗 ÷ 總活躍時間，效率高的在前。
+
+        地圖用名字分（同一張圖的像素指紋可能不只一個）；沒讀到地圖、職業或等級的紀錄不算。
+        job、level 給了就只看那個職業、那個等級所在的區間。jobs、levels 是這段期間內有資料的選項，給網頁做篩選。
+        """
+        now = time.monotonic()
+        key = ("training", days, job, level, limit)
+        with self._lock:
+            hit = self._boards.get(key)
+            if hit and now - hit[0] < BOARD_TTL and now_ms is None:
+                return hit[1]
+            now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+            since = now_ms - days * DAY_MS if days else 0
+            base = "end_at >= ? AND map_name <> '' AND job <> '' AND level IS NOT NULL"
+            band = f"(level - 1) / {LEVEL_BAND}"
+            where, args = base, [since]
+            if job:
+                where += " AND job = ?"
+                args.append(job)
+            if level:
+                where += f" AND {band} = ?"
+                args.append((level - 1) // LEVEL_BAND)
+            rows = self._db.execute(
+                f"SELECT map_name, job, {band} AS band, SUM(cum_net) * 3600.0 / SUM(active_sec) AS rate,"
+                " SUM(cum_net), SUM(active_sec), COUNT(*), COUNT(DISTINCT character)"
+                f" FROM records WHERE {where} GROUP BY map_name, job, band"
+                " ORDER BY rate DESC, map_name, job LIMIT ?",
+                (*args, limit),
+            ).fetchall()
+            jobs = [j for (j,) in self._db.execute(f"SELECT DISTINCT job FROM records WHERE {base} ORDER BY job", (since,))]
+            bands = [b for (b,) in self._db.execute(
+                f"SELECT DISTINCT {band} AS band FROM records WHERE {base} ORDER BY band", (since,))]
+            out = {
+                "days": days,
+                "jobs": jobs,
+                "levels": [b * LEVEL_BAND + 1 for b in bands],
+                "rows": [
+                    {"mapName": m, "job": j, "levelFrom": b * LEVEL_BAND + 1, "levelTo": (b + 1) * LEVEL_BAND,
+                     "rate": round(rate), "exp": total, "activeSec": round(sec), "records": n, "characters": who}
+                    for m, j, b, rate, total, sec, n, who in rows
+                ],
+            }
+            # 篩選條件是使用者給的，組合沒有上限；快取太多就整個清掉，免得被亂給的條件塞滿記憶體
+            if len(self._boards) > 200:
+                self._boards.clear()
             self._boards[key] = (now, out)
             return out
 
@@ -308,74 +352,6 @@ def client_ip(peer: str, headers) -> str:
             except ValueError:
                 continue
     return peer
-
-
-PAGE = """<!doctype html>
-<html lang="zh-Hant">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>服刑日誌排行榜</title>
-<style>
-  :root { color-scheme: light dark; --line: #8884; --dim: #888; }
-  body { font: 15px/1.5 system-ui, "Noto Sans TC", sans-serif; margin: 0 auto; padding: 16px; max-width: 760px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 28px 0 6px; }
-  nav a { margin-right: 12px; }
-  nav a[aria-current] { font-weight: 700; text-decoration: none; color: inherit; }
-  .wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; white-space: nowrap; }
-  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
-  th { color: var(--dim); font-weight: 500; font-size: 13px; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .note { color: var(--dim); font-size: 13px; }
-</style>
-<h1>服刑日誌排行榜</h1>
-<nav><a href="?" data-days="">全部</a><a href="?days=30" data-days="30">近 30 天</a><a href="?days=7" data-days="7">近 7 天</a></nav>
-<p class="note" id="note">載入中…</p>
-<h2>總經驗</h2><div class="wrap"><table id="exp"></table></div>
-<h2>最高效率<span class="note">（單段活躍滿 10 分鐘）</span></h2><div class="wrap"><table id="rate"></table></div>
-<h2>等級</h2><div class="wrap"><table id="level"></table></div>
-<script>
-const days = new URLSearchParams(location.search).get("days") || "";
-for (const a of document.querySelectorAll("nav a")) if (a.dataset.days === days) a.setAttribute("aria-current", "page");
-const num = (n) => Math.round(n).toLocaleString();
-const dur = (s) => `${Math.floor(s / 3600)} 小時 ${Math.floor(s % 3600 / 60)} 分`;
-const BOARDS = {
-  exp: [["角色", "character"], ["職業", "job"], ["等級", "level", String], ["累計經驗", "exp", num], ["活躍時間", "activeSec", dur], ["段數", "records", num]],
-  rate: [["角色", "character"], ["職業", "job"], ["等級", "level", String], ["地圖", "mapName"], ["EXP / hr", "rate", num], ["活躍時間", "activeSec", dur]],
-  level: [["角色", "character"], ["職業", "job"], ["等級", "level", String]],
-};
-function fill(id, rows) {
-  const table = document.getElementById(id), cols = BOARDS[id];
-  const head = table.createTHead().insertRow();
-  for (const [label, , fmt] of [["#", "", num], ...cols]) {
-    const th = document.createElement("th");
-    th.textContent = label;
-    if (fmt) th.className = "num";
-    head.appendChild(th);
-  }
-  const body = table.createTBody();
-  rows.forEach((row, i) => {
-    const tr = body.insertRow();
-    const rank = tr.insertCell();
-    rank.textContent = i + 1;
-    rank.className = "num";
-    for (const [, key, fmt] of cols) {
-      const td = tr.insertCell();
-      const value = row[key];
-      td.textContent = value == null || value === "" ? "--" : fmt ? fmt(value) : value;
-      if (fmt) td.className = "num";
-    }
-  });
-  if (!rows.length) body.insertRow().insertCell().textContent = "還沒有紀錄";
-}
-fetch("api/leaderboard" + (days ? `?days=${days}` : "")).then((res) => res.json()).then((data) => {
-  for (const id of Object.keys(BOARDS)) fill(id, data[id]);
-  document.getElementById("note").textContent = "資料來自大家在服刑日誌結算時上傳的修練紀錄。";
-}).catch(() => { document.getElementById("note").textContent = "讀不到排行榜，稍後再試。"; });
-</script>
-</html>
-"""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -438,7 +414,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         if url.path == "/":
-            self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            # 排行榜的畫面在網站上；直接開後端網址的人帶過去
+            self.send_response(302)
+            self.send_header("Location", SITE + "#rank")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         elif url.path == "/api/health":
             self._json(200, {"ok": True, "records": self.store.count()})
         elif url.path == "/api/leaderboard":
@@ -453,6 +433,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, "days 或 limit 超出範圍")
                 return
             self._json(200, self.store.boards(days, limit))
+        elif url.path == "/api/training":
+            query = parse_qs(url.query)
+            try:
+                days = int(query["days"][0]) if "days" in query else None
+                limit = int(query["limit"][0]) if "limit" in query else 100
+                level = int(query["level"][0]) if "level" in query else None
+            except ValueError:
+                self._error(400, "days、level 與 limit 要是整數")
+                return
+            job = query["job"][0].strip() if "job" in query else None
+            if ((days is not None and not 1 <= days <= 3650) or not 1 <= limit <= MAX_LIMIT
+                    or (level is not None and not 1 <= level <= 300) or (job is not None and len(job) > 24)):
+                self._error(400, "days、level、limit 或 job 超出範圍")
+                return
+            self._json(200, self.store.training(days, job or None, level, limit))
         else:
             self._error(404, "沒有這個路徑")
 
@@ -480,12 +475,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, "不是合法的 JSON")
             return
         if path == "/api/records/delete":
-            uids = data.get("uids") if isinstance(data, dict) else None
-            if not isinstance(uids, list) or not 0 < len(uids) <= MAX_BATCH:
-                self._error(400, f"uids 要是 1 到 {MAX_BATCH} 筆的陣列")
-                return
-            # 格式不對的直接略過：反正不會有那一筆，不必讓整批失敗
-            self.store.delete_many([uid for uid in uids if isinstance(uid, str) and UID.match(uid)])
+            # 舊版網頁刪紀錄時叫的。現在收下的紀錄不刪，回 204 讓它把待刪清單清掉、繼續上傳
             self._send(204)
             return
         records = data.get("records") if isinstance(data, dict) else None
@@ -508,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
         if not UID.match(uid):
             self._error(404, "沒有這個路徑")
             return
-        self.store.delete(uid)
+        # 同上：舊版網頁的單筆刪除，不刪，照樣回 204
         self._send(204)
 
 

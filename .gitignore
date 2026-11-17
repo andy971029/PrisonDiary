@@ -5,6 +5,9 @@ __pycache__/
 # 打包產物：serve.cmd 每次啟動都會重新產生
 web/mapleexp.zip
 
+# 本機試跑後端（python server/app.py）時的資料檔
+server/data/
+
 # Claude Code
 CLAUDE.md
 CLAUDE.local.md

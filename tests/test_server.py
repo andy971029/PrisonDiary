@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -53,7 +55,7 @@ class ValidateTest(unittest.TestCase):
             {"character": ""}, {"character": "   "}, {"character": "x" * 25}, {"character": "a\nb"}, {"character": 5},
             {"level": 0}, {"level": 301}, {"level": 70.5}, {"level": "70"}, {"level": True},
             {"cumNet": 0}, {"cumNet": -5}, {"cumNet": 1e14}, {"cumNet": "9"}, {"cumNet": float("nan")},
-            {"activeSec": -1}, {"activeSec": 31 * 86400}, {"idleSec": None},
+            {"activeSec": -1}, {"activeSec": 599}, {"activeSec": 31 * 86400}, {"idleSec": None},
             {"startAt": 0}, {"endAt": NOW - 2 * HOUR}, {"endAt": NOW + 2 * app.DAY_MS},
             {"mapName": "x" * 49},
         ]
@@ -92,16 +94,21 @@ class StoreTest(unittest.TestCase):
         self.assertTrue(all(r["reason"] for r in rejected))
         self.assertEqual(self.store.count(), 2)
 
-    def test_delete(self):
-        self.store.add([record(1), record(2)], "::1", NOW)
-        self.assertTrue(self.store.delete(uid(1)))
-        self.assertFalse(self.store.delete(uid(1)))
-        self.assertEqual(self.store.count(), 1)
+    def test_short_records_kept_before_the_minimum_are_dropped_on_start(self):
+        import tempfile
 
-    def test_delete_many(self):
-        self.store.add([record(1), record(2), record(3)], "::1", NOW)
-        self.assertEqual(self.store.delete_many([uid(1), uid(3), uid(9)]), 2)
-        self.assertEqual(self.store.count(), 1)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "r.db"
+        store = app.Store(path)
+        store.add([record(1), record(2)], "::1", NOW)
+        # 門檻加上去以前收下的短紀錄：現在的 add 存不進這種的，直接改資料表模擬
+        store._db.execute("UPDATE records SET active_sec = 599 WHERE uid = ?", (uid(2),))
+        store._db.commit()
+        store.close()
+        store = app.Store(path)
+        self.addCleanup(store.close)
+        self.assertEqual(store._db.execute("SELECT uid FROM records").fetchall(), [(uid(1),)])
 
     def test_full_store_refuses(self):
         import tempfile
@@ -123,7 +130,7 @@ class BoardsTest(unittest.TestCase):
             # 阿明：兩段，後來轉職升等；第二段效率比較高
             record(1, startAt=NOW - 50 * HOUR, endAt=NOW - 49 * HOUR, job="槍騎兵", level=68, cumNet=100_000),
             record(2, job="龍騎士", level=70, cumNet=360_000, mapName="死亡森林"),
-            # 小華：總經驗最多，但效率最高的那段只打了 5 分鐘，不算進效率榜
+            # 小華：總經驗最多；另一段只打了 5 分鐘，不滿 10 分鐘的不收，哪個榜都不會算到
             record(3, character="小華", job="祭司", level=65, cumNet=900_000, activeSec=7200,
                    startAt=NOW - 2 * HOUR, mapName="天空之塔"),
             record(4, character="小華", job="", level=None, cumNet=200_000, activeSec=300,
@@ -133,10 +140,10 @@ class BoardsTest(unittest.TestCase):
     def test_exp_board_sums_per_character(self):
         board = self.store.boards(now_ms=NOW)["exp"]
         self.assertEqual([(r["character"], r["exp"], r["records"]) for r in board],
-                         [("小華", 1_100_000, 2), ("阿明", 460_000, 2)])
+                         [("小華", 900_000, 1), ("阿明", 460_000, 2)])
         # 職業取最近一筆有讀到的，等級取最高的
         self.assertEqual([(r["job"], r["level"]) for r in board], [("祭司", 65), ("龍騎士", 70)])
-        self.assertEqual(board[0]["activeSec"], 7500)
+        self.assertEqual(board[0]["activeSec"], 7200)
 
     def test_rate_board_takes_best_long_enough_record(self):
         board = self.store.boards(now_ms=NOW)["rate"]
@@ -163,8 +170,62 @@ class BoardsTest(unittest.TestCase):
         self.assertEqual(len(self.store.boards()["exp"]), 2)
         self.store.add([record(9, character="新人")], "::1", NOW)
         self.assertEqual(len(self.store.boards()["exp"]), 3)
-        self.store.delete(uid(9))
-        self.assertEqual(len(self.store.boards()["exp"]), 2)
+
+
+class TrainingTest(unittest.TestCase):
+    def setUp(self):
+        self.store = app.Store(":memory:")
+        self.addCleanup(self.store.close)
+        self.store.add([
+            # 死亡森林、龍騎士、61–70：兩個人各一小時，合起來算
+            record(1, cumNet=360_000),
+            record(2, character="小美", level=65, cumNet=180_000),
+            # 同一張圖同一個職業，升到 71 就是另一個區間
+            record(3, level=71, cumNet=400_000),
+            # 天空之塔、祭司、61–70：最近一段效率高，很久以前那段拉低了全期的平均
+            record(4, character="小華", job="祭司", level=65, mapName="天空之塔", cumNet=900_000, activeSec=7200,
+                   startAt=NOW - 2 * HOUR),
+            record(5, character="小華", job="祭司", level=62, mapName="天空之塔", cumNet=100_000,
+                   startAt=NOW - 400 * HOUR, endAt=NOW - 399 * HOUR),
+            # 活躍不到 10 分鐘的根本不收；沒讀到地圖、職業、等級的不算
+            record(6, character="路人", job="法師", level=30, mapName="姑姑鐘", cumNet=9_000_000, activeSec=300),
+            record(7, mapName=""), record(8, job=""), record(9, level=None),
+            record(10, character="路人", job="法師", level=30, mapName="姑姑鐘", cumNet=30_000, activeSec=600),
+        ], "::1", NOW)
+
+    def rows(self, **kw):
+        return [(r["mapName"], r["job"], r["levelFrom"], r["levelTo"], r["rate"])
+                for r in self.store.training(now_ms=NOW, **kw)["rows"]]
+
+    def test_groups_by_map_job_and_level_band(self):
+        out = self.store.training(now_ms=NOW)
+        self.assertEqual(self.rows(), [
+            ("死亡森林", "龍騎士", 71, 80, 400_000),
+            ("天空之塔", "祭司", 61, 70, 333_333),
+            ("死亡森林", "龍騎士", 61, 70, 270_000),
+            ("姑姑鐘", "法師", 21, 30, 180_000),
+        ])
+        low = out["rows"][2]
+        self.assertEqual((low["exp"], low["activeSec"], low["records"], low["characters"]), (540_000, 7200, 2, 2))
+        # 篩選用的選項：這段期間有資料的職業與區間起點
+        self.assertEqual((out["jobs"], out["levels"]), (["法師", "祭司", "龍騎士"], [21, 61, 71]))
+
+    def test_filters_and_window(self):
+        self.assertEqual([r[4] for r in self.rows(job="龍騎士")], [400_000, 270_000])
+        self.assertEqual([r[:2] for r in self.rows(level=65)], [("天空之塔", "祭司"), ("死亡森林", "龍騎士")])
+        self.assertEqual(self.rows(job="祭司", level=70, days=1), [("天空之塔", "祭司", 61, 70, 450_000)])
+        self.assertEqual(self.rows(job="沒這個職業"), [])
+        self.assertEqual(len(self.rows(limit=1)), 1)
+
+    def test_never_leaks_uid_ip_or_names(self):
+        text = json.dumps(self.store.training(now_ms=NOW), ensure_ascii=False)
+        for secret in (uid(1), "::1", "阿明", "小華"):
+            self.assertNotIn(secret, text)
+
+    def test_cached_until_a_write(self):
+        self.assertEqual(len(self.store.training()["rows"]), 4)
+        self.store.add([record(20, mapName="新地圖")], "::1", NOW)
+        self.assertEqual(len(self.store.training()["rows"]), 5)
 
 
 class LimiterAndIpTest(unittest.TestCase):
@@ -213,7 +274,7 @@ class HttpTest(unittest.TestCase):
             with err:
                 return err.code, dict(err.headers), err.read()
 
-    def test_upload_then_board_then_delete(self):
+    def test_upload_then_board(self):
         now = app.time.time() * 1000
         rec = record(1, startAt=now - HOUR, endAt=now)
         status, headers, raw = self.call("POST", "/api/records", {"records": [rec, record(2, cumNet=0)]},
@@ -234,11 +295,19 @@ class HttpTest(unittest.TestCase):
         self.assertNotIn("203.0.113.50", raw.decode("utf-8"))
 
         self.assertEqual(json.loads(self.call("GET", "/api/health")[2]), {"ok": True, "records": 1})
-        self.assertEqual(self.call("DELETE", f"/api/records/{uid(1)}")[0], 204)
-        self.assertEqual(self.call("DELETE", f"/api/records/{uid(1)}")[0], 204)
-        self.assertEqual(self.store.count(), 0)
 
-    def test_resend_is_ignored_and_batch_delete(self):
+    def test_old_pages_cannot_delete_any_more(self):
+        # 收下的紀錄不刪。舊版網頁還會來叫刪除，照樣回 204（不然它會卡著一直重試、後面的也傳不上來），但什麼都不動
+        now = app.time.time() * 1000
+        self.call("POST", "/api/records", {"records": [record(1, startAt=now - HOUR, endAt=now)]},
+                  {"Content-Type": "application/json"})
+        self.assertEqual(self.call("DELETE", f"/api/records/{uid(1)}")[0], 204)
+        status, _headers, raw = self.call("POST", "/api/records/delete", {"uids": [uid(1), "not-a-uid"]},
+                                          {"Content-Type": "application/json"})
+        self.assertEqual((status, raw), (204, b""))
+        self.assertEqual(self.store.count(), 1)
+
+    def test_resend_is_ignored(self):
         # 網頁每次開啟都整批重傳：同樣的 uid 再來幾次都只有一筆，回應照樣說收下了
         now = app.time.time() * 1000
         batch = {"records": [record(n, startAt=now - HOUR, endAt=now) for n in (1, 2, 3)]}
@@ -246,15 +315,6 @@ class HttpTest(unittest.TestCase):
             status, _headers, raw = self.call("POST", "/api/records", batch, {"Content-Type": "application/json"})
             self.assertEqual((status, json.loads(raw)["accepted"]), (200, [uid(1), uid(2), uid(3)]))
         self.assertEqual(self.store.count(), 3)
-
-        # 一次刪一批；格式不對的、沒有的都略過，不讓整批失敗
-        status, _headers, raw = self.call("POST", "/api/records/delete", {"uids": [uid(1), "not-a-uid", 7, uid(9), uid(3)]},
-                                          {"Content-Type": "application/json"})
-        self.assertEqual((status, raw), (204, b""))
-        self.assertEqual(self.store.count(), 1)
-        for bad in ({"uids": []}, {"uids": "x"}, {"records": [record(1)]}, [uid(2)]):
-            self.assertEqual(self.call("POST", "/api/records/delete", bad, {"Content-Type": "application/json"})[0], 400)
-        self.assertEqual(self.store.count(), 1)
 
     def test_preflight(self):
         status, headers, _ = self.call("OPTIONS", "/api/records", headers={
@@ -283,11 +343,30 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.call("DELETE", "/api/records/not-a-uid")[0], 404)
         self.assertEqual(self.store.count(), 0)
 
-    def test_page_and_rate_limit(self):
-        status, headers, raw = self.call("GET", "/")
+    def test_training_over_http(self):
+        now = app.time.time() * 1000
+        recs = [record(1, startAt=now - HOUR, endAt=now),
+                record(2, character="小華", job="祭司", level=35, mapName="天空之塔", startAt=now - HOUR, endAt=now)]
+        self.call("POST", "/api/records", {"records": recs}, {"Content-Type": "application/json"})
+        query = urllib.parse.urlencode({"job": "祭司", "level": 31, "days": 7, "limit": 5})
+        status, _headers, raw = self.call("GET", "/api/training?" + query)
+        out = json.loads(raw)
         self.assertEqual(status, 200)
-        self.assertIn("text/html", headers["Content-Type"])
-        self.assertIn("排行榜", raw.decode("utf-8"))
+        self.assertEqual([(r["mapName"], r["job"], r["levelFrom"], r["levelTo"]) for r in out["rows"]],
+                         [("天空之塔", "祭司", 31, 40)])
+        self.assertEqual((out["jobs"], out["levels"]), (["祭司", "龍騎士"], [31, 61]))
+        self.assertEqual(len(json.loads(self.call("GET", "/api/training")[2])["rows"]), 2)
+        for bad in ("level=0", "level=301", "level=x", "days=0", "limit=100000", "job=" + "x" * 25):
+            self.assertEqual(self.call("GET", "/api/training?" + bad)[0], 400, bad)
+
+    def test_root_redirects_to_the_site_and_rate_limit(self):
+        # 畫面在網站上，後端自己沒有頁面；urllib 會自動跟著轉址跑去外面，所以這裡自己發請求
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=10)
+        self.addCleanup(conn.close)
+        conn.request("GET", "/")
+        res = conn.getresponse()
+        self.assertEqual((res.status, res.getheader("Location")), (302, app.SITE + "#rank"))
+        res.read()
         self.server.RequestHandlerClass.limiter = app.RateLimiter(limit=1)
         self.assertEqual(self.call("GET", "/api/health")[0], 200)
         self.assertEqual(self.call("GET", "/api/health")[0], 429)
