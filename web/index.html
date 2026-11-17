@@ -833,7 +833,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1208,7 +1208,7 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；活躍不滿 10 分鐘、讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來">
+  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來">
     <span>上傳練功紀錄</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
   </div>
   <h3>神聖祈禱（掛7）設定</h3>
@@ -1253,8 +1253,9 @@
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
   <p>確認要把這次的紀錄存進歷史嗎？</p>
-  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字、活躍滿 10 分鐘的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；上傳後在這裡刪掉紀錄，排行榜上的不會跟著刪。不想上傳可以到「設定」關掉「上傳練功紀錄」。</p>
+  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；上傳後在這裡刪掉紀錄，排行榜上的不會跟著刪。不想上傳可以到「設定」關掉「上傳練功紀錄」。</p>
   <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
+  <p class="note" id="dlg-short" hidden></p>
   <div class="btns">
     <button id="dlg-cancel" class="secondary" hidden>取消</button>
     <button id="dlg-no" class="secondary">不要儲存</button>
@@ -1622,6 +1623,7 @@ function tick() {
 const HIST_KEY = "mapleexp.history.v3";
 const HIST_KEY_V2 = "mapleexp.history.v2";
 const HIST_MAX = 300;
+const HIST_MIN_SEC = 600;          // 活躍不滿 10 分鐘的段不記：結算時直接丟掉，不進歷史也不上傳（後端的 MIN_ACTIVE_SEC 也是這個數）
 const UNKNOWN_CHAR = "（未辨識角色）";
 const UNKNOWN_MAP = "（未辨識地圖）";
 // 暫存的「這一次修練」：key = 角色 × 職業 × 等級 × 地圖。只有結算時才寫進 records（localStorage）。
@@ -1630,6 +1632,15 @@ let records = loadRecords();
 let lastTotals = null;             // 上一格的累計值，用來算增量
 let liveKey = "";
 let seq = 0;
+// 這條規則上線前存下來的短紀錄也一併丟掉
+{
+  const kept = records.filter((r) => r.activeSec >= HIST_MIN_SEC);
+  if (kept.length !== records.length) {
+    log(`已移除 ${records.length - kept.length} 段活躍不滿 10 分鐘的舊紀錄。`);
+    records = kept;
+    writeRecords();
+  }
+}
 
 function loadRecords() {
   try {
@@ -1657,8 +1668,11 @@ function writeRecords() {
   } catch { return false; }
 }
 
+// 結算時會記下來的段：有拿到經驗，活躍也滿 10 分鐘。只有短的段時，關分頁不用擋、也不用自動結算
+const keepable = (seg) => seg.cumNet > 0 && seg.activeSec >= HIST_MIN_SEC;
+
 function hasPending() {
-  return Object.values(pending).some((seg) => seg.cumNet > 0);
+  return Object.values(pending).some(keepable);
 }
 
 function trackHistory(out) {
@@ -1696,7 +1710,12 @@ function trackHistory(out) {
 }
 
 function pendingSegments() {
-  return Object.values(pending).filter((seg) => seg.cumNet > 0);
+  return Object.values(pending).filter(keepable);
+}
+
+// 有拿到經驗、但活躍不滿 10 分鐘，結算時會被丟掉的段數
+function shortSegments() {
+  return Object.values(pending).filter((seg) => seg.cumNet > 0 && !keepable(seg)).length;
 }
 
 // 結算確認後才呼叫：把暫存的段正式寫入歷史。
@@ -1784,7 +1803,7 @@ function renderHistory() {
   else if (sent) where = `存在這個瀏覽器，其中 ${sent} 段已上傳排行榜`;
   $("hist-note").textContent = rows.length
     ? `共 ${records.length} 段，${where}。`
-    : "還沒有紀錄。按「停止分享並結算」或重置，確認儲存後才會出現在這裡。";
+    : "還沒有紀錄。按「停止分享並結算」或重置，確認儲存後才會出現在這裡；活躍不滿 10 分鐘的段不記錄。";
   for (const { seg: r, live: isLive } of rows) {
     const tr = document.createElement("tr");
     if (isLive) tr.className = "live";
@@ -1821,13 +1840,12 @@ buildHistoryHead();
 // 開著上傳時，每次開頁把手上的紀錄整批傳一次（這個功能上線前存的、關著上傳時結算的也一起），儲存紀錄時再傳新的那幾筆。
 // 後端只靠 uid 認重複，同一個 uid 再傳不會多存一筆。傳上去的就留在後端：在這裡刪掉紀錄只是這個瀏覽器不再存，排行榜上的不會跟著刪。
 // uid 是從紀錄內容算出來的（recordUid），不是亂數：同一筆不管第幾次開頁、在哪個分頁算，都是同一個。
-// 讀不到角色名字的排行榜用不到，活躍不滿 10 分鐘的太短、後端也不收：這兩種不配 uid、不上傳，只留在這個瀏覽器。
+// 讀不到角色名字的排行榜用不到，不配 uid、不上傳，只留在這個瀏覽器。活躍不滿 10 分鐘的段連歷史都不進（HIST_MIN_SEC），後端也不收。
 // sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
 // 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
 const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
 const SYNC_BATCH = 50;
-const SYNC_MIN_SEC = 600;                        // 活躍不滿 10 分鐘的不上傳；跟後端的 MIN_ACTIVE_SEC 一樣
 const SYNC_RETRY_MS = 5 * 60 * 1000;
 const syncApi = (() => {
   // 只有本機開的頁面能改後端網址，免得有人拿一條動過手腳的連結把別人的紀錄導到別處
@@ -1862,9 +1880,9 @@ function recordUid(r) {
   return hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
 }
 
-// 這一筆會不會上傳：要讀得到角色名字，活躍也要滿 10 分鐘
+// 這一筆會不會上傳：要讀得到角色名字。活躍時間照理都夠（短的進不了歷史），多擋一次免得後端退回來
 function canUpload(r) {
-  return r.character !== UNKNOWN_CHAR && r.activeSec >= SYNC_MIN_SEC;
+  return r.character !== UNKNOWN_CHAR && r.activeSec >= HIST_MIN_SEC;
 }
 
 // 幫會上傳、還沒有 uid 的紀錄配上；回傳配了幾筆。已經有的不動（v0.32 配的亂數 uid 後端已經認得）。
@@ -1996,8 +2014,16 @@ function fillSettleTable(segs) {
 // 結算確認視窗：列出這次的紀錄，由使用者決定存或不存。cancelable 時多一個「取消」（重置用）。
 function openSettle(cancelable, done) {
   const segs = pendingSegments();
-  if (!segs.length) { discardPending(); done("empty"); return; }
+  const short = shortSegments();
+  if (!segs.length) {
+    if (short) log(`這次的 ${short} 段修練活躍不滿 10 分鐘，不記錄。`);
+    discardPending();
+    done("empty");
+    return;
+  }
   fillSettleTable(segs);
+  $("dlg-short").hidden = !short;
+  $("dlg-short").textContent = short ? `另外有 ${short} 段活躍不滿 10 分鐘，不會記錄。` : "";
   $("dlg-upload").hidden = !uploadOn;
   const dlg = $("settle-dlg");
   $("dlg-cancel").hidden = !cancelable;
