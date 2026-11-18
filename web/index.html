@@ -464,6 +464,8 @@
   .rank-mask[hidden], .doll-mask[hidden] { display: none; }
   /* 紙娃娃的預覽畫面：抓目錄、抓剛換上那幾件的圖時整塊蓋起來，字放正中間；圖都在快取裡、不用等的時候不會出現 */
   .doll-mask { align-items: center; padding-top: 0; z-index: 5; border-radius: 6px; }
+  #doll-rank-body { position: relative; min-height: 88px; }
+  #doll-rank-body .doll-mask { border-radius: 0; }
   .rank-mask > div, .doll-mask > div { display: flex; align-items: center; gap: 12px; padding: 12px 22px; font: 700 14px var(--body); letter-spacing: .1em;
     background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 24px rgb(0 0 0 / .18); }
   .rank-mask i, .doll-mask i { width: 20px; height: 20px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
@@ -947,7 +949,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.4</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1397,8 +1399,11 @@
 </dialog>
 <dialog id="doll-rank-dlg" class="settings" aria-label="排行榜造型">
   <h2>排行榜造型</h2>
-  <p class="note" id="doll-rank-note" role="status"></p>
-  <div id="doll-rank-list"></div>
+  <p class="note" id="doll-rank-note" role="status" hidden></p>
+  <div id="doll-rank-body">
+    <div id="doll-rank-list"></div>
+    <div class="doll-mask" id="doll-rank-mask" role="status" hidden><div><i aria-hidden="true"></i>載入中…</div></div>
+  </div>
   <div class="btns"><button type="button" class="secondary" id="doll-rank-close">關閉</button></div>
 </dialog>
 <dialog id="settle-dlg">
@@ -4957,33 +4962,47 @@ function dollRankRender() {
     + `<button type="button" class="secondary" data-doll-rank-clear="${i}"${c.look ? "" : " hidden"}>拿掉</button></div>`).join("");
   dollRank.list.forEach((c, i) => { if (c.look) paintDoll($("doll-rank-list").children[i].querySelector(".podium-doll"), c.look); });
 }
+// 對話框裡的「載入中」遮罩（讀清單、套用、拿掉都用）；文字那行只留給沒有角色與出錯
+function dollRankBusy(on) {
+  $("doll-rank-mask").hidden = !on;
+  $("doll-rank-body").setAttribute("aria-busy", String(on));
+}
+function dollRankNote(text) {
+  $("doll-rank-note").textContent = text;
+  $("doll-rank-note").hidden = !text;
+}
 async function dollRankOpen() {
   $("doll-rank-btn").classList.remove("hint");
   dollRank.list = [];
   dollRankRender();
-  $("doll-rank-note").textContent = "載入中…";
+  dollRankNote("");
+  dollRankBusy(true);
   $("doll-rank-dlg").showModal();
   try {
     dollRank.list = (await lookApi("/api/looks/mine")).characters || [];
-    $("doll-rank-note").textContent = dollRank.list.length ? "" : "這個瀏覽器還沒有上傳過練功紀錄，沒有可以設定的角色。";
+    dollRankNote(dollRank.list.length ? "" : "這個瀏覽器還沒有上傳過練功紀錄，沒有可以設定的角色。");
     dollRankRender();
     $("doll-rank-list").querySelector(".on")?.scrollIntoView({ block: "nearest" });
   } catch (err) {
-    $("doll-rank-note").textContent = `讀不到角色清單：${err.message}`;
+    dollRankNote(`讀不到角色清單：${err.message}`);
+  } finally {
+    dollRankBusy(false);
   }
 }
 // look 給 null 是拿掉
 async function dollRankSet(i, look) {
   const c = dollRank.list[i];
-  $("doll-rank-note").textContent = "儲存中…";
+  dollRankNote("");
+  dollRankBusy(true);
   try {
     await lookApi("/api/looks", { character: c.character, look });
     c.look = look;
-    $("doll-rank-note").textContent = look ? `${c.character} 的排行榜造型已更新。` : `${c.character} 的排行榜造型已拿掉。`;
     rank.cache.clear();       // 排行榜頁籤下次打開時重抓，才看得到新造型
     dollRankRender();
   } catch (err) {
-    $("doll-rank-note").textContent = `沒有存成：${err.message}`;
+    dollRankNote(`沒有存成：${err.message}`);
+  } finally {
+    dollRankBusy(false);
   }
 }
 $("doll-rank-btn").hidden = !syncApi;
@@ -4995,6 +5014,7 @@ $("doll-rank-list").addEventListener("click", async (e) => {
   if (clear) { dollRankSet(Number(clear.dataset.dollRankClear), null); return; }
   if (!set) return;
   // 剛換的那件還在載的話，等畫面跟上再存，存下去的才是眼前看到的這一套
+  dollRankBusy(true);
   while (!doll.ready || doll.readyToken !== doll.token) await new Promise((r) => setTimeout(r, 50));
   dollRankSet(Number(set.dataset.dollRankSet), dollLook());
 });
