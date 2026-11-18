@@ -983,7 +983,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.6</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.7</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1339,7 +1339,6 @@
       <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
       <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
       <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
-      <span class="sec-sub" id="job-count">載入中…</span>
     </div>
     <p class="note rank-error" id="job-error" role="alert"></p>
     <div class="job-tree" id="job-tree"></div>
@@ -5364,11 +5363,9 @@ function renderJobSkills() {
     // 搜尋是跨職業的：名字裡有這幾個字的技能都列，每個標上是哪個職業的
     list = jobBook.data.jobs.flatMap((j) => jobSkills(j).filter((skill) => skill.name.toLowerCase().includes(q)).map((skill) => [j, skill]));
     more = Math.max(0, list.length - JOB_SEARCH_CAP);
-    $("job-count").textContent = `找到 ${list.length} 個技能`;
     list = list.slice(0, JOB_SEARCH_CAP);
   } else {
     list = job ? jobSkills(job).map((skill) => [job, skill]) : [];
-    $("job-count").textContent = job ? `${jobLabel(job)} · ${list.length} 個技能` : "";
   }
   $("job-skills").innerHTML = (list.map(([j, skill]) => skillHtml(j, skill, Boolean(q))).join("")
     || `<p class="note">${q ? "找不到名字符合的技能。" : job && job.skills.length ? "這個職業的技能都是隱藏的，打開「含隱藏技能」才會列。" : "這個職業沒有技能。"}</p>`)
@@ -5402,12 +5399,10 @@ function jobPick(id) {
 async function jobOpen() {
   if (jobBook.data) { jobPick(jobBook.want ?? jobBook.job); jobBook.want = null; return; }
   $("job-mask").hidden = false;
-  $("job-count").textContent = "載入中…";
   try {
     await loadJobs();
   } catch (err) {
     $("job-mask").hidden = true;
-    $("job-count").textContent = "讀取失敗";
     $("job-error").textContent = `讀不到職業資料（${err.message}）。`;
     return;
   }
