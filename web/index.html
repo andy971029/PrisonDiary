@@ -132,7 +132,8 @@
   .book-card .sec-sub[data-for] { display: none; }
   .book-card[data-sub="mobs"] .sec-sub[data-for="mobs"], .book-card[data-sub="items"] .sec-sub[data-for="items"],
   .book-card[data-sub="equips"] .sec-sub[data-for="equips"], .book-card[data-sub="quests"] .sec-sub[data-for="quests"],
-  .book-card[data-sub="npcs"] .sec-sub[data-for="npcs"], .book-card[data-sub="maps"] .sec-sub[data-for="maps"] { display: inline; }
+  .book-card[data-sub="npcs"] .sec-sub[data-for="npcs"], .book-card[data-sub="maps"] .sec-sub[data-for="maps"],
+  .book-card[data-sub="all"] .sec-sub[data-for="all"] { display: inline; }
   .sub-panel[hidden] { display: none; }
   /* 控制鈕列：頂列右上，靠右排 */
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
@@ -451,16 +452,18 @@
   /* 載入中的遮罩：向後端抓資料的時候蓋住整張排行榜卡片，抓到（或失敗）就拿掉；有快取、不用等的時候不會出現。
      卡片留一個最小高度，練功排行榜沒幾列的時候遮罩裡的字才不會掉到卡片外面 */
   .rank-card { position: relative; min-height: 300px; }
-  .rank-mask { position: absolute; inset: 0; z-index: 3; display: flex; align-items: flex-start; justify-content: center;
+  .rank-mask, .doll-mask { position: absolute; inset: 0; z-index: 3; display: flex; align-items: flex-start; justify-content: center;
     padding-top: 140px; background: color-mix(in srgb, var(--surface) 78%, transparent); animation: rank-fade .12s ease-out; }
-  .rank-mask[hidden] { display: none; }
-  .rank-mask > div { display: flex; align-items: center; gap: 12px; padding: 12px 22px; font: 700 14px var(--body); letter-spacing: .1em;
+  .rank-mask[hidden], .doll-mask[hidden] { display: none; }
+  /* 紙娃娃的預覽畫面：抓目錄、抓剛換上那幾件的圖時整塊蓋起來，字放正中間；圖都在快取裡、不用等的時候不會出現 */
+  .doll-mask { align-items: center; padding-top: 0; z-index: 5; border-radius: 6px; }
+  .rank-mask > div, .doll-mask > div { display: flex; align-items: center; gap: 12px; padding: 12px 22px; font: 700 14px var(--body); letter-spacing: .1em;
     background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 24px rgb(0 0 0 / .18); }
-  .rank-mask i { width: 20px; height: 20px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+  .rank-mask i, .doll-mask i { width: 20px; height: 20px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
     animation: rank-spin .8s linear infinite; }
   @keyframes rank-spin { to { transform: rotate(360deg); } }
   @keyframes rank-fade { from { opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .rank-mask, .rank-mask i { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .rank-mask, .rank-mask i, .doll-mask, .doll-mask i { animation: none; } }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
@@ -898,7 +901,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.38.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.39.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1108,6 +1111,7 @@
   <div id="tab-book" class="tab-panel book-card" role="tabpanel" aria-labelledby="tab-btn-book" data-sub="mobs" hidden>
     <div class="sec-head">
       <nav class="subtabs" role="tablist" aria-label="圖鑑分類">
+        <button role="tab" data-sub="all" aria-selected="false" aria-controls="allbook">全部</button>
         <button role="tab" data-sub="mobs" aria-selected="true" aria-controls="bestiary">怪物</button>
         <button role="tab" data-sub="items" aria-selected="false" aria-controls="itembook">道具</button>
         <button role="tab" data-sub="equips" aria-selected="false" aria-controls="equipbook">裝備</button>
@@ -1116,6 +1120,7 @@
         <button role="tab" data-sub="maps" aria-selected="false" aria-controls="mapbook">地圖</button>
       </nav>
       <label class="switch here-switch" title="開著、又在分享遊戲畫面而且讀到地圖名稱時，每個分類都只看這張地圖：這裡的怪、牠們會掉的道具與裝備、這裡的 NPC 與他們的任務"><input type="checkbox" id="book-here" autocomplete="off"><i></i><span id="book-here-label">以所在地圖篩選（尚未分享遊戲畫面）</span></label>
+      <span class="sec-sub" id="all-count" data-for="all">載入中…</span>
       <span class="sec-sub" id="book-count" data-for="mobs">載入中…</span>
       <span class="sec-sub" id="items-count" data-for="items">載入中…</span>
       <span class="sec-sub" id="equips-count" data-for="equips">載入中…</span>
@@ -1123,6 +1128,19 @@
       <span class="sec-sub" id="npcs-count" data-for="npcs">載入中…</span>
       <span class="sec-sub" id="maps-count" data-for="maps">載入中…</span>
     </div>
+    <section id="allbook" class="sub-panel" role="tabpanel" aria-label="全部" hidden>
+      <div class="book-tools">
+        <input type="search" id="all-q" placeholder="搜尋名稱：怪物、道具、裝備、任務、NPC、地圖都找" aria-label="搜尋名稱">
+        <select id="all-kind" aria-label="類別"><option value="">全部類別</option></select>
+        <label class="switch" title="預設不列的：沒有圖鑑卡或還沒開放的怪、接不到的任務、不在任何一張已開放地圖上的 NPC"><input type="checkbox" id="all-more"><i></i>含未開放、接不到的</label>
+      </div>
+      <div class="hist-wrap">
+        <table class="hist book">
+          <thead><tr id="all-head"></tr></thead>
+          <tbody id="all-body"></tbody>
+        </table>
+      </div>
+    </section>
     <section id="bestiary" class="sub-panel" role="tabpanel" aria-label="怪物圖鑑">
       <div class="book-tools">
         <input type="search" id="book-q" placeholder="搜尋怪物、掉落物或地圖名稱" aria-label="搜尋怪物、掉落物或地圖名稱">
@@ -1259,6 +1277,7 @@
             <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
             <span class="doll-state" id="doll-state" aria-live="polite"></span>
           </div>
+          <div class="doll-mask" id="doll-mask" role="status" hidden><div><i aria-hidden="true"></i>載入中…</div></div>
         </div>
         <div class="doll-slots" id="doll-slots"></div>
       </section>
@@ -2818,7 +2837,7 @@ function bookHereOff() {
   renderAllBooks();
 }
 function renderAllBooks() {
-  renderBook(); renderItems(); renderEquips(); renderQuests(); renderNpcs();
+  renderBook(); renderItems(); renderEquips(); renderQuests(); renderNpcs(); renderAll();
   wmGoHere();
 }
 // 表格框捲到快底了就再接下一批
@@ -3203,7 +3222,7 @@ const renderEquips = makeTable("equips", EQUIP_COLS, equipDetail, () => {
 for (const id of ["items-q", "equips-q", "equips-lo", "equips-hi"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["items-kind", "items-drop", "items-quest", "equips-kind", "equips-job", "equips-drop", "equips-quest"]) $(id).addEventListener("change", () => renderSub());
 function renderSub() {
-  if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips();
+  if (ibook.sub === "all") renderAll(); else if (ibook.sub === "items") renderItems(); else if (ibook.sub === "equips") renderEquips();
   else if (ibook.sub === "quests") renderQuests(); else if (ibook.sub === "npcs") renderNpcs(); else if (ibook.sub === "maps") renderMaps();
 }
 
@@ -3346,9 +3365,10 @@ async function loadWorldNow() {
     fillKinds($("npcs-func"), [...new Set(npcs.npcs.map((n) => n.func).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant")).map((f) => [f, f]));
     wmInit(world.worlds);
     renderQuests(); renderNpcs(); renderMaps(); wmGoHere();
+    allBuild(); renderAll();
     renderItems(); renderEquips(); renderBook();          // 道具、裝備補上任務獎勵；怪物的出現地圖變成能點的 chip
   } catch (err) {
-    for (const key of ["quests", "npcs", "maps"]) $(`${key}-count`).textContent = "載入失敗：讀不到任務、NPC 或地圖圖鑑（" + err.message + "）";
+    for (const key of ["all", "quests", "npcs", "maps"]) $(`${key}-count`).textContent = "載入失敗：讀不到任務、NPC 或地圖圖鑑（" + err.message + "）";
   }
 }
 
@@ -3462,6 +3482,82 @@ const renderNpcs = makeTable("npcs", NPC_COLS, npcDetail, () => {
   { ready: worldReady, reset: (q) => { resetTools(["npcs-func", "npcs-quest"], "npcs-q", q); $("npcs-all").checked = true; } });
 for (const id of ["quests-q", "quests-lo", "quests-hi", "npcs-q", "maps-q"]) $(id).addEventListener("input", () => renderSub());
 for (const id of ["quests-area", "quests-job", "quests-item", "quests-all", "npcs-func", "npcs-quest", "npcs-all"]) $(id).addEventListener("change", () => renderSub());
+
+// ---------------------------------------------------------------- 圖鑑的「全部」
+// 六個分類的東西排在同一張表裡，只為了一件事：不用先想它是哪一類，打名字就找得到。
+// 欄位只留每一類都有意義的：名稱（照各分類自己那一欄畫，圖示與標記都一樣）、類別、等級、一行重點；
+// 點一列展開的就是它在自己分類裡展開的那一塊。
+// 搜尋只比名稱（地圖連地區一起比）。各分類自己的搜尋還會比掉落物、所在地圖，放在這裡會撈出一大堆間接相關的。
+const ALL_KINDS = [["mob", "怪物"], ["item", "道具"], ["equip", "裝備"], ["quest", "任務"], ["npc", "NPC"], ["map", "地圖"]];
+const ALL_LABEL = Object.fromEntries(ALL_KINDS), ALL_ORDER = Object.fromEntries(ALL_KINDS.map(([kind], i) => [kind, i]));
+const allFact = (...parts) => `<span class="fx">${esc(parts.filter(Boolean).join("　"))}</span>`;
+// 每一類怎麼變成一列。list：這一類全部的東西；cell：名稱那一格；sub：類別後面的小字；lv、lvText：等級（排序用的數字、顯示的字）；
+// fact：那一行重點；live：預設列不列（跟各分類自己的預設一樣）；here：「以所在地圖篩選」開著時算不算這張地圖的；detail：展開的內容
+const ALL_SHAPE = {
+  mob: {
+    list: () => book.data.mobs, cell: (m) => BOOK_COLS[0].html(m), sub: (m) => (m.boss ? "BOSS" : ""), lv: (m) => m.level,
+    fact: (m) => allFact(`HP ${fmtInt(m.hp)}`, `EXP ${fmtInt(m.exp)}`),
+    live: (m) => m.card && m.live, here: (m, here) => m.spawn.some((id) => here.has(id)), detail: (m) => bookDetail(m, "", hereMaps()),
+  },
+  item: {
+    list: () => ibook.data.items, cell: (e) => ITEM_COLS[0].html(e), sub: itemKind, lv: (e) => e.lv || null,
+    fact: (e) => allFact(specText(e) || e.desc), here: (e, here, mobs) => e.fromLive.some((id) => mobs.has(id)), detail: (e) => itemDetail(e),
+  },
+  equip: {
+    list: () => ibook.data.equips, cell: (e) => EQUIP_COLS[0].html(e), sub: (e) => EQUIP_KINDS[e.kind] || "", lv: (e) => e.lv,
+    fact: (e) => allFact(jobText(e.job), atk(e) && `攻擊 ${atk(e)}`, def(e) && `防禦 ${def(e)}`),
+    here: (e, here, mobs) => e.fromLive.some((id) => mobs.has(id)), detail: (e) => equipDetail(e),
+  },
+  quest: {
+    list: () => wbook.data.quests.quests, cell: (q) => QUEST_COLS[0].html(q), sub: (q) => q.areaName, lv: (q) => q.lv[0] ?? q.lv[1] ?? null, lvText: (q) => lvText(q.lv),
+    fact: (q) => allFact(q.start ? `接：${npcName(q.start)}` : AUTO_TEXT[q.auto] || "", q.give.exp ? `EXP ${fmtInt(q.give.exp)}` : "", q.give.meso ? `楓幣 ${fmtInt(q.give.meso)}` : ""),
+    live: (q) => q.live, detail: (q) => questDetail(q),
+    // 跟任務分類一樣：接或交任務的 NPC 站在這裡，或要打的怪在這裡生成
+    here: (q, here, mobs) => [q.start, q.end].some((id) => id != null && wbook.npcById.get(id)?.maps.some((m) => here.has(m))) || q.need.mobs.some(([id]) => mobs.has(id)),
+  },
+  npc: {
+    list: () => wbook.data.npcs.npcs, cell: (n) => NPC_COLS[0].html(n), sub: (n) => n.func || "", lv: () => null,
+    fact: (n) => fewNames(n.maps.map(mapLabelW), "張"), live: (n) => n.maps.length > 0, here: (n, here) => n.maps.some((id) => here.has(id)), detail: (n) => npcDetail(n),
+  },
+  map: {
+    list: () => wbook.data.maps.maps, cell: (m) => `<span class="mob-name">${esc(m.name)}</span>${m.street ? `<span class="mob-kind">${esc(m.street)}</span>` : ""}`,
+    sub: (m) => (m.town ? "城鎮" : ""), lv: (m) => m.lvLo, lvText: (m) => (m.lvLo == null ? "" : m.lvLo === m.lvHi ? m.lvLo : `${m.lvLo}–${m.lvHi}`),
+    fact: (m) => m.mobs.length ? fewNames(m.mobs.map(([id]) => mobName(id)), "種") : fewNames(m.npcs.map(npcName), "個"),
+    hay: (m) => `${m.street} ${m.name}`, here: (m, here) => here.has(m.id), detail: (m) => mapDetail(m),
+  },
+};
+const allShape = (e) => ALL_SHAPE[e.kind];
+const allBook = { rows: null };
+// 資料都載好之後排一次：每個東西一列，id 是流水號（各類自己的編號會撞在一起）。rank 是排名稱那一欄用的，每次篩選時重算
+function allBuild() {
+  const rows = [];
+  for (const [kind] of ALL_KINDS) {
+    const shape = ALL_SHAPE[kind];
+    for (const ref of shape.list()) {
+      rows.push({ id: rows.length, kind, ref, name: ref.name || "", hay: (shape.hay ? shape.hay(ref) : ref.name || "").toLowerCase(), live: shape.live ? Boolean(shape.live(ref)) : true, rank: 0 });
+    }
+  }
+  allBook.rows = rows;
+}
+const ALL_COLS = [
+  // 有在搜尋時名字完全一樣的排最前面、開頭一樣的其次；沒在搜尋時照類別的順序一類一類排
+  { label: "名稱", sort: (e) => `${e.rank}${e.name}`, html: (e) => allShape(e).cell(e.ref) },
+  { label: "類別", sort: (e) => `${ALL_ORDER[e.kind]}${allShape(e).sub(e.ref)}`,
+    html: (e) => { const sub = allShape(e).sub(e.ref); return `${ALL_LABEL[e.kind]}${sub ? `<span class="mob-kind">${esc(sub)}</span>` : ""}`; } },
+  { label: "等級", num: true, sort: (e) => allShape(e).lv(e.ref), text: (e) => (allShape(e).lvText ? allShape(e).lvText(e.ref) : allShape(e).lv(e.ref)) ?? "" },
+  { label: "重點", sort: null, html: (e) => allShape(e).fact(e.ref) },
+];
+const renderAll = makeTable("all", ALL_COLS, (e) => allShape(e).detail(e.ref), () => {
+  const q = $("all-q").value.trim().toLowerCase(), kind = $("all-kind").value, more = $("all-more").checked;
+  const here = hereMaps(), mobs = here && hereMobs(here);
+  const pool = allBook.rows.filter((e) => more || e.live);
+  const rows = pool.filter((e) => (!kind || e.kind === kind) && (!here || allShape(e).here(e.ref, here, mobs)) && (!q || e.hay.includes(q)));
+  for (const e of rows) e.rank = !q ? ALL_ORDER[e.kind] : e.hay === q || e.name.toLowerCase() === q ? 0 : e.name.toLowerCase().startsWith(q) ? 1 : 2;
+  return { rows, total: pool.length };
+}, { col: 0, dir: 1 }, "筆", { ready: () => !!allBook.rows });
+fillKinds($("all-kind"), ALL_KINDS);
+$("all-q").addEventListener("input", () => renderAll());
+for (const id of ["all-kind", "all-more"]) $(id).addEventListener("change", () => renderAll());
 
 // ---------------------------------------------------------------- 世界地圖（圖鑑的地圖分頁）
 // 客戶端的地圖插畫：節點是按鈕，區域（總圖上的島、維多利亞島上的奇幻村）是不規則的形狀，靠區域貼圖的透明度判斷滑鼠在不在上面，
@@ -3936,7 +4032,7 @@ function setSub(id) {
   ibook.sub = id;
   for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.setAttribute("aria-selected", String(btn.dataset.sub === id));
   $("tab-book").dataset.sub = id;                       // 標題列右邊只顯示這個分類的計數
-  for (const [panel, sub] of [["bestiary", "mobs"], ["itembook", "items"], ["equipbook", "equips"], ["questbook", "quests"], ["npcbook", "npcs"], ["mapbook", "maps"]])
+  for (const [panel, sub] of [["allbook", "all"], ["bestiary", "mobs"], ["itembook", "items"], ["equipbook", "equips"], ["questbook", "quests"], ["npcbook", "npcs"], ["mapbook", "maps"]])
     $(panel).hidden = id !== sub;
   try { localStorage.setItem(SUB_KEY, id); } catch { /* 存不了就算了 */ }
   if (!$("tab-book").hidden) {
@@ -3946,8 +4042,8 @@ function setSub(id) {
 }
 for (const btn of document.querySelectorAll(".subtabs [data-sub]")) btn.addEventListener("click", () => setSub(btn.dataset.sub));
 {
-  let saved = "mobs";
-  try { saved = localStorage.getItem(SUB_KEY) || "mobs"; } catch { /* 讀不到就用預設 */ }
+  let saved = "all";       // 沒選過分類的人從「全部」開始：不用先知道要找的東西是哪一類
+  try { saved = localStorage.getItem(SUB_KEY) || "all"; } catch { /* 讀不到就用預設 */ }
   ibook.sub = saved;
 }
 
@@ -4032,15 +4128,21 @@ function dollIndex() {
   }
   return doll.loading;
 }
+// 預覽畫面的「載入中」遮罩。底下那條的文字（doll-state）只留給出錯的訊息
+function dollBusy(on) {
+  $("doll-mask").hidden = !on;
+}
 async function dollOpen() {
   if (doll.opened) { dollRefresh(); return; }
   if (doll.opening) return;
   doll.opening = true;
-  $("doll-state").textContent = "載入中…";
+  $("doll-state").textContent = "";
+  dollBusy(true);
   try {
     await dollIndex();
   } catch {
     doll.opening = false;
+    dollBusy(false);
     $("doll-state").textContent = "讀不到紙娃娃資料。";
     return;
   }
@@ -4111,12 +4213,14 @@ function dollReady({ ids, mixes }, results) {
 async function dollRefresh() {
   const token = ++doll.token;
   const needs = dollNeeds(), { ids } = needs;
-  $("doll-state").textContent = "載入中…";
+  $("doll-state").textContent = "";
+  dollBusy(true);       // 檔案都在快取裡時下面馬上就回來，畫面還來不及畫，遮罩不會閃一下
   dollRenderWorn();
   dollRenderMisses();
   const results = await Promise.allSettled(ids.map(dollLoad));
   if (token !== doll.token) return;
   const failed = results.filter((r) => r.status === "rejected").length;
+  dollBusy(false);      // 走到這裡的是最後一次換裝；被後面取代的那幾次在上面就 return 了，遮罩留給最後那次收
   $("doll-state").textContent = failed ? `有 ${failed} 件讀不到` : "";
   doll.ready = dollReady(needs, results);
   doll.readyToken = token;
