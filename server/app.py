@@ -21,7 +21,7 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
     POST   /api/records        同上，多帶 "key"（瀏覽器的金鑰）就把這批紀錄記在它名下；已經有、還沒主的紀錄也歸它
     POST   /api/looks          {"key", "character", "look"}，設那個角色的造型；look 給 null 是拿掉。沒傳過那個角色的紀錄回 403
     POST   /api/looks/mine     {"key"}，回這把金鑰名下的角色與各自目前的造型 {"characters": [{character, look}]}
-    GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級），looks 是各榜前三名有設的造型
+    GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級），looks 是榜上有設造型的角色各自的造型
     GET    /api/training       ?days=7&job=法師&level=35&limit=100，回練功榜：地圖 × 職業 × 等級區間的平均效率
     GET    /api/health         {"ok": true, "records": 筆數}
     GET    /                   轉去網站的排行榜頁籤
@@ -57,7 +57,6 @@ BOARD_TTL = 60.0
 MAX_LIMIT = 200
 LEVEL_BAND = 10                   # 練功榜的等級區間：1–10、11–20…
 SITE = "https://andy971029.github.io/PrisonDiary/"
-PODIUM = 3                        # 排行榜回應裡只附各榜前幾名的造型（網頁的頒獎台）
 LOOK_PARTS = 24                   # 一套造型最多幾個部位；紙娃娃現在有 12 類時裝
 LOOK_PART = re.compile(r"[A-Za-z]{1,24}\Z")
 
@@ -363,11 +362,11 @@ class Store:
                 ],
                 "level": [{"character": c, "job": j or "", "level": top} for c, j, top, _ in level],
             }
-            # 頒獎台上那幾個角色有設造型的附上；名單其他人用不到，不送
-            top = sorted({row[0] for board in (exp, rate, level) for row in board[:PODIUM]})
+            # 這次回應裡出現的角色有設造型的都附上：頒獎台畫全身，名單畫頭像
+            names = sorted({row[0] for board in (exp, rate, level) for row in board})
             looks = self._db.execute(
-                f"SELECT character, look FROM looks WHERE character IN ({','.join('?' * len(top))})", top,
-            ).fetchall() if top else []
+                f"SELECT character, look FROM looks WHERE character IN ({','.join('?' * len(names))})", names,
+            ).fetchall() if names else []
             out["looks"] = {c: json.loads(look) for c, look in looks}
             self._boards[key] = (now, out)
             return out

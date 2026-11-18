@@ -409,6 +409,17 @@
   /* 有設造型的：紙娃娃畫好的站姿，腳底的位置每張都一樣；框線收掉 */
   .podium-doll img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
   .podium-doll.has-look { border-color: transparent; }
+  /* 名單每一列的頭像：有設造型的是他紙娃娃的頭，沒設的是剪影 */
+  .rank-face { width: 40px; height: 40px; display: grid; place-items: center; overflow: hidden; color: var(--line);
+    background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
+  .rank-face svg { width: 20px; height: auto; }
+  .rank-face img { width: 100%; height: 100%; image-rendering: pixelated; }
+  /* 自己的角色（這個瀏覽器傳過紀錄的）：琥珀色的框與光暈，名字也換成琥珀色；點圖去紙娃娃設排行榜造型 */
+  .podium-doll.mine, .rank-face.mine { cursor: pointer; border: 2px solid var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .podium-doll.mine:hover, .rank-face.mine:hover { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .podium li:has(.mine) .podium-name, .rank-list li:has(.mine) .who b { color: var(--accent); }
+  .rank-list li:has(.mine) { background: color-mix(in srgb, var(--accent) 9%, transparent); }
   .podium-name { max-width: 100%; margin-top: 6px; font-weight: 700; font-size: 14px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .podium .none .podium-name { font-weight: 400; color: var(--muted); }
@@ -422,7 +433,7 @@
   /* 完整名單：名次、角色（下面一行小字是職業等級）、數值（下面一行小字是補充） */
   .rank-list { list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--line); }
   .rank-list:empty { display: none; }
-  .rank-list li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  .rank-list li { display: grid; grid-template-columns: 28px 40px minmax(0, 1fr) auto; gap: 10px; align-items: center;
     padding: 7px 0; border-top: 1px solid var(--line); }
   .rank-list .no { font: 500 14px var(--mono); color: var(--muted); text-align: right; }
   .rank-list li:nth-child(-n+3) .no { color: var(--accent); }
@@ -622,6 +633,14 @@
   .doll-rank-row .podium-doll { width: 52px; }
   .doll-rank-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .doll-rank-row button { padding: 4px 10px; margin: 0; font-size: 12px; }
+  .doll-rank-row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  /* 從排行榜點自己的角色過來時，「排行榜造型」鈕亮起來一閃一閃，按下去（或離開紙娃娃）才停 */
+  .doll-bar #doll-rank-btn.hint { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700;
+    animation: doll-hint 1.2s ease-out infinite; }
+  @keyframes doll-hint { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 80%, transparent); } to { box-shadow: 0 0 0 11px transparent; } }
+  @media (prefers-reduced-motion: reduce) {
+    .doll-bar #doll-rank-btn.hint { animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); }
+  }
   /* 四格儲存：縮圖是存的時候拍的站姿，右上角存檔，點格子套用，套用中的框琥珀色 */
   .doll-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 476px; margin-top: 12px; }
   .doll-slot { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; cursor: pointer;
@@ -873,7 +892,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.35.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.36.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1984,6 +2003,7 @@ async function syncRecords() {
   clearTimeout(syncTimer);
   syncTimer = null;
   try {
+    let added = 0;      // 這一輪後端新收下幾筆
     while (uploadOn) {
       const batch = records.filter((r) => r.uid && canUpload(r) && r.sync !== "no" && !syncSeen.has(r.uid)).slice(0, SYNC_BATCH);
       if (!batch.length) break;
@@ -2009,8 +2029,13 @@ async function syncRecords() {
       if (fresh || refused) { writeRecords(); renderHistory(); }
       if (fresh) {
         log(`已上傳 ${fresh} 段紀錄到排行榜。`);
-        rank.cache.clear();       // 排行榜頁籤下次打開時重抓，才看得到剛傳的
+        added += fresh;
       }
+    }
+    // 排行榜的快取丟掉，下次打開重抓才看得到剛傳的；正開著排行榜（例如開頁就停在那一頁）就直接重抓
+    if (added) {
+      rank.cache.clear();
+      if (!$("tab-rank").hidden) rankLoad();
     }
     syncFailed = false;
   } catch (err) {
@@ -4692,7 +4717,13 @@ $("doll-group").addEventListener("change", (e) => {
 // 紙娃娃頁籤的「排行榜造型」：把目前的造型設成某個角色在排行榜頒獎台上的樣子，一個角色一套。
 // 能設的角色由後端說了算：這個瀏覽器（金鑰）傳過紀錄的那些。同一個角色在別台電腦也有紀錄的話兩邊都能改，後設的蓋掉先設的。
 // 傳上去的是造型的零件編號（dollLook），不是圖。
-const dollRank = { list: [] };
+const dollRank = { list: [], focus: null };
+// 從排行榜點了自己的角色過來：切到紙娃娃，把「排行榜造型」鈕亮起來，讓人知道要從這裡設；打開視窗時那個角色那一列也標著
+function dollRankHint(character) {
+  dollRank.focus = character;
+  setTab("doll");
+  $("doll-rank-btn").classList.add("hint");
+}
 async function lookApi(path, body = {}) {
   const key = syncKey();
   if (!key) throw new Error("瀏覽器不讓網站存資料，沒辦法認出這個瀏覽器");
@@ -4703,12 +4734,13 @@ async function lookApi(path, body = {}) {
 }
 function dollRankRender() {
   $("doll-rank-list").innerHTML = dollRank.list.map((c, i) =>
-    `<div class="doll-rank-row"><div class="podium-doll">${RANK_DOLL}</div><b title="${esc(c.character)}">${esc(c.character)}</b>`
+    `<div class="doll-rank-row${c.character === dollRank.focus ? " on" : ""}"><div class="podium-doll">${RANK_DOLL}</div><b title="${esc(c.character)}">${esc(c.character)}</b>`
     + `<button type="button" data-doll-rank-set="${i}">套用目前造型</button>`
     + `<button type="button" class="secondary" data-doll-rank-clear="${i}"${c.look ? "" : " hidden"}>拿掉</button></div>`).join("");
   dollRank.list.forEach((c, i) => { if (c.look) paintDoll($("doll-rank-list").children[i].querySelector(".podium-doll"), c.look); });
 }
 async function dollRankOpen() {
+  $("doll-rank-btn").classList.remove("hint");
   dollRank.list = [];
   dollRankRender();
   $("doll-rank-note").textContent = "載入中…";
@@ -4717,6 +4749,7 @@ async function dollRankOpen() {
     dollRank.list = (await lookApi("/api/looks/mine")).characters || [];
     $("doll-rank-note").textContent = dollRank.list.length ? "" : "這個瀏覽器還沒有上傳過練功紀錄，沒有可以設定的角色。";
     dollRankRender();
+    $("doll-rank-list").querySelector(".on")?.scrollIntoView({ block: "nearest" });
   } catch (err) {
     $("doll-rank-note").textContent = `讀不到角色清單：${err.message}`;
   }
@@ -4738,6 +4771,7 @@ async function dollRankSet(i, look) {
 $("doll-rank-btn").hidden = !syncApi;
 $("doll-rank-btn").addEventListener("click", dollRankOpen);
 $("doll-rank-close").addEventListener("click", () => $("doll-rank-dlg").close());
+$("doll-rank-dlg").addEventListener("close", () => { dollRank.focus = null; });
 $("doll-rank-list").addEventListener("click", async (e) => {
   const set = e.target.closest("[data-doll-rank-set]"), clear = e.target.closest("[data-doll-rank-clear]");
   if (clear) { dollRankSet(Number(clear.dataset.dollRankClear), null); return; }
@@ -4757,11 +4791,12 @@ const RANK_KEY = "mapleexp.rank-board";
 const RANK_TTL = 60 * 1000;
 const RANK_BAND = 10;      // 等級區間的寬度，跟後端的 LEVEL_BAND 一樣
 const rank = { board: "people", days: "", job: "", level: "", cache: new Map(), turn: 0 };
-// 頒獎台上的角色模型：沒設造型的是這個空的剪影，有設的由 paintPodium 換成他的紙娃娃（.podium-doll 的 data-character 是角色名字）。
+// 頒獎台上的角色模型：沒設造型的是這個空的剪影，有設的由 paintPeople 換成他的紙娃娃（data-character 是角色名字）。名單的頭像也用同一個剪影。
 const RANK_DOLL = '<svg viewBox="0 0 44 64" fill="currentColor" aria-hidden="true"><circle cx="22" cy="14" r="11"/><path d="M8 62V41a14 14 0 0 1 28 0v21z"/></svg>';
 const rankNum = (n) => Math.round(n).toLocaleString();
 const rankJoin = (...parts) => parts.filter(Boolean).join(" · ");
 const rankLv = (level) => (level ? `Lv.${level}` : "");
+const RANK_FACE = { w: 40, h: 40, x: 24, y: 68 };     // 頭像從站姿裡切哪一塊：腳底在 (x, y)，頭大約在往上 29～64 像素的地方
 // 每一塊：top 是頒獎台上名字底下那行，who 是名單裡名字底下的小字，val 與 sub 是名單右邊的數值與小字
 const RANK_BOARDS = [
   { id: "exp", top: (r) => rankNum(r.exp), who: (r) => rankJoin(r.job, rankLv(r.level)),
@@ -4771,6 +4806,9 @@ const RANK_BOARDS = [
   { id: "level", top: (r) => rankLv(r.level), who: (r) => r.job, val: (r) => rankLv(r.level), sub: () => "" },
 ];
 
+// 一格角色圖：頒獎台的全身（podium-doll）或名單的頭像（rank-face），先放剪影，有設造型的由 paintPeople 換成紙娃娃
+const rankSlot = (kind, r) => `<div class="${kind}"${r ? ` data-character="${esc(r.character)}"` : ""}>${RANK_DOLL}</div>`;
+
 function renderPeople(data) {
   for (const board of RANK_BOARDS) {
     const rows = data?.[board.id] || [];
@@ -4778,45 +4816,89 @@ function renderPeople(data) {
     // 不滿三個人時空位照樣留著，寫「從缺」
     box.querySelector(".podium").innerHTML = [0, 1, 2].map((i) => {
       const r = rows[i];
-      return `<li class="p${i + 1}${r ? "" : " none"}"><div class="podium-doll"${r ? ` data-character="${esc(r.character)}"` : ""}>${RANK_DOLL}</div>`
+      return `<li class="p${i + 1}${r ? "" : " none"}">${rankSlot("podium-doll", r)}`
         + `<b class="podium-name"${r ? ` title="${esc(r.character)}"` : ""}>${r ? esc(r.character) : "從缺"}</b>`
         + `<span class="podium-val">${r ? esc(board.top(r)) : "--"}</span><div class="podium-step" aria-label="第 ${i + 1} 名">${i + 1}</div></li>`;
     }).join("");
     box.querySelector(".rank-list").innerHTML = rows.map((r, i) =>
-      `<li><span class="no">${i + 1}</span><span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small></span>`
+      `<li><span class="no">${i + 1}</span>${rankSlot("rank-face", r)}<span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small></span>`
       + `<span class="val">${esc(board.val(r))}<small>${esc(board.sub(r))}</small></span></li>`).join("");
     box.querySelector(".rank-none").hidden = rows.length > 0;
   }
-  paintPodium(data?.looks);
+  paintPeople(data?.looks);
+  markMine(rank.cache.get("mine")?.data);
 }
 
-// 同一套造型只畫一次：造型（轉成字串當 key）→ 畫好的圖。畫失敗的不留，下次再試
+// 同一套造型、同一種裁法只畫一次：造型（轉成字串當 key）→ 畫好的圖。畫失敗的不留，下次再試
 const rankPics = new Map();
-function rankPortrait(look) {
-  const id = JSON.stringify(look);
+function rankPortrait(look, box) {
+  const id = `${box.w}x${box.h}:${JSON.stringify(look)}`;
   if (!rankPics.has(id)) {
-    const pic = dollPortrait(look);
+    const pic = dollPortrait(look, box);
     pic.catch(() => rankPics.delete(id));
     rankPics.set(id, pic);
   }
   return rankPics.get(id);
 }
-// 把一格角色模型換成畫好的造型。等圖的時候那一格可能已經換人（重新整理、切期間），所以畫之前再對一次
-function paintDoll(slot, look) {
+// 把一格角色圖換成畫好的造型。等圖的時候那一格可能已經換人（重新整理、切期間），所以畫之前再對一次
+function paintDoll(slot, look, box = DOLL_PORTRAIT) {
   const id = JSON.stringify(look);
   slot.dataset.look = id;
-  rankPortrait(look).then((src) => {
+  rankPortrait(look, box).then((src) => {
     if (!src || slot.dataset.look !== id || !slot.isConnected) return;
     slot.innerHTML = `<img src="${src}" alt="">`;
     slot.classList.add("has-look");
   }).catch(() => { /* 紙娃娃資料讀不到：維持剪影 */ });
 }
-// 頒獎台上有設造型的角色（後端只附前三名的）換成他的紙娃娃；沒設的維持剪影
-function paintPodium(looks) {
-  for (const slot of document.querySelectorAll("#rank-people .podium-doll[data-character]")) {
-    const look = looks?.[slot.dataset.character];
-    if (look) paintDoll(slot, look);
+// 榜上有設造型的角色換成他的紙娃娃：頒獎台畫全身，名單畫頭像。名單很長，捲到看得見（或快看見）才畫，
+// 不然一開頁就要把幾十個人身上每一件的圖都抓下來
+let rankSeen = null;
+function paintPeople(looks) {
+  rankSeen?.disconnect();
+  rankSeen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const slot = entry.target;
+      rankSeen.unobserve(slot);
+      paintDoll(slot, looks[slot.dataset.character], slot.classList.contains("rank-face") ? RANK_FACE : DOLL_PORTRAIT);
+    }
+  }, { rootMargin: "160px" });
+  for (const slot of document.querySelectorAll("#rank-people [data-character]")) if (looks?.[slot.dataset.character]) rankSeen.observe(slot);
+}
+
+// 這個瀏覽器名下的角色：後端說了算（傳過紀錄的那些），跟能設排行榜造型的是同一批。問不到就當作沒有。
+// 紀錄是傳上去才歸這個瀏覽器的，所以先等開頁那一輪上傳跑完再問（setTimeout 0：等這一輪程式跑完，上傳才開始了）
+async function rankMine(force) {
+  const hit = rank.cache.get("mine");
+  if (hit && !force && Date.now() - hit.at < RANK_TTL) return hit.data;
+  await new Promise((done) => { const wait = () => (syncBusy ? setTimeout(wait, 150) : done()); setTimeout(wait, 0); });
+  let names = [];
+  try { names = ((await lookApi("/api/looks/mine")).characters || []).map((c) => c.character); } catch { /* 沒有金鑰、後端連不上：不標 */ }
+  const data = new Set(names);
+  rank.cache.set("mine", { at: Date.now(), data });
+  return data;
+}
+// 把自己的角色標出來（高光），並做成可以點的：點了去紙娃娃設排行榜造型。排行榜先畫、這個後到，所以是事後補標，不重畫
+function markMine(mine) {
+  for (const slot of document.querySelectorAll("#rank-people [data-character]")) {
+    const own = Boolean(mine?.has(slot.dataset.character));
+    slot.classList.toggle("mine", own);
+    if (own) {
+      slot.setAttribute("role", "button");
+      slot.tabIndex = 0;
+      slot.title = "這是你的角色，點一下到紙娃娃設定排行榜造型";
+    } else {
+      slot.removeAttribute("role");
+      slot.removeAttribute("tabindex");
+      slot.removeAttribute("title");
+    }
   }
+}
+function rankPick(e) {
+  const slot = e.target.closest?.("#rank-people .mine");
+  if (!slot || (e.type === "keydown" && e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault();
+  dollRankHint(slot.dataset.character);
 }
 
 function renderTraining(data) {
@@ -4865,6 +4947,8 @@ async function rankLoad(force = false) {
     const hit = await rankGet(path, force);
     if (turn !== rank.turn) return;
     (rank.board === "people" ? renderPeople : renderTraining)(hit.data);
+    // 「哪些角色是我的」另外問，不讓排行榜等它；回來的時候畫面還是這一次的才標
+    if (rank.board === "people") rankMine(force).then((mine) => { if (turn === rank.turn) markMine(mine); });
     const at = new Date(hit.at);
     $("rank-state").textContent = `更新於 ${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
     $("rank-error").textContent = "";
@@ -4903,6 +4987,8 @@ if (syncApi) {
     });
   }
   $("rank-reload").addEventListener("click", () => rankLoad(true));
+  $("rank-people").addEventListener("click", rankPick);
+  $("rank-people").addEventListener("keydown", rankPick);
   $("rank-pick-job").addEventListener("change", (e) => { rank.job = e.target.value; rankLoad(); });
   $("rank-pick-level").addEventListener("change", (e) => { rank.level = e.target.value; rankLoad(); });
   try { rank.board = localStorage.getItem(RANK_KEY) || "people"; } catch { /* 讀不到就用預設 */ }
@@ -4926,6 +5012,7 @@ function setTab(id) {
   if (id === "book") { loadWorld(); setSub(ibook.sub); }   // 連道具、任務、地圖資料一起載：怪物的掉落物要縮圖、出現地圖要小卡
   if (id === "doll") dollOpen();
   if (id === "rank") setBoard(rank.board);
+  if (id !== "doll") $("doll-rank-btn").classList.remove("hint");     // 沒按就走掉了，提示收起來
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
 {

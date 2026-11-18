@@ -301,15 +301,17 @@ class LooksTest(unittest.TestCase):
         self.assertEqual(self.store.my_looks(self.b), [{"character": "阿明", "look": None}])
         self.assertEqual(self.store._db.execute("SELECT COUNT(*) FROM looks").fetchone()[0], 0)
 
-    def test_board_carries_the_looks_of_the_podium_only(self):
+    def test_board_carries_the_looks_of_the_characters_listed(self):
         names = ["甲", "乙", "丙", "丁"]
         self.store.add([record(n + 1, character=name, cumNet=1_000_000 - n * 1000, level=90 - n)
                         for n, name in enumerate(names)], "::1", NOW, owner=self.a)
         self.assertEqual(self.store.boards(now_ms=NOW)["looks"], {})
         for name in ("乙", "丁"):
             self.store.set_look(self.a, name, {**LOOK, "skin": names.index(name)}, "::1", NOW)
-        # 丁是第四名，不在頒獎台上，造型不送；設完造型快取也要跟著更新
-        self.assertEqual(self.store.boards()["looks"], {"乙": {**LOOK, "skin": 1}})
+        # 榜上的人有設的都附上（頒獎台畫全身、名單畫頭像）；設完造型快取也要跟著更新
+        self.assertEqual(self.store.boards()["looks"], {"乙": {**LOOK, "skin": 1}, "丁": {**LOOK, "skin": 3}})
+        # 沒擠進這次回應的人（limit 之外）不送
+        self.assertEqual(self.store.boards(limit=3, now_ms=NOW)["looks"], {"乙": {**LOOK, "skin": 1}})
         text = json.dumps(self.store.boards(now_ms=NOW))
         self.assertNotIn(self.a, text)
         self.assertNotIn(key(1), text)
