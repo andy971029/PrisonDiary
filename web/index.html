@@ -947,7 +947,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -4321,11 +4321,21 @@ function dollHidden(capDrawn) {
   if (hit("Ae")) ["accessoryEar", "accessoryEarOverHair", "backAccessoryEar"].forEach((z) => hide.add(z));
   return hide;
 }
-// 有些時裝（不少披風）的圖在客戶端的特效裡：錨在腳底，動畫有自己的每格毫秒，沒有這個動作就用 default（背面用 backDefault）
+// 有些時裝（不少披風）的圖在客戶端的特效裡：動畫有自己的每格毫秒，沒有這個動作就用 default（背面用 backDefault）
 function dollEffect(file, action) {
   const e = file.e;
   if (!e) return null;
   return e[action] || ((action === "ladder" || action === "rope") && e.backDefault) || e.default || null;
+}
+// 特效錨在哪。不是腳底：照腳底畫，藍寶石之翼的中心會落在腳邊，會站在地上的跟班（小恐龍波比、狂購神妖精）整隻陷進地面 31 像素。
+// 31 是站姿時身體那張圖的高度，所以錨點是「身體的上緣」：這個動作第一格的身體有多高就往上多少（站著 31、趴下 15），
+// 用這個算，那兩隻跟班在每個動作裡都剛好踩在地上（差在 4 像素以內）。客戶端標成 fixed 的特效不跟著動作走，一律用站姿的高度。
+// 這條規則是從資料對出來的，不是照客戶端的程式；fixed 的名單也是從客戶端的 ItemEff 抄的，重匯紙娃娃資料時再搬進資料裡。
+const DOLL_FIXED_EFFECTS = new Set([1003965, 1005277, 1005278, 1005576, 1005577, 1102669]);
+function dollEffectY(action, id) {
+  const body = doll.ready.find((x) => x.id === 2000 + doll.skin)?.file;
+  const top = (name) => (body?.a?.[name]?.[0] || []).map((n) => body.p[n]).find((p) => p && (p[6] === "body" || p[6] === "backBody"))?.[5];
+  return -((DOLL_FIXED_EFFECTS.has(id) ? null : top(action)) ?? top("stand1") ?? 31);
 }
 const dollEffTime = () => performance.now() - doll.effBase;
 function dollEffectFrame(rows, time) {
@@ -4350,10 +4360,10 @@ function dollCompose(action, index) {
   const isBody = (e) => e.part[6] === "body" || e.part[6] === "backBody";
   pending.filter(isBody).forEach((e) => place(e, 0, 0));
   pending = pending.filter((e) => !isBody(e));
-  for (const { file } of doll.ready) {
+  for (const { file, id } of doll.ready) {
     const rows = dollEffect(file, action);
     const n = rows && dollEffectFrame(rows, dollEffTime()).row[0];
-    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: 0, effect: true });
+    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: dollEffectY(action, id), effect: true });
   }
   for (let moved = true; moved && pending.length;) {
     moved = false;
