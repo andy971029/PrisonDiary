@@ -26,6 +26,9 @@
 ``lv`` 的每個陣列是第 1 級到最高級的值，鍵是句型裡的代號（不含 ``#``）；句型裡有、``lv`` 裡沒有的代號就是
 算不出來的。用 ``LevelDesc`` 的技能沒有 ``h`` 與 ``lv``，改成 ``texts``：每一級一句。``req``、``master``、
 ``hidden`` 沒有就不寫。
+
+匯出腳本另外會加上圖示：最外層多 ``cell``、``cols``（圖集每格的像素與一列幾格），有圖示的技能多一個 ``ic``（在圖集
+``web/icons/skills.png`` 裡的序號，位置是 ``(ic % cols, ic // cols)`` 格）。
 """
 
 from __future__ import annotations

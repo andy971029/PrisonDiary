@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import tempfile
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
 
 import helpers  # noqa: F401
 
 from mapleexp import skillbook
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "export_skillbook.py"
+spec = importlib.util.spec_from_file_location("export_skillbook", SCRIPT)
+export_skillbook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(export_skillbook)
 
 
 @dataclass
@@ -123,6 +132,44 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(skill["lv"], {"x": [1, None, 3.5]})
         self.assertIsNone(skillbook.build_skill(1, {"level": {}}, {"Name": "沒有等級"}))
         self.assertIsNone(skillbook.build_skill(1, node, {"Name": "  "}))
+
+
+class CarryIconsTest(unittest.TestCase):
+    """沒有 UnityPy 的環境重匯文字時，圖示的序號要照技能 ID 從上一次的結果抄過來。"""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.out, self.icons = Path(folder.name) / "skillbook.json", Path(folder.name) / "skills.png"
+        self.keep = (export_skillbook.OUT, export_skillbook.ICONS)
+        export_skillbook.OUT, export_skillbook.ICONS = self.out, self.icons
+        self.addCleanup(lambda: setattr(export_skillbook, "OUT", self.keep[0]) or setattr(export_skillbook, "ICONS", self.keep[1]))
+
+    def fresh(self):
+        return {"jobs": [{"id": 100, "skills": [{"id": 1}, {"id": 2}, {"id": 9}]}]}
+
+    def test_indexes_follow_the_skill_id(self):
+        self.out.write_text(json.dumps({"jobs": [{"id": 100, "skills": [{"id": 2, "ic": 7}, {"id": 1, "ic": 0}, {"id": 5, "ic": 3}]}]}), encoding="utf-8")
+        self.icons.write_bytes(b"png")
+        data = self.fresh()
+        self.assertEqual(export_skillbook.carry_icons(data), 2)
+        # 新加的技能（9）沒有圖示，網頁會用名稱的第一個字
+        self.assertEqual(data["jobs"][0]["skills"], [{"id": 1, "ic": 0}, {"id": 2, "ic": 7}, {"id": 9}])
+
+    def test_nothing_to_carry_without_the_atlas_or_the_old_file(self):
+        data = self.fresh()
+        self.assertEqual(export_skillbook.carry_icons(data), 0)
+        self.out.write_text(json.dumps({"jobs": [{"id": 100, "skills": [{"id": 1, "ic": 0}]}]}), encoding="utf-8")
+        self.assertEqual(export_skillbook.carry_icons(data), 0)          # 圖集不在：序號指不到東西，不抄
+        self.assertEqual(data, self.fresh())
+
+    def test_the_shipped_data_points_inside_the_shipped_atlas(self):
+        data = json.loads(self.keep[0].read_text(encoding="utf-8"))
+        indexes = [skill["ic"] for skill in export_skillbook.skills_of(data) if "ic" in skill]
+        self.assertTrue(self.keep[1].is_file())
+        self.assertEqual((data["cell"], data["cols"]), (export_skillbook.CELL, export_skillbook.COLS))
+        self.assertEqual(len(indexes), len(set(indexes)))
+        self.assertEqual(sorted(indexes), list(range(len(indexes))))
 
 
 if __name__ == "__main__":
