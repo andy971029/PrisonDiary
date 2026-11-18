@@ -143,8 +143,42 @@
   .book-card[data-sub="all"] .sec-sub[data-for="all"] { display: inline; }
   .sub-panel[hidden] { display: none; }
   /* 控制鈕列：頂列右上，靠右排 */
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
-  @media (max-width: 900px) {
+  /* 固定一排不換行；這一欄變窄時按鈕跟著縮小（看的是這一欄的寬，不是整個視窗） */
+  .controls { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; justify-content: flex-end;
+    container-type: inline-size; min-width: 0; }
+  .controls > * { flex: none; white-space: nowrap; }
+  @container (max-width: 880px) {
+    .controls > button { padding: 7px 12px; font-size: 13px; }
+    .controls > .pill { padding-left: 10px; padding-right: 10px; }
+  }
+  @container (max-width: 740px) {
+    .controls > button { padding: 5px 8px; font-size: 12px; }
+    .controls > button .ic { margin-right: 5px; }
+    .controls > .pill { padding-left: 7px; padding-right: 7px; font-size: 12px; }
+  }
+  /* 再窄（手機）：暫停、重置、小浮窗、設定只留圖示（字在 title 與 aria-label 裡） */
+  @container (max-width: 600px) {
+    .controls { gap: 5px; }
+    :is(#pause, #reset, #mini, #settings) > span { display: none; }
+    :is(#pause, #reset, #mini, #settings) .ic { margin-right: 0; }
+  }
+  /* 最窄：分享鈕也只留圖示，狀態只留燈號 */
+  @container (max-width: 470px) {
+    #share > span, #state > span { display: none; }
+    #share .ic { margin-right: 0; }
+  }
+  /* 頁籤橫跨兩欄、不撐寬左欄，左欄只要放得下標題，右邊的控制鈕才有整排的寬度；角色資訊靠右疊在頁籤那一列 */
+  @media (min-width: 1101px) {
+    header > .tabs { grid-row: 2; grid-column: 1 / -1; }
+    header > .ident { grid-row: 2; grid-column: 2; justify-self: end; max-width: min(100%, 580px); }
+  }
+  @container (max-width: 360px) {
+    .controls { gap: 3px; }
+    .controls > button { padding: 4px 6px; }
+    .controls > .pill { padding-left: 5px; padding-right: 5px; }
+  }
+  /* 內容欄不到 1120 時頂列改成上下疊，控制鈕整排獨佔一行 */
+  @media (max-width: 1100px) {
     header { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
     .controls, .ident { justify-content: flex-start; }
   }
@@ -949,7 +983,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.4</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.5</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1606,8 +1640,13 @@ const ICONS = {
   replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
 };
 function setBtn(id, icon, text) {
-  $(id).innerHTML = ICONS[icon] + "<span></span>";
-  $(id).lastElementChild.textContent = text;
+  const el = $(id);
+  el.innerHTML = ICONS[icon] + "<span></span>";
+  el.lastElementChild.textContent = text;
+  // 頂列太窄時只剩圖示：字留在 aria-label，沒有自己說明的鈕也把字放進 title 當提示
+  if (!text) return;
+  el.setAttribute("aria-label", text);
+  if (!el.title || el.dataset.autoTitle) { el.title = text; el.dataset.autoTitle = "1"; }
 }
 let paused = false;
 function syncButtons() {
