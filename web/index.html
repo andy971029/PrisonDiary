@@ -983,7 +983,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.7</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.8</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -5307,6 +5307,8 @@ if (syncApi) {
 const JOB_KEY = "mapleexp.job";
 const JOB_SEARCH_CAP = 80;
 const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null };
+// 先不顯示的職業系統（資料裡有，還沒開放）：分頁、技能搜尋、網址或上次選的都不會開到它們
+const JOB_GROUPS_OFF = new Set(["皇家騎士團", "狂狼勇士"]);
 function loadJobs() {
   if (!jobBook.promise) {
     jobBook.promise = (async () => {
@@ -5317,6 +5319,9 @@ function loadJobs() {
         jobBook.byId.set(job.id, job);
         for (const skill of job.skills) { jobBook.names.set(skill.id, skill.name); jobBook.skills.set(skill.id, [job, skill]); }
       }
+      const off = new Set(data.groups.filter((g) => JOB_GROUPS_OFF.has(g.name)).flatMap((g) => [g.root, ...g.lines.flat()]));
+      data.groups = data.groups.filter((g) => !JOB_GROUPS_OFF.has(g.name));
+      data.jobs = data.jobs.filter((job) => !off.has(job.id));
       jobBook.data = data;
     })();
     jobBook.promise.catch(() => { jobBook.promise = null; });
@@ -5388,7 +5393,7 @@ function renderJobs() {
 }
 // 選一個職業：切到它的系統、清掉搜尋、記下來
 function jobPick(id) {
-  if (!jobBook.byId.has(id)) id = jobBook.data.jobs[0].id;
+  if (!jobBook.data.jobs.some((job) => job.id === id)) id = jobBook.data.jobs[0].id;
   jobBook.job = id;
   jobBook.group = Math.max(0, jobGroupOf(id));
   $("job-q").value = "";
