@@ -100,6 +100,19 @@ class Collect(unittest.TestCase):
         avatar.collect_effect(eff, "1", parts, "x")
         self.assertEqual(parts.rows[0]["z"], avatar.EFFECT_OVER)
 
+    def test_effect_meta_gives_pos_and_z_per_action(self):
+        eff = {"1102551": {"effect": {"z": -2, "fixed": 0, "action": 1,
+                                      "default": {"0": {}, "pos": 1, "z": -2}, "ladder": {"0": {}, "pos": 1, "z": 2},
+                                      "prone": {"0": {}, "z": -2}, "jump": {"0": {}, "pos": 0}, "walk1": {"0": {}},
+                                      "alert": {"pos": 1, "z": 2}, "nonsense": {"0": {}, "pos": 1}}},
+               "5": {"effect": {"default": {"0": {}}}}, "6": {"icon": {}}}
+        # pos 沒寫算 0；z 沒寫用整件的；沒有任何一格的動作、不認得的動作名不收
+        self.assertEqual(avatar.effect_meta(eff, "1102551"),
+                         {"walk1": [0, -2], "jump": [0, -2], "prone": [0, -2], "ladder": [1, 2], "default": [1, -2]})
+        self.assertEqual(avatar.effect_meta(eff, "5"), {"default": [0, 1]})     # 整件也沒寫 z：畫在前面
+        self.assertEqual(avatar.effect_meta(eff, "6"), {})
+        self.assertEqual(avatar.effect_meta(eff, "404"), {})
+
     def test_pack_keys_group_by_kind_and_id_range(self):
         self.assertEqual(avatar.pack_key(2000), "base")
         self.assertEqual(avatar.pack_key(21000), "base")

@@ -7,8 +7,11 @@
 - 身體 ``00002xxx`` 與頭 ``00012xxx`` 是膚色；頭髮 ``0003xxxx``、``0004xxxx``；臉 ``0002xxxx`` 與臉飾只有 ``default``。
 - 時裝武器多一層武器類型：``01702020/30/stand1/0/weapon``，``30`` 是單手劍的握法。
 - 有些時裝（不少披風）在 ``Character`` 只放一張 1×1 的空圖，真正的圖在 ``Effect/ItemEff``：
-  ``1102513/effect/<動作>/<格>``，沒列的動作用 ``default``（背面用 ``backDefault``），錨點是角色腳底，
-  ``effect/z`` 小於 0 畫在角色後面。動畫有自己的每格毫秒，跟身體分開跑。
+  ``1102513/effect/<動作>/<格>``，沒列的動作用 ``default``（背面用 ``backDefault``）。動畫有自己的每格毫秒，跟身體分開跑。
+  每個動作底下另外有 ``pos`` 與 ``z``（:func:`effect_meta`）：``pos`` 是 1 的那個動作，圖的原點對在眉心（``brow``）；
+  沒有 ``pos``（或是 0）的，水平對肚臍、垂直對腳底。``z`` 小於 0 畫在角色後面，同一件的不同動作可以不一樣
+  （翅膀站著在背後，爬梯子時角色背對鏡頭，翅膀就在前面）。這條定位規則是拿 maplestory.io 畫出來的圖一張張對出來的：
+  站、走、趴、爬梯，``pos`` 是 1 的原點都剛好落在那一格的眉心上，沒有 ``pos`` 的都落在（肚臍的 x，腳底）。
 
 客戶端找不到 ``zmap``（圖層前後）與 ``smap``（圖層佔哪些欄位），所以 :data:`ORDER` 是照圖層名稱手排的，
 新出現的名稱會由 :func:`clean_z` 放到最上層，``scripts/export_avatar.py`` 會印出來提醒補進去。
@@ -200,6 +203,27 @@ def collect_effect(item_eff: dict, item: str, parts: Parts, sheet: str) -> dict[
                 rows.append([parts.add(path, node, z, sheet), delay if isinstance(delay, int) and delay > 0 else EFFECT_DELAY])
         if rows:
             out[name] = rows
+    return out
+
+
+def effect_meta(item_eff: dict, item: str) -> dict[str, list[int]]:
+    """這件特效每個動作怎麼定位：動作 → ``[pos, z]``。``pos`` 沒寫算 0；``z`` 沒寫就用整件的，再沒有算 1（畫在前面）。
+
+    圖本身在 :func:`collect_effect` 匯出的那幾包裡，這裡只有定位，另外存成一個小檔（``web/avatar-effects.json``）。
+    """
+    effect = _node_at(item_eff, [item, "effect"])
+    if not isinstance(effect, dict):
+        return {}
+
+    def number(value: Any, fallback: int) -> int:
+        return value if isinstance(value, int) and not isinstance(value, bool) else fallback
+
+    whole = number(effect.get("z"), 1)
+    out = {}
+    for name in EFFECT_ACTIONS:
+        action = effect.get(name)
+        if isinstance(action, dict) and any(key.isdigit() for key in action):
+            out[name] = [1 if action.get("pos") == 1 else 0, number(action.get("z"), whole)]
     return out
 
 

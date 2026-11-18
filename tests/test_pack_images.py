@@ -50,9 +50,11 @@ class CopyExtra(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             web, out = Path(tmp) / "web", Path(tmp) / "site"
             web.mkdir()
-            (web / "skillbook.json").write_text('{"jobs": []}', encoding="utf-8")
-            self.assertEqual(pack_images.copy_extra(web, out), ["skillbook.json"])
-            self.assertEqual((out / "skillbook.json").read_text(encoding="utf-8"), '{"jobs": []}')
+            for name in pack_images.EXTRA:
+                (web / name).write_text('{"from": "%s"}' % name, encoding="utf-8")
+            self.assertEqual(pack_images.copy_extra(web, out), list(pack_images.EXTRA))
+            for name in pack_images.EXTRA:
+                self.assertEqual((out / name).read_text(encoding="utf-8"), '{"from": "%s"}' % name)
 
     def test_a_missing_file_stops_the_build(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -947,7 +947,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -4186,6 +4186,8 @@ function dollIndex() {
         for (const [id, json, img] of entries) { doll.where.set(id, { pack, at, json, img }); at += json + img; }
       }
       for (const [cat, list] of Object.entries(index.items)) for (const item of list) doll.byId.set(item.id, { ...item, cat });
+      // 特效的定位（哪個動作對眉心、哪個對腳底、畫在前面還是後面）放在主站的小檔裡，不在紙娃娃那幾十包圖裡；載不到就照預設畫
+      doll.effects = await fetch("avatar-effects.json", { cache: "no-store" }).then((res) => (res.ok ? res.json() : {})).catch(() => ({}));
       doll.index = index;
     })();
     doll.loading.catch(() => { doll.loading = null; });
@@ -4321,24 +4323,26 @@ function dollHidden(capDrawn) {
   if (hit("Ae")) ["accessoryEar", "accessoryEarOverHair", "backAccessoryEar"].forEach((z) => hide.add(z));
   return hide;
 }
-// 有些時裝（不少披風）的圖在客戶端的特效裡：動畫有自己的每格毫秒，沒有這個動作就用 default（背面用 backDefault）
-function dollEffect(file, action) {
+// 有些時裝（不少披風）的圖在客戶端的特效裡：動畫有自己的每格毫秒，沒有這個動作就用 default（背面用 backDefault）。
+// dollEffectKey 回實際用到的是哪一組（定位資料是照這個名字記的），dollEffect 回那一組的格
+function dollEffectKey(file, action) {
   const e = file.e;
   if (!e) return null;
-  return e[action] || ((action === "ladder" || action === "rope") && e.backDefault) || e.default || null;
+  return e[action] ? action : (action === "ladder" || action === "rope") && e.backDefault ? "backDefault" : e.default ? "default" : null;
 }
-// 特效錨在哪：身體那張圖的左上角（站姿是腳底往左 16、往上 31），不是腳底。這是從資料對出來的，不是照客戶端的程式：
-// ・垂直：照腳底畫，會站在地上的跟班（小恐龍波比、狂購神妖精）整隻陷進地面 31 像素，31 正好是站姿身體的高度；
-//   改用「這個動作第一格的身體上緣」（站著 31、趴下 15），牠們每個動作都踩在地上（差在 4 像素以內）。
-// ・水平：左右對稱的翅膀，圖上的原點大多在左翼根部、離兩翼中間 20 像素左右；從身體左緣算，兩翼中間才會落在身體上
-//   （藍寶石之翼的中間在身體中心往背後 13 像素），從角色中心算就整對偏到身後去。
-// 客戶端標成 fixed 的特效不跟著動作走，一律用站姿的位置；名單是從客戶端的 ItemEff 抄的，重匯紙娃娃資料時再搬進資料裡。
-const DOLL_FIXED_EFFECTS = new Set([1003965, 1005277, 1005278, 1005576, 1005577, 1102669]);
-function dollEffectAt(action, id) {
-  const body = doll.ready.find((x) => x.id === 2000 + doll.skin)?.file;
-  const part = (name) => (body?.a?.[name]?.[0] || []).map((n) => body.p[n]).find((p) => p && (p[6] === "body" || p[6] === "backBody"));
-  const p = (DOLL_FIXED_EFFECTS.has(id) ? null : part(action)) || part("stand1");
-  return p ? [-p[4], -p[5]] : [-16, -31];
+function dollEffect(file, action) {
+  const key = dollEffectKey(file, action);
+  return key ? file.e[key] : null;
+}
+// 特效的原點對在哪、畫在角色前面還是後面：看 avatar-effects.json 裡這件這個動作的 [pos, z]（scripts/export_avatar_effects.py 從客戶端匯的）。
+// pos 是 1：對眉心（brow），跟著這一格的頭走；不是 1：水平對肚臍、垂直對腳底。z 小於 0 畫在角色後面，其他畫在前面，
+// 同一件的不同動作可以不一樣（翅膀站著在背後，爬梯子時角色背對鏡頭就在前面）。
+// 這條規則不是猜的：拿 maplestory.io 畫的圖一張張對過，站、走、趴、爬梯，原點都剛好落在這兩個位置上。
+// 資料載不到、或這件不在裡面：當成最常見的對眉心，前後照匯出圖時整件的 z。
+function dollEffectPlace(id, key, anchors, part) {
+  const [pos, z] = doll.effects?.[id]?.[key] || [1, null];
+  const navel = anchors.get("navel") || [0, 0], at = pos === 1 ? anchors.get("brow") || navel : [navel[0], 0];
+  return { dx: at[0], dy: at[1], z: z == null ? part[6] : z < 0 ? "itemEffectBelow" : "itemEffectOver" };
 }
 const dollEffTime = () => performance.now() - doll.effBase;
 function dollEffectFrame(rows, time) {
@@ -4363,11 +4367,6 @@ function dollCompose(action, index) {
   const isBody = (e) => e.part[6] === "body" || e.part[6] === "backBody";
   pending.filter(isBody).forEach((e) => place(e, 0, 0));
   pending = pending.filter((e) => !isBody(e));
-  for (const { file, id } of doll.ready) {
-    const rows = dollEffect(file, action);
-    const n = rows && dollEffectFrame(rows, dollEffTime()).row[0];
-    if (rows && file.p[n]) { const [dx, dy] = dollEffectAt(action, id); placed.push({ file, part: file.p[n], dx, dy, effect: true }); }
-  }
   for (let moved = true; moved && pending.length;) {
     moved = false;
     pending = pending.filter((e) => {
@@ -4379,12 +4378,19 @@ function dollCompose(action, index) {
       return false;
     });
   }
+  // 特效最後放：它的原點要對眉心或肚臍，得等身體與頭都放好才知道那兩點在哪
+  for (const { file, id } of doll.ready) {
+    const key = dollEffectKey(file, action);
+    if (!key) continue;
+    const part = file.p[dollEffectFrame(file.e[key], dollEffTime()).row[0]];
+    if (part) placed.push({ file, part, effect: true, ...dollEffectPlace(id, key, anchors, part) });
+  }
   // 被遮住的部位（頭、臉、頭髮）照樣放，骨架點還要給別人用（面具遮了頭，帽子還是錨在頭上），只是不畫
   // 面向前方時，背面那段圖層（backCap、backHair、backCape…）排到身體後面：有 51 件（假髮、寧靜的心、幾件披風、鞋子…）
   // 正面的格子裡也放了背面的圖，是垂在腦後、身後的長髮與飾物；照背面的順序畫在最上層會蓋住整張臉
   const lo = doll.rank.get("backBody"), hi = doll.rank.get("itemEffectOver"), behind = doll.rank.get("itemEffectBelow") + 0.5;
   const rank = (e) => {
-    const r = doll.rank.get(e.part[6]) ?? Infinity;
+    const r = doll.rank.get(e.z || e.part[6]) ?? Infinity;      // 特效的前後照這個動作的 z，不是匯出時寫死在圖上的
     return !back && r >= lo && r < hi ? behind + (r - lo) / (hi - lo) / 2 : r;
   };
   return placed.filter((e) => e.effect || !hidden.has(e.part[6])).map((e, i) => ({ ...e, i })).sort((a, b) => rank(a) - rank(b) || a.i - b.i);
