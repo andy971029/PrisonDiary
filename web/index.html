@@ -983,7 +983,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.5</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.6</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2846,6 +2846,8 @@ const BOOK_COLS = [
   { label: "EXP", num: true, sort: (m) => m.exp, text: (m) => fmtInt(m.exp) },
   { label: "EXP / HP", num: true, title: "每打掉 1 點 HP 拿到的經驗，越高越划算", sort: expPerHp,
     text: (m) => { const r = expPerHp(m); return r == null ? "--" : r.toFixed(2); } },
+  { label: "物攻", num: true, sort: (m) => m.pad, text: (m) => fmtInt(m.pad) },
+  { label: "魔攻", num: true, sort: (m) => m.mad, text: (m) => fmtInt(m.mad) },
   { label: "物防", num: true, sort: (m) => m.pdd, text: (m) => fmtInt(m.pdd) },
   { label: "魔防", num: true, sort: (m) => m.mdd, text: (m) => fmtInt(m.mdd) },
   { label: "命中", num: true, sort: (m) => m.acc, text: (m) => fmtInt(m.acc) },
@@ -2982,7 +2984,7 @@ function bookDetail(m, q, here) {
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
     <div><h4>${m.live ? `出現地圖 ${m.spawn.length}` : "還沒開放"}</h4>${maps.length ? `<div class="chips">${maps.join("")}</div>` : '<p class="note">圖鑑上沒有列出現地圖。</p>'}${m.live ? "" : '<p class="note">客戶端沒有任何一張會生成牠的地圖；上面是圖鑑卡上列的、以後會出現的地方。</p>'}</div>
-    <p class="note">${[m.undead ? "不死系" : "", m.pad != null ? `物攻 ${fmtInt(m.pad)}` : "", m.mad != null ? `魔攻 ${fmtInt(m.mad)}` : "", `怪物 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
+    <p class="note">${[m.undead ? "不死系" : "", `怪物 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
   </div>`;
 }
 
