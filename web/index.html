@@ -444,6 +444,10 @@
   .rank-list .who b { font-size: 14px; }
   .rank-list .val { text-align: right; font: 500 15px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   #rank-train table.hist td b { font: 500 15px var(--mono); }
+  /* 練功排行榜的地圖名稱：圖鑑裡有這張圖的做成可以點的字（底下一條虛線），點了彈地圖小卡 */
+  #rank-train table.hist button.rank-map { padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
+    background: none; border: 0; border-bottom: 1px dashed var(--muted); border-radius: 0; }
+  #rank-train table.hist button.rank-map:hover, #rank-train table.hist button.rank-map.on { color: var(--accent); border-bottom-color: var(--accent); }
   /* 載入中的遮罩：向後端抓資料的時候蓋住整張排行榜卡片，抓到（或失敗）就拿掉；有快取、不用等的時候不會出現。
      卡片留一個最小高度，練功排行榜沒幾列的時候遮罩裡的字才不會掉到卡片外面 */
   .rank-card { position: relative; min-height: 300px; }
@@ -750,6 +754,8 @@
   .mm-key { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; font-size: 12px; color: var(--muted); }
   .mm-key i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; background: #3ddc6b; border-radius: 50%; }
   .mm-key i.portal { background: #59b7ff; border-radius: 1px; }
+  /* 地圖小卡裡的小地圖：放在名字底下，太高的圖由 miniMapHtml 縮到放得下 */
+  .tip .mm { margin: 0 0 10px; }
   .wm-results { margin-bottom: 14px; }
   .wm-results p { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
   .wm-others { margin-top: 16px; }
@@ -892,7 +898,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.36.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.37.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3388,9 +3394,11 @@ function npcDetail(n) {
     <p class="note">NPC ID ${n.id}${n.script ? ` · 腳本 ${esc(n.script)}` : ""}</p>
   </div>`;
 }
-// 小地圖與上面的標記；座標用百分比，圖被欄寬縮小時標記跟著走。點標記和點 chip 一樣彈小卡
-function miniMapHtml(m) {
+// 小地圖與上面的標記；座標用百分比，圖被欄寬縮小時標記跟著走。點標記和點 chip 一樣彈小卡。
+// 平常放大兩倍；maxH 給了（小卡裡）就縮到圖高不超過它，但不小於原圖大小（再小看不清楚，直的長條地圖就讓小卡自己捲）
+function miniMapHtml(m, maxH = 0) {
   const { w, h, npcs, portals } = m.mini;
+  const width = Math.floor(maxH ? Math.max(w, Math.min(w * 2, w * maxH / h)) : w * 2);
   const pos = (x, y, cls = "") => `class="mm-dot${cls}${x > w / 2 ? " flip" : ""}" style="left:${(x / w * 100).toFixed(2)}%;top:${(y / h * 100).toFixed(2)}%"`;
   const dot = (attrs, label) => `<button type="button" ${attrs} data-label="${esc(label)}" aria-label="${esc(label)}"></button>`;
   const portalDots = portals.map(([id, x, y]) => {
@@ -3400,7 +3408,7 @@ function miniMapHtml(m) {
   }).join("");
   const npcDots = npcs.map(([id, x, y]) => dot(`${pos(x, y)} data-tip="npc" data-id="${id}"`, npcName(id))).join("");
   return `<div class="mm">
-      <div class="mm-stage" style="width:${w * 2}px"><img data-pk="minimaps/${m.id}.png" width="${w}" height="${h}" alt="${esc(m.name)}的小地圖" decoding="async">${portalDots}${npcDots}</div>
+      <div class="mm-stage" style="width:${width}px"><img data-pk="minimaps/${m.id}.png" width="${w}" height="${h}" alt="${esc(m.name)}的小地圖" decoding="async">${portalDots}${npcDots}</div>
       <div class="mm-key"><span><i></i>NPC</span>${portals.length ? '<span><i class="portal"></i>傳送點</span>' : ""}</div>
     </div>`;
 }
@@ -3810,6 +3818,7 @@ function npcTip(n) {
 }
 function mapTip(m) {
   return tipHead("", m.name, [m.street, m.town ? "城鎮" : "", m.lvLo ? `怪物 Lv.${m.lvLo === m.lvHi ? m.lvLo : `${m.lvLo}–${m.lvHi}`}` : ""].filter(Boolean).join(" · "))
+    + (m.mini ? miniMapHtml(m, 200) : "")
     + tipRows([["NPC", m.npcs.map(npcName).join("、")], ["通往", m.to.map((id) => wbook.mapById.get(id)?.name || id).join("、")],
       ["回程", m.ret && m.ret !== m.id ? wbook.mapById.get(m.ret)?.name || "" : ""]])
     + (m.mobs.length ? `<h5>怪物</h5><div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "goto", "生成點數")).join("")}</div>` : "")
@@ -4913,10 +4922,32 @@ function renderTraining(data) {
   fill("rank-pick-level", "全部等級", data?.levels || [], rank.level, (v) => `Lv.${v} – ${Number(v) + RANK_BAND - 1}`);
   const rows = data?.rows || [];
   $("rank-train-body").innerHTML = rows.map((r, i) =>
-    `<tr><td class="num">${i + 1}</td><td>${esc(r.mapName)}</td><td>${esc(r.job)}</td><td>Lv.${r.levelFrom} – ${r.levelTo}</td>`
+    `<tr><td class="num">${i + 1}</td><td data-map="${esc(r.mapName)}">${esc(r.mapName)}</td><td>${esc(r.job)}</td><td>Lv.${r.levelFrom} – ${r.levelTo}</td>`
     + `<td class="num"><b>${rankNum(r.rate)}</b></td><td class="num">${fmtDuration(r.activeSec)}</td>`
     + `<td class="num">${r.characters}</td><td class="num">${r.records}</td></tr>`).join("");
   $("rank-train-none").hidden = rows.length > 0;
+  if (rows.length) loadWorld().then(linkMaps);
+}
+
+// 上傳的地圖名稱（「地區 地圖」，沒讀到地區時只有地圖）→ 地圖圖鑑的那一張。同名的有好幾張就挑有怪、有小地圖的
+function mapByName(name) {
+  let best = null, top = -1;
+  for (const m of wbook.mapById.values()) {
+    if (m.name !== name && `${m.street} ${m.name}`.trim() !== name) continue;
+    const score = (m.mobs.length ? 2 : 0) + (m.mini ? 1 : 0);
+    if (score > top) { best = m; top = score; }
+  }
+  return best;
+}
+// 練功排行榜的地圖名稱接上地圖圖鑑：找得到的做成按鈕，點了彈地圖小卡（跟圖鑑裡的地圖 chip 同一套）。
+// 圖鑑資料是另外載的，載好才接；載不到、或圖鑑裡沒有這張的維持純文字
+function linkMaps() {
+  if (!wbook.data) return;
+  for (const cell of $("rank-train-body").querySelectorAll("td[data-map]")) {
+    const m = mapByName(cell.dataset.map);
+    if (m) cell.innerHTML = `<button type="button" class="rank-map" data-tip="map" data-id="${m.id}">${esc(cell.dataset.map)}</button>`;
+    cell.removeAttribute("data-map");
+  }
 }
 
 async function rankGet(path, force) {
