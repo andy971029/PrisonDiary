@@ -491,22 +491,24 @@
   .job-node.empty { opacity: .55; }
   .job-node[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); opacity: 1; }
   .job-node[aria-pressed="true"] small { color: var(--on-accent); }
-  /* 技能：一個技能一塊。收著的時候右邊是第一級與最高級的效果，點開是每一級 */
-  .job-skill { border-top: 1px solid var(--line); }
-  .job-skill:first-child { border-top: 0; }
-  .job-skill summary { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 4px 28px; padding: 10px 0; cursor: pointer; list-style: none; }
-  .job-skill summary::-webkit-details-marker { display: none; }
-  .job-skill summary:hover .job-name b, .job-skill[open] .job-name b { color: var(--accent); }
+  /* 技能：一個技能一張卡片，只放圖示、名稱、最高等級與說明；每一級的效果點了才彈小卡（跟圖鑑的小卡同一個） */
+  .job-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-content: start; }
+  .job-skills > .note { grid-column: 1 / -1; margin: 0; }
+  .job-skill { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px 12px; align-items: start; align-content: start; padding: 12px; margin: 0;
+    font: 400 13px/1.5 var(--body); text-align: left; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
+  .job-skill:hover, .job-skill.on { border-color: var(--accent); }
+  .job-skill.on { box-shadow: 0 0 0 1px var(--accent); }
+  /* 圖示的位置。技能圖示還沒從客戶端匯出來，先用名稱的第一個字頂著 */
+  .job-icon { width: 44px; height: 44px; display: grid; place-items: center; font: 700 20px var(--body); color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
   .job-name b { font-size: 15px; }
   .job-name .soon { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; font-style: normal; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; vertical-align: 2px; }
   .job-name small { display: block; font-size: 12px; color: var(--muted); }
-  .job-name p { margin: 4px 0 0; font-size: 13px; white-space: pre-line; }
-  .job-ends { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-  .job-ends i, .job-levels i { display: inline-block; min-width: 44px; margin-right: 8px; font: 500 12px var(--mono); font-style: normal; color: var(--muted); }
-  .job-skill[open] .job-ends { visibility: hidden; }
-  .job-levels { margin: 0 0 14px; columns: 2 380px; column-gap: 36px; font-size: 13px; }
-  .job-levels div { break-inside: avoid; padding: 3px 0; border-top: 1px dashed var(--line); }
-  @media (max-width: 720px) { .job-skill summary { grid-template-columns: minmax(0, 1fr); } }
+  .job-desc { grid-column: 1 / -1; white-space: pre-line; }
+  /* 小卡裡每一級的效果：左邊等級、右邊那一級的句子 */
+  .job-levels { margin-top: 4px; }
+  .job-levels div { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; padding: 3px 0; border-top: 1px dashed var(--line); }
+  .job-levels i { font: 500 12px/1.9 var(--mono); font-style: normal; color: var(--muted); }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
@@ -944,7 +946,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.40.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.40.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1299,7 +1301,6 @@
     <div class="sec-head">
       <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
       <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
-      <label class="switch" title="每個技能都攤開，列出每一級的效果；關著時只列第一級與最高級，點技能再攤開"><input type="checkbox" id="job-open"><i></i>展開每一級</label>
       <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
       <span class="sec-sub" id="job-count">載入中…</span>
     </div>
@@ -4021,6 +4022,7 @@ function tipHtml(kind, id) {
   if (kind === "quest") { const q = wbook.questById.get(id); return q ? questTip(q) : ""; }
   if (kind === "npc") { const n = wbook.npcById.get(id); return n ? npcTip(n) : ""; }
   if (kind === "map") { const m = wbook.mapById.get(id); return m ? mapTip(m) : ""; }
+  if (kind === "skill") { const hit = jobBook.skills.get(id); return hit ? skillTip(...hit) : ""; }
   return "";
 }
 function hideTip() {
@@ -4036,7 +4038,8 @@ function showTip(anchor) {
   // 小卡裡的 chip（怪物小卡的掉落物、出現地圖）：換成那一張，放在原地，原本的 chip 還是亮著
   const inner = tip.contains(anchor), at = inner && { top: tip.offsetTop, left: tip.offsetLeft };
   if (!inner) hideTip();
-  const goRow = `<div class="goto-row"><button type="button" data-goto="${anchor.dataset.tip}" data-id="${anchor.dataset.id}">在圖鑑裡展開</button></div>`;
+  // 技能不在圖鑑裡，沒有地方可以跳
+  const goRow = anchor.dataset.tip === "skill" ? "" : `<div class="goto-row"><button type="button" data-goto="${anchor.dataset.tip}" data-id="${anchor.dataset.id}">在圖鑑裡展開</button></div>`;
   tip.innerHTML = html + goRow + '<button type="button" class="tip-x" aria-label="關閉">✕</button>';
   tip.dataset.key = key;
   tip.hidden = false;
@@ -5219,10 +5222,11 @@ if (syncApi) {
 // skillbook.json 是客戶端技能資料的快照（scripts/export_skillbook.py）：groups 是每個系統的轉職分支，jobs 是每個職業的技能。
 // 技能每一級的效果是一個句型（h，例如「消耗MP#mpCon，攻擊力#damage%」）加上每個代號在各級的值（lv），這裡把代號換成數值；
 // 少數技能沒有句型、每一級各寫一句（texts）。句型裡有、lv 裡沒有的代號是匯出時算不出來的，印「？」。
-// 切到這個頁籤才載。選了哪個職業、兩個開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
+// 技能排成卡片，只有圖示、名稱、最高等級與說明；點卡片彈小卡（skillTip，走圖鑑那套 data-tip），裡面才是每一級的效果。
+// 切到這個頁籤才載。選了哪個職業、開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
 const JOB_KEY = "mapleexp.job";
 const JOB_SEARCH_CAP = 80;
-const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), group: 0, job: null, hidden: false, open: false, want: null };
+const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null };
 function loadJobs() {
   if (!jobBook.promise) {
     jobBook.promise = (async () => {
@@ -5231,7 +5235,7 @@ function loadJobs() {
       const data = await res.json();
       for (const job of data.jobs) {
         jobBook.byId.set(job.id, job);
-        for (const skill of job.skills) jobBook.names.set(skill.id, skill.name);
+        for (const skill of job.skills) { jobBook.names.set(skill.id, skill.name); jobBook.skills.set(skill.id, [job, skill]); }
       }
       jobBook.data = data;
     })();
@@ -5248,15 +5252,25 @@ const jobLabel = (job) => job.name + (job.stage ? ` ${job.stage}` : "");
 const jobSkills = (job) => job.skills.filter((skill) => jobBook.hidden || !skill.hidden);
 const jobGroupOf = (id) => jobBook.data.groups.findIndex((g) => g.root === id || g.lines.some((line) => line.includes(id)));
 function jobSave() {
-  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, hidden: jobBook.hidden, open: jobBook.open })); } catch { /* 存不了就算了 */ }
+  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, hidden: jobBook.hidden })); } catch { /* 存不了就算了 */ }
 }
+// 圖示：匯出時有圖示（ic）的之後接圖集；現在都還沒有，用名稱的第一個字
+const skillIcon = (skill) => `<span class="job-icon" aria-hidden="true">${esc([...skill.name.replace(/^\[TW\]/, "")][0] || "")}</span>`;
+// 說明開頭那行「[最高等級：20]」跟卡片上的最高等級重複，拿掉
+const skillDesc = (skill) => skill.desc.replace(/^\[[^\]\n]*等級[^\]\n]*\]\s*/, "");
 function skillHtml(job, skill, withJob) {
-  const tags = [withJob ? jobLabel(job) : "", `最高 Lv.${skill.max}`, skill.master ? `吃技能書之前到 Lv.${skill.master}` : "",
-    ...(skill.req || []).map(([id, lv]) => `要先學 ${jobBook.names.get(id) || id} Lv.${lv}`)].filter(Boolean).join(" · ");
-  const ends = [0, skill.max - 1].filter((i, at, list) => list.indexOf(i) === at).map((i) => `<span><i>Lv.${i + 1}</i>${esc(skillText(skill, i))}</span>`).join("");
-  const levels = Array.from({ length: skill.max }, (_, i) => `<div><i>Lv.${i + 1}</i>${esc(skillText(skill, i))}</div>`).join("");
-  return `<details class="job-skill" data-skill="${skill.id}"${jobBook.open ? " open" : ""}><summary><span class="job-name"><b>${esc(skill.name)}</b>${skill.hidden ? '<i class="soon">隱藏</i>' : ""}`
-    + `<small>${esc(tags)}</small>${skill.desc ? `<p>${esc(skill.desc)}</p>` : ""}</span><span class="job-ends">${ends}</span></summary><div class="job-levels">${levels}</div></details>`;
+  const desc = skillDesc(skill);
+  return `<button type="button" class="job-skill" data-tip="skill" data-id="${skill.id}">${skillIcon(skill)}`
+    + `<span class="job-name"><b>${esc(skill.name)}</b>${skill.hidden ? '<i class="soon">隱藏</i>' : ""}<small>${esc([withJob ? jobLabel(job) : "", `最高 Lv.${skill.max}`].filter(Boolean).join(" · "))}</small></span>`
+    + `${desc ? `<span class="job-desc">${esc(desc)}</span>` : ""}</button>`;
+}
+// 點技能彈的小卡：哪個職業的、最高幾級、要先學什麼，下面是每一級的效果
+function skillTip(job, skill) {
+  const levels = Array.from({ length: skill.max }, (_, i) => `<div><i>Lv.${i + 1}</i><span>${esc(skillText(skill, i))}</span></div>`).join("");
+  return tipHead(skillIcon(skill), skill.name, `${jobLabel(job)} · 最高 Lv.${skill.max}`)
+    + tipRows([["前置技能", (skill.req || []).map(([id, lv]) => `${jobBook.names.get(id) || id} Lv.${lv}`).join("、")],
+      ["技能書", skill.master ? `沒吃技能書之前最高到 Lv.${skill.master}` : ""]])
+    + `<h5>各等級效果</h5><div class="job-levels">${levels}</div>`;
 }
 function renderJobSkills() {
   const q = $("job-q").value.trim().toLowerCase(), job = jobBook.byId.get(jobBook.job);
@@ -5317,9 +5331,7 @@ async function jobOpen() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(JOB_KEY) || "{}") || {}; } catch { /* 壞了就用預設 */ }
   jobBook.hidden = saved.hidden === true;
-  jobBook.open = saved.open === true;
   $("job-hidden").checked = jobBook.hidden;
-  $("job-open").checked = jobBook.open;
   // 先看網址指定的，再來是上次選的；都沒有的話，正在分享遊戲畫面而且讀到職業就開那個職業，不然從劍士開始
   const read = $("id-job").textContent.trim();
   const mine = jobBook.data.jobs.find((job) => job.name === read)?.id;
@@ -5338,11 +5350,6 @@ $("job-tree").addEventListener("click", (e) => {
 });
 $("job-q").addEventListener("input", () => { if (jobBook.data) renderJobSkills(); });
 $("job-hidden").addEventListener("change", (e) => { jobBook.hidden = e.target.checked; jobSave(); renderJobs(); });
-$("job-open").addEventListener("change", (e) => {
-  jobBook.open = e.target.checked;
-  jobSave();
-  for (const box of $("job-skills").querySelectorAll("details")) box.open = jobBook.open;
-});
 
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
