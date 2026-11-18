@@ -898,7 +898,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.38.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.38.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1254,7 +1254,7 @@
           <div class="doll-bar">
             <button class="secondary" id="doll-reset" title="回到目前套用的儲存格">恢復原狀</button>
             <button class="secondary" id="doll-clear">全部脫下</button>
-            <button class="secondary" id="doll-random" title="每個部位各抽一件時裝，臉型也抽一個">隨機</button>
+            <button class="secondary" id="doll-random" title="每個部位各抽一件時裝，髮型與臉型也各抽一款">隨機</button>
             <button class="secondary" id="doll-rank-btn" title="把目前的造型設成某個角色在排行榜頒獎台上的樣子" hidden>排行榜造型</button>
             <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
             <span class="doll-state" id="doll-state" aria-live="polite"></span>
@@ -4717,7 +4717,7 @@ $("doll-clear").addEventListener("click", () => {
   doll.worn = {};
   dollChanged();
 });
-// 隨機：每個部位各抽一件時裝，臉型也抽一款；髮型、膚色、髮色與瞳色不動。
+// 隨機：每個部位各抽一件時裝，髮型與臉型也各抽一款；膚色、髮色與瞳色不動。
 // 互斥的照穿衣服時的規則避開：套服跟「上衣＋褲裙」二選一（各半），抽到雙手武器就不拿盾牌。
 // 性別篩選開著就只從那個性別能用的裡面抽，跟左邊列表看到的一樣。
 function dollRandom() {
@@ -4730,9 +4730,11 @@ function dollRandom() {
   if (worn.longcoat && Math.random() < 0.5) { delete worn.coat; delete worn.pants; } else delete worn.longcoat;
   if ((doll.byId.get(worn.weapon)?.v || "").includes("Si")) delete worn.shield;
   doll.worn = worn;
-  // 臉型抽一款，瞳色沿用現在的；那一款沒有這個顏色就用它的第一個
-  const face = pick(doll.index.face.filter((style) => dollSexOk(Object.values(style.c)[0], "face")));
-  if (face) doll.face = face.c[dollColorOf("face", doll.face)] ?? Object.values(face.c)[0];
+  // 髮型、臉型各抽一款，髮色與瞳色沿用現在的；那一款沒有這個顏色就用它的第一個
+  for (const kind of ["hair", "face"]) {
+    const style = pick(doll.index[kind].filter((x) => dollSexOk(Object.values(x.c)[0], kind)));
+    if (style) doll[kind] = style.c[dollColorOf(kind, doll[kind])] ?? Object.values(style.c)[0];
+  }
   dollChanged();
 }
 $("doll-random").addEventListener("click", dollRandom);
