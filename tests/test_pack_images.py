@@ -45,5 +45,26 @@ class Pack(unittest.TestCase):
         self.assertNotEqual(*names)
 
 
+class CopyExtra(unittest.TestCase):
+    def test_listed_files_are_copied_as_they_are(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            web, out = Path(tmp) / "web", Path(tmp) / "site"
+            web.mkdir()
+            (web / "skillbook.json").write_text('{"jobs": []}', encoding="utf-8")
+            self.assertEqual(pack_images.copy_extra(web, out), ["skillbook.json"])
+            self.assertEqual((out / "skillbook.json").read_text(encoding="utf-8"), '{"jobs": []}')
+
+    def test_a_missing_file_stops_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            web, out = Path(tmp) / "web", Path(tmp) / "site"
+            web.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                pack_images.copy_extra(web, out)
+
+    def test_the_real_data_file_is_in_the_repo(self):
+        for name in pack_images.EXTRA:
+            self.assertTrue((SCRIPT.parents[1] / "web" / name).is_file(), name)
+
+
 if __name__ == "__main__":
     unittest.main()

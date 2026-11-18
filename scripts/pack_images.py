@@ -6,16 +6,21 @@
 只在部署時做（``.github/workflows/pages.yml``），repo 裡還是散檔；本機開發沒有 ``packs.json``，網頁就直接讀散檔。
 
 用法：``python scripts/pack_images.py <web 目錄> <輸出目錄>``，輸出 ``<輸出>/packs/*.bin`` 與 ``<輸出>/packs.json``。
+
+另外順手把 :data:`EXTRA` 列的資料檔原樣複製到輸出目錄。部署要帶哪些檔案本來寫在 workflow 的那行 ``cp``，
+但改 workflow 檔需要另外的權限；之後才加的資料檔列在這裡，一樣會被帶上去。
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
 KINDS = ("mobs", "npcs", "minimaps")
+EXTRA = ("skillbook.json",)       # 「職業」分頁的資料
 LIMIT = 2 << 20
 
 
@@ -49,13 +54,24 @@ def pack(web: Path, out: Path, kinds: tuple[str, ...] = KINDS, limit: int = LIMI
     return index
 
 
+def copy_extra(web: Path, out: Path, names: tuple[str, ...] = EXTRA) -> list[str]:
+    """把 *names* 列的檔案從 web 目錄原樣複製到輸出目錄，回傳複製了哪些。少了哪個就丟 FileNotFoundError，
+    部署會停在這裡，不會發布一個點了就讀不到資料的網站。"""
+    out.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        shutil.copyfile(web / name, out / name)
+    return list(names)
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(__doc__, file=sys.stderr)
         return 2
-    index = pack(Path(sys.argv[1]), Path(sys.argv[2]))
+    web, out = Path(sys.argv[1]), Path(sys.argv[2])
+    index = pack(web, out)
     files = len({name for name, _, _ in index.values()})
     print(f"{len(index)} 張圖併成 {files} 包")
+    print(f"另外複製 {'、'.join(copy_extra(web, out))}")
     return 0
 
 

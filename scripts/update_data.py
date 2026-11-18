@@ -18,9 +18,9 @@ WEB = ROOT / "web"
 VERSION_PY = ROOT / "src" / "mapleexp" / "__init__.py"
 INDEX = WEB / "index.html"
 # 順序不能換：道具反查怪物圖鑑，世界圖鑑要怪物與道具，世界地圖要地圖圖鑑
-EXPORTS = ["export_monsterbook", "export_itembook", "export_worldbook", "export_worldmap", "export_mapvocab", "export_avatar"]
+EXPORTS = ["export_monsterbook", "export_itembook", "export_worldbook", "export_worldmap", "export_mapvocab", "export_avatar", "export_skillbook"]
 DATA = [
-    "monsterbook.json", "itembook.json", "questbook.json", "npcbook.json", "mapbook.json", "worldmap.json", "mapvocab.json", "avatar.json",
+    "monsterbook.json", "itembook.json", "questbook.json", "npcbook.json", "mapbook.json", "worldmap.json", "mapvocab.json", "avatar.json", "skillbook.json",
     "mobs", "icons", "npcs", "minimaps", "worldmap", "avatar",
 ]
 
@@ -47,6 +47,8 @@ def counts(web: Path) -> dict[str, int]:
         "時裝": sum(len(v) for v in book("avatar.json").get("items", {}).values()),
         "髮型": len(book("avatar.json").get("hair", [])),
         "臉型": len(book("avatar.json").get("face", [])),
+        "職業": len(book("skillbook.json").get("jobs", [])),
+        "技能": sum(len(job.get("skills", [])) for job in book("skillbook.json").get("jobs", [])),
     }
     for label, folder in (("怪物圖", "mobs"), ("NPC 圖", "npcs"), ("小地圖", "minimaps"), ("世界地圖圖檔", "worldmap")):
         path = web / folder

@@ -90,6 +90,13 @@
     #rank-people .rank-block > * { flex: none; }
     #rank-people .rank-block > .rank-list { flex: 1; min-height: 136px; overflow-y: auto; scrollbar-gutter: stable; }
   }
+  /* 職業也不要外層捲軸：分支圖固定在上面，技能清單在卡片裡捲 */
+  @media (min-height: 521px) {
+    .page-scroll:has(> #tab-job:not([hidden])) { display: flex; flex-direction: column; padding-bottom: 20px; }
+    #tab-job:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #tab-job > * { flex: none; }
+    #tab-job > .job-skills { flex: 1; min-height: 160px; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
+  }
   /* 視窗太矮（手機橫放）時頂列會吃掉大半畫面，改回整頁捲動 */
   @media (max-height: 520px) { main { height: auto; } .page-scroll { overflow: visible; } }
   /* 捲軸：細的圓角滑塊，平常是淡淡的灰青，滑過變亮、拖曳時是琥珀色，軌道透明 */
@@ -464,6 +471,42 @@
   @keyframes rank-spin { to { transform: rotate(360deg); } }
   @keyframes rank-fade { from { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .rank-mask, .rank-mask i, .doll-mask, .doll-mask i { animation: none; } }
+  /* ---------- 職業：客戶端技能資料的快照（scripts/export_skillbook.py）。上面是選到那個系統的轉職分支，下面是選到那個職業的技能 ---------- */
+  .job-card { position: relative; min-height: 300px; }
+  .job-card .sec-head { align-items: center; flex-wrap: wrap; }
+  .job-card .sec-head .switch { min-width: 0; font-size: 13px; }
+  .job-card .sec-head .sec-sub { margin-left: auto; }
+  .job-card .sec-head input[type="search"] { flex: 1 1 160px; max-width: 260px; min-width: 0; font: 500 14px var(--body); padding: 6px 10px;
+    color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
+  /* 分支圖：左邊是起點的職業，右邊每一條路一列，一轉一轉往右排 */
+  .job-tree { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .job-tree:empty { display: none; }
+  .job-lines { display: flex; flex-direction: column; gap: 6px; }
+  .job-line { display: flex; align-items: center; gap: 8px; }
+  .job-arrow { color: var(--muted); font-weight: 700; }
+  .job-node { display: inline-flex; flex-direction: column; align-items: flex-start; flex: none; min-width: 138px; padding: 6px 12px; margin: 0;
+    font: 700 14px var(--body); text-align: left; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
+  .job-node small { font: 400 12px var(--body); color: var(--muted); }
+  .job-node:hover { border-color: var(--ink); }
+  .job-node.empty { opacity: .55; }
+  .job-node[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); opacity: 1; }
+  .job-node[aria-pressed="true"] small { color: var(--on-accent); }
+  /* 技能：一個技能一塊。收著的時候右邊是第一級與最高級的效果，點開是每一級 */
+  .job-skill { border-top: 1px solid var(--line); }
+  .job-skill:first-child { border-top: 0; }
+  .job-skill summary { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 4px 28px; padding: 10px 0; cursor: pointer; list-style: none; }
+  .job-skill summary::-webkit-details-marker { display: none; }
+  .job-skill summary:hover .job-name b, .job-skill[open] .job-name b { color: var(--accent); }
+  .job-name b { font-size: 15px; }
+  .job-name .soon { margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; font-style: normal; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; vertical-align: 2px; }
+  .job-name small { display: block; font-size: 12px; color: var(--muted); }
+  .job-name p { margin: 4px 0 0; font-size: 13px; white-space: pre-line; }
+  .job-ends { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .job-ends i, .job-levels i { display: inline-block; min-width: 44px; margin-right: 8px; font: 500 12px var(--mono); font-style: normal; color: var(--muted); }
+  .job-skill[open] .job-ends { visibility: hidden; }
+  .job-levels { margin: 0 0 14px; columns: 2 380px; column-gap: 36px; font-size: 13px; }
+  .job-levels div { break-inside: avoid; padding: 3px 0; border-top: 1px dashed var(--line); }
+  @media (max-width: 720px) { .job-skill summary { grid-template-columns: minmax(0, 1fr); } }
   /* ---------- 圖鑑：客戶端資料的快照（scripts/export_*.py），怪物、道具、裝備三個分類同一張卡片、同一套捲動區與表格 ---------- */
   .book-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
   .book-tools input[type="search"], .wm-q { flex: 1 1 220px; min-width: 0; font: 500 14px var(--body); padding: 7px 10px;
@@ -901,7 +944,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.39.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.40.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -920,6 +963,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>排行榜</button>
       <button role="tab" id="tab-btn-book" aria-selected="false" aria-controls="tab-book" data-tab="book">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>圖鑑</button>
+      <button role="tab" id="tab-btn-job" aria-selected="false" aria-controls="tab-job" data-tab="job">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/></svg>職業</button>
       <button role="tab" id="tab-btn-doll" aria-selected="false" aria-controls="tab-doll" data-tab="doll">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 3.5 16 2a4 4 0 0 1-8 0L3.6 3.5a2 2 0 0 0-1.3 2.2l.6 3.5a1 1 0 0 0 1 .8H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.1a1 1 0 0 0 1-.8l.6-3.5a2 2 0 0 0-1.3-2.2z"/></svg>紙娃娃</button>
     </nav>
@@ -1247,6 +1292,21 @@
         <div id="wm-others-body"></div>
       </details>
     </section>
+  </div>
+
+  <!-- 職業：每個職業的轉職分支與技能，資料是客戶端的快照 web/skillbook.json（見下面的「職業」那一段程式） -->
+  <div id="tab-job" class="tab-panel book-card job-card" role="tabpanel" aria-labelledby="tab-btn-job" hidden>
+    <div class="sec-head">
+      <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
+      <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
+      <label class="switch" title="每個技能都攤開，列出每一級的效果；關著時只列第一級與最高級，點技能再攤開"><input type="checkbox" id="job-open"><i></i>展開每一級</label>
+      <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
+      <span class="sec-sub" id="job-count">載入中…</span>
+    </div>
+    <p class="note rank-error" id="job-error" role="alert"></p>
+    <div class="job-tree" id="job-tree"></div>
+    <div class="job-skills" id="job-skills"></div>
+    <div class="rank-mask" id="job-mask" role="status" hidden><div><i aria-hidden="true"></i>載入中…</div></div>
   </div>
 
   <div id="tip" class="tip" role="dialog" aria-label="圖鑑小卡" hidden></div>
@@ -5155,9 +5215,138 @@ if (syncApi) {
   $("tab-rank").remove();
 }
 
+// ---------------------------------------------------------------- 職業
+// skillbook.json 是客戶端技能資料的快照（scripts/export_skillbook.py）：groups 是每個系統的轉職分支，jobs 是每個職業的技能。
+// 技能每一級的效果是一個句型（h，例如「消耗MP#mpCon，攻擊力#damage%」）加上每個代號在各級的值（lv），這裡把代號換成數值；
+// 少數技能沒有句型、每一級各寫一句（texts）。句型裡有、lv 裡沒有的代號是匯出時算不出來的，印「？」。
+// 切到這個頁籤才載。選了哪個職業、兩個開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
+const JOB_KEY = "mapleexp.job";
+const JOB_SEARCH_CAP = 80;
+const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), group: 0, job: null, hidden: false, open: false, want: null };
+function loadJobs() {
+  if (!jobBook.promise) {
+    jobBook.promise = (async () => {
+      const res = await fetch("skillbook.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      for (const job of data.jobs) {
+        jobBook.byId.set(job.id, job);
+        for (const skill of job.skills) jobBook.names.set(skill.id, skill.name);
+      }
+      jobBook.data = data;
+    })();
+    jobBook.promise.catch(() => { jobBook.promise = null; });
+  }
+  return jobBook.promise;
+}
+// 一個技能在第 i 級（從 0 算）的效果
+function skillText(skill, i) {
+  if (skill.texts) return skill.texts[i] || "";
+  return (skill.h || "").replace(/#([A-Za-z]+)/g, (_, mark) => { const v = skill.lv[mark]?.[i]; return v == null ? "？" : v.toLocaleString(); });
+}
+const jobLabel = (job) => job.name + (job.stage ? ` ${job.stage}` : "");
+const jobSkills = (job) => job.skills.filter((skill) => jobBook.hidden || !skill.hidden);
+const jobGroupOf = (id) => jobBook.data.groups.findIndex((g) => g.root === id || g.lines.some((line) => line.includes(id)));
+function jobSave() {
+  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, hidden: jobBook.hidden, open: jobBook.open })); } catch { /* 存不了就算了 */ }
+}
+function skillHtml(job, skill, withJob) {
+  const tags = [withJob ? jobLabel(job) : "", `最高 Lv.${skill.max}`, skill.master ? `吃技能書之前到 Lv.${skill.master}` : "",
+    ...(skill.req || []).map(([id, lv]) => `要先學 ${jobBook.names.get(id) || id} Lv.${lv}`)].filter(Boolean).join(" · ");
+  const ends = [0, skill.max - 1].filter((i, at, list) => list.indexOf(i) === at).map((i) => `<span><i>Lv.${i + 1}</i>${esc(skillText(skill, i))}</span>`).join("");
+  const levels = Array.from({ length: skill.max }, (_, i) => `<div><i>Lv.${i + 1}</i>${esc(skillText(skill, i))}</div>`).join("");
+  return `<details class="job-skill" data-skill="${skill.id}"${jobBook.open ? " open" : ""}><summary><span class="job-name"><b>${esc(skill.name)}</b>${skill.hidden ? '<i class="soon">隱藏</i>' : ""}`
+    + `<small>${esc(tags)}</small>${skill.desc ? `<p>${esc(skill.desc)}</p>` : ""}</span><span class="job-ends">${ends}</span></summary><div class="job-levels">${levels}</div></details>`;
+}
+function renderJobSkills() {
+  const q = $("job-q").value.trim().toLowerCase(), job = jobBook.byId.get(jobBook.job);
+  let list, more = 0;
+  if (q) {
+    // 搜尋是跨職業的：名字裡有這幾個字的技能都列，每個標上是哪個職業的
+    list = jobBook.data.jobs.flatMap((j) => jobSkills(j).filter((skill) => skill.name.toLowerCase().includes(q)).map((skill) => [j, skill]));
+    more = Math.max(0, list.length - JOB_SEARCH_CAP);
+    $("job-count").textContent = `找到 ${list.length} 個技能`;
+    list = list.slice(0, JOB_SEARCH_CAP);
+  } else {
+    list = job ? jobSkills(job).map((skill) => [job, skill]) : [];
+    $("job-count").textContent = job ? `${jobLabel(job)} · ${list.length} 個技能` : "";
+  }
+  $("job-skills").innerHTML = (list.map(([j, skill]) => skillHtml(j, skill, Boolean(q))).join("")
+    || `<p class="note">${q ? "找不到名字符合的技能。" : job && job.skills.length ? "這個職業的技能都是隱藏的，打開「含隱藏技能」才會列。" : "這個職業沒有技能。"}</p>`)
+    + (more ? `<p class="note">還有 ${more} 個沒列出來，再多打幾個字。</p>` : "");
+  $("job-skills").scrollTop = 0;
+}
+function renderJobs() {
+  const data = jobBook.data;
+  if (!data) return;
+  $("job-groups").innerHTML = data.groups.map((g, i) => `<button role="tab" data-job-group="${i}" aria-selected="${i === jobBook.group}">${esc(g.name)}</button>`).join("");
+  const g = data.groups[jobBook.group];
+  const node = (id) => {
+    const job = jobBook.byId.get(id), n = jobSkills(job).length;
+    return `<button type="button" class="job-node${n ? "" : " empty"}" data-job="${id}" aria-pressed="${id === jobBook.job}"><b>${esc(job.name)}</b><small>${[job.stage, `${n} 個技能`].filter(Boolean).join(" · ")}</small></button>`;
+  };
+  const arrow = '<span class="job-arrow" aria-hidden="true">›</span>';
+  $("job-tree").innerHTML = (g.root != null ? node(g.root) : "")
+    + (g.lines.length ? `<div class="job-lines">${g.lines.map((line) => `<div class="job-line">${g.root != null ? arrow : ""}${line.map(node).join(arrow)}</div>`).join("")}</div>` : "");
+  renderJobSkills();
+}
+// 選一個職業：切到它的系統、清掉搜尋、記下來
+function jobPick(id) {
+  if (!jobBook.byId.has(id)) id = jobBook.data.jobs[0].id;
+  jobBook.job = id;
+  jobBook.group = Math.max(0, jobGroupOf(id));
+  $("job-q").value = "";
+  jobSave();
+  if (!$("tab-job").hidden) history.replaceState(null, "", `#job/${id}`);
+  renderJobs();
+}
+async function jobOpen() {
+  if (jobBook.data) { jobPick(jobBook.want ?? jobBook.job); jobBook.want = null; return; }
+  $("job-mask").hidden = false;
+  $("job-count").textContent = "載入中…";
+  try {
+    await loadJobs();
+  } catch (err) {
+    $("job-mask").hidden = true;
+    $("job-count").textContent = "讀取失敗";
+    $("job-error").textContent = `讀不到職業資料（${err.message}）。`;
+    return;
+  }
+  $("job-mask").hidden = true;
+  $("job-error").textContent = "";
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(JOB_KEY) || "{}") || {}; } catch { /* 壞了就用預設 */ }
+  jobBook.hidden = saved.hidden === true;
+  jobBook.open = saved.open === true;
+  $("job-hidden").checked = jobBook.hidden;
+  $("job-open").checked = jobBook.open;
+  // 先看網址指定的，再來是上次選的；都沒有的話，正在分享遊戲畫面而且讀到職業就開那個職業，不然從劍士開始
+  const read = $("id-job").textContent.trim();
+  const mine = jobBook.data.jobs.find((job) => job.name === read)?.id;
+  jobPick(jobBook.want ?? saved.job ?? mine ?? 100);
+  jobBook.want = null;
+}
+$("job-groups").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-job-group]");
+  if (!btn) return;
+  const g = jobBook.data.groups[Number(btn.dataset.jobGroup)];
+  jobPick(g.root ?? g.lines[0][0]);
+});
+$("job-tree").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-job]");
+  if (btn) jobPick(Number(btn.dataset.job));
+});
+$("job-q").addEventListener("input", () => { if (jobBook.data) renderJobSkills(); });
+$("job-hidden").addEventListener("change", (e) => { jobBook.hidden = e.target.checked; jobSave(); renderJobs(); });
+$("job-open").addEventListener("change", (e) => {
+  jobBook.open = e.target.checked;
+  jobSave();
+  for (const box of $("job-skills").querySelectorAll("details")) box.open = jobBook.open;
+});
+
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
-// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備；#rank、#rank/train 是排行榜），網址上的優先於記住的。
+// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備；#rank、#rank/train 是排行榜，#job/110 是職業分頁的狂戰士），網址上的優先於記住的。
 const TAB_KEY = "mapleexp.tab";
 const hasTab = (id) => !!document.querySelector(`.tabs [data-tab="${id}"]`);
 function setTab(id) {
@@ -5169,6 +5358,7 @@ function setTab(id) {
   if (id === "book") { loadWorld(); setSub(ibook.sub); }   // 連道具、任務、地圖資料一起載：怪物的掉落物要縮圖、出現地圖要小卡
   if (id === "doll") dollOpen();
   if (id === "rank") setBoard(rank.board);
+  if (id === "job") jobOpen();
   if (id !== "doll") $("doll-rank-btn").classList.remove("hint");     // 沒按就走掉了，提示收起來
 }
 for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventListener("click", () => setTab(btn.dataset.tab));
@@ -5178,6 +5368,7 @@ for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventLis
   const [fromUrl, sub] = location.hash.slice(1).split("/");
   if (fromUrl === "book" && sub) ibook.sub = sub;
   if (fromUrl === "rank" && sub) rank.board = sub;
+  if (fromUrl === "job" && /^\d+$/.test(sub || "")) jobBook.want = Number(sub);
   setTab(hasTab(fromUrl) ? fromUrl : hasTab(saved) ? saved : "train");
 }
 
