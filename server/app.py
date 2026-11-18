@@ -8,13 +8,20 @@
 活躍不滿 10 分鐘的紀錄不收（網頁也不會傳）。收下的紀錄不會因為使用者在網頁上刪掉而消失：沒有對外的刪除功能，要拿掉只能直接改資料檔。
 uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 
+每個瀏覽器有一把自己產生的金鑰，上傳紀錄時帶著；這裡記下每筆紀錄是哪把金鑰傳的（只存雜湊）。
+它不是登入，只用來決定誰能幫一個角色設排行榜上的造型：傳過那個角色紀錄的金鑰都可以，
+同一個角色在兩台電腦都有紀錄就兩邊都能改，後設的蓋掉先設的。造型只是紙娃娃的零件編號，不是圖片。
+
 數字是瀏覽器自己算好傳上來的，這裡只擋格式不對與明顯不可能的值，擋不了有心造假。
 
 這裡只出資料，畫面在網站的「排行榜」頁籤（web/index.html）。
 
 路徑：
     POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}]}
-    GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級）
+    POST   /api/records        同上，多帶 "key"（瀏覽器的金鑰）就把這批紀錄記在它名下；已經有、還沒主的紀錄也歸它
+    POST   /api/looks          {"key", "character", "look"}，設那個角色的造型；look 給 null 是拿掉。沒傳過那個角色的紀錄回 403
+    POST   /api/looks/mine     {"key"}，回這把金鑰名下的角色與各自目前的造型 {"characters": [{character, look}]}
+    GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級），looks 是各榜前三名有設的造型
     GET    /api/training       ?days=7&job=法師&level=35&limit=100，回練功榜：地圖 × 職業 × 等級區間的平均效率
     GET    /api/health         {"ok": true, "records": 筆數}
     GET    /                   轉去網站的排行榜頁籤
@@ -25,6 +32,7 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import math
@@ -49,6 +57,9 @@ BOARD_TTL = 60.0
 MAX_LIMIT = 200
 LEVEL_BAND = 10                   # 練功榜的等級區間：1–10、11–20…
 SITE = "https://andy971029.github.io/PrisonDiary/"
+PODIUM = 3                        # 排行榜回應裡只附各榜前幾名的造型（網頁的頒獎台）
+LOOK_PARTS = 24                   # 一套造型最多幾個部位；紙娃娃現在有 12 類時裝
+LOOK_PART = re.compile(r"[A-Za-z]{1,24}\Z")
 
 UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是壞資料
@@ -70,10 +81,18 @@ CREATE TABLE IF NOT EXISTS records (
     active_sec  REAL NOT NULL,
     idle_sec    REAL NOT NULL,
     ip          TEXT NOT NULL,
-    received_at INTEGER NOT NULL
+    received_at INTEGER NOT NULL,
+    owner       TEXT
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS records_character ON records (character, end_at);
 CREATE INDEX IF NOT EXISTS records_end ON records (end_at);
+CREATE TABLE IF NOT EXISTS looks (
+    character  TEXT PRIMARY KEY,
+    look       TEXT NOT NULL,
+    owner      TEXT NOT NULL,
+    ip         TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+) WITHOUT ROWID;
 """
 
 
@@ -142,6 +161,46 @@ def validate(raw: object, now_ms: int) -> dict:
     }
 
 
+def _look_int(value: object, name: str, high: int, *, optional: bool = False) -> int | None:
+    if value is None and optional:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= high:
+        raise Invalid(f"造型的 {name} 不對")
+    return value
+
+
+def validate_look(raw: object) -> dict:
+    """檢查網頁傳來的一套造型，只留認得的欄位。
+
+    造型是紙娃娃的零件編號：膚色、髮型、臉型、各自的混色、每個部位穿哪一件、武器類型。
+    這裡只擋格式；編號存不存在由網頁畫的時候處理（下一版客戶端拿掉的零件，網頁會當作沒穿）。
+    """
+    if not isinstance(raw, dict):
+        raise Invalid("造型不是物件")
+    mix = raw.get("mix") if raw.get("mix") is not None else {}
+    worn = raw.get("worn") if raw.get("worn") is not None else {}
+    if not isinstance(mix, dict) or not isinstance(worn, dict) or len(worn) > LOOK_PARTS:
+        raise Invalid("造型的 mix 或 worn 不對")
+    for part in worn:
+        if not isinstance(part, str) or not LOOK_PART.match(part):
+            raise Invalid("造型的部位名稱不對")
+    return {
+        "skin": _look_int(raw.get("skin"), "skin", 999),
+        "hair": _look_int(raw.get("hair"), "hair", 9_999_999),
+        "face": _look_int(raw.get("face"), "face", 9_999_999),
+        "mix": {kind: _look_int(mix.get(kind), "mix", 99, optional=True) for kind in ("hair", "face")},
+        "worn": {part: _look_int(worn[part], part, 99_999_999) for part in sorted(worn)},
+        "group": _look_int(raw.get("group"), "group", 999, optional=True),
+    }
+
+
+def owner_of(key: object) -> str | None:
+    """瀏覽器金鑰的雜湊，資料表裡存的是它；金鑰格式不對回 None。"""
+    if not isinstance(key, str) or not UID.match(key):
+        return None
+    return hashlib.sha256(key.encode("ascii")).hexdigest()
+
+
 class Full(RuntimeError):
     """資料檔或磁碟滿了，不再收新紀錄。"""
 
@@ -161,6 +220,10 @@ class Store:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
         self._db.executescript(SCHEMA)
+        # owner 欄是後來才加的：舊的資料檔補上這一欄（值是空的，等那個瀏覽器下次開頁重傳時認領）
+        if "owner" not in {row[1] for row in self._db.execute("PRAGMA table_info(records)")}:
+            self._db.execute("ALTER TABLE records ADD COLUMN owner TEXT")
+        self._db.execute("CREATE INDEX IF NOT EXISTS records_owner ON records (owner, character)")
         # 門檻是後來才加的：之前收下的短紀錄在啟動時清掉
         self._db.execute("DELETE FROM records WHERE active_sec < ?", (MIN_ACTIVE_SEC,))
         self._db.commit()
@@ -178,8 +241,13 @@ class Store:
         if shutil.disk_usage(target.parent).free < self.min_free:
             raise Full("磁碟空間不足")
 
-    def add(self, raws: list, ip: str, now_ms: int | None = None) -> tuple[list[str], list[dict]]:
-        """存一批紀錄。回 (收下的 uid, 被拒絕的 {uid, reason})；已經有的 uid 也算收下。"""
+    def add(self, raws: list, ip: str, now_ms: int | None = None, *,
+            owner: str | None = None) -> tuple[list[str], list[dict]]:
+        """存一批紀錄。回 (收下的 uid, 被拒絕的 {uid, reason})；已經有的 uid 也算收下。
+
+        owner 是上傳的瀏覽器（金鑰的雜湊）。已經有、但還沒記主的紀錄（這個功能上線前收的）也歸它；
+        已經有主的不改，先傳的人是主。
+        """
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
         accepted: list[str] = []
         rejected: list[dict] = []
@@ -193,6 +261,7 @@ class Store:
                 continue
             row["ip"] = ip
             row["received_at"] = now_ms
+            row["owner"] = owner
             rows.append(row)
             accepted.append(row["uid"])
         if rows:
@@ -200,15 +269,50 @@ class Store:
                 self._check_room()
                 self._db.executemany(
                     "INSERT INTO records (uid, character, job, level, map_id, map_name, start_at, end_at,"
-                    " cum_net, active_sec, idle_sec, ip, received_at)"
+                    " cum_net, active_sec, idle_sec, ip, received_at, owner)"
                     " VALUES (:uid, :character, :job, :level, :map_id, :map_name, :start_at, :end_at,"
-                    " :cum_net, :active_sec, :idle_sec, :ip, :received_at)"
+                    " :cum_net, :active_sec, :idle_sec, :ip, :received_at, :owner)"
                     " ON CONFLICT (uid) DO NOTHING",
                     rows,
                 )
+                if owner:
+                    self._db.executemany(
+                        "UPDATE records SET owner = ? WHERE uid = ? AND owner IS NULL",
+                        [(owner, row["uid"]) for row in rows],
+                    )
                 self._db.commit()
                 self._boards.clear()
         return accepted, rejected
+
+    def set_look(self, owner: str, character: str, look: dict | None, ip: str, now_ms: int | None = None) -> bool:
+        """設（look 是 None 就拿掉）一個角色的造型。這把金鑰沒傳過那個角色的紀錄就不動，回 False。"""
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        with self._lock:
+            mine = self._db.execute(
+                "SELECT 1 FROM records WHERE owner = ? AND character = ? LIMIT 1", (owner, character)).fetchone()
+            if not mine:
+                return False
+            if look is None:
+                self._db.execute("DELETE FROM looks WHERE character = ?", (character,))
+            else:
+                self._check_room()
+                self._db.execute(
+                    "INSERT INTO looks (character, look, owner, ip, updated_at) VALUES (?, ?, ?, ?, ?)"
+                    " ON CONFLICT (character) DO UPDATE SET look = excluded.look, owner = excluded.owner,"
+                    " ip = excluded.ip, updated_at = excluded.updated_at",
+                    (character, json.dumps(look, separators=(",", ":")), owner, ip, now_ms),
+                )
+            self._db.commit()
+            self._boards.clear()
+        return True
+
+    def my_looks(self, owner: str) -> list[dict]:
+        """這把金鑰名下的角色（傳過紀錄的），以及各自目前的造型（沒設是 None；可能是別台電腦設的）。"""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT DISTINCT r.character, l.look FROM records r LEFT JOIN looks l ON l.character = r.character"
+                " WHERE r.owner = ? ORDER BY r.character", (owner,)).fetchall()
+        return [{"character": c, "look": json.loads(look) if look else None} for c, look in rows]
 
     def count(self) -> int:
         with self._lock:
@@ -259,6 +363,12 @@ class Store:
                 ],
                 "level": [{"character": c, "job": j or "", "level": top} for c, j, top, _ in level],
             }
+            # 頒獎台上那幾個角色有設造型的附上；名單其他人用不到，不送
+            top = sorted({row[0] for board in (exp, rate, level) for row in board[:PODIUM]})
+            looks = self._db.execute(
+                f"SELECT character, look FROM looks WHERE character IN ({','.join('?' * len(top))})", top,
+            ).fetchall() if top else []
+            out["looks"] = {c: json.loads(look) for c, look in looks}
             self._boards[key] = (now, out)
             return out
 
@@ -458,7 +568,7 @@ class Handler(BaseHTTPRequestHandler):
         if ip is None:
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/records", "/api/records/delete"):
+        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine"):
             self._error(404, "沒有這個路徑")
             return
         try:
@@ -478,16 +588,43 @@ class Handler(BaseHTTPRequestHandler):
             # 舊版網頁刪紀錄時叫的。現在收下的紀錄不刪，回 204 讓它把待刪清單清掉、繼續上傳
             self._send(204)
             return
-        records = data.get("records") if isinstance(data, dict) else None
-        if not isinstance(records, list) or not 0 < len(records) <= MAX_BATCH:
-            self._error(400, f"records 要是 1 到 {MAX_BATCH} 筆的陣列")
+        if not isinstance(data, dict):
+            self._error(400, "內容要是一個物件")
             return
-        try:
-            accepted, rejected = self.store.add(records, ip)
-        except Full as err:
-            self._error(507, str(err))
+        # 金鑰：上傳紀錄可以不帶（舊版網頁），帶了就要是對的；造型的兩個路徑一定要帶
+        owner = owner_of(data.get("key"))
+        if owner is None and (data.get("key") is not None or path != "/api/records"):
+            self._error(400, "key 沒給或格式不對")
             return
-        self._json(200, {"accepted": accepted, "rejected": rejected})
+        if path == "/api/records":
+            records = data.get("records")
+            if not isinstance(records, list) or not 0 < len(records) <= MAX_BATCH:
+                self._error(400, f"records 要是 1 到 {MAX_BATCH} 筆的陣列")
+                return
+            try:
+                accepted, rejected = self.store.add(records, ip, owner=owner)
+            except Full as err:
+                self._error(507, str(err))
+                return
+            self._json(200, {"accepted": accepted, "rejected": rejected})
+        elif path == "/api/looks/mine":
+            self._json(200, {"characters": self.store.my_looks(owner)})
+        else:
+            try:
+                character = _text(data, "character", 24, required=True)
+                look = None if data.get("look") is None else validate_look(data["look"])
+            except Invalid as err:
+                self._error(400, str(err))
+                return
+            try:
+                done = self.store.set_look(owner, character, look, ip)
+            except Full as err:
+                self._error(507, str(err))
+                return
+            if not done:
+                self._error(403, "這個瀏覽器沒有上傳過這個角色的紀錄")
+                return
+            self._json(200, {"ok": True})
 
     def do_DELETE(self) -> None:
         if self._guard() is None:

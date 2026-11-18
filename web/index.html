@@ -403,9 +403,12 @@
   .podium .p2 { order: 1; }
   .podium .p3 { order: 3; }
   /* 角色模型的位置：現在是空的剪影，之後自訂角色模型畫在這一格裡 */
-  .podium-doll { width: 68px; height: 88px; display: grid; place-items: center; color: var(--line);
-    border: 1px dashed var(--line); border-radius: 3px; }
-  .podium-doll svg { width: 44px; height: 64px; }
+  .podium-doll { width: min(104px, 100%); aspect-ratio: 104 / 112; display: grid; place-items: center; color: var(--line);
+    border: 1px dashed var(--line); border-radius: 3px; overflow: hidden; }
+  .podium-doll svg { width: 42%; height: auto; }
+  /* 有設造型的：紙娃娃畫好的站姿，腳底的位置每張都一樣；框線收掉 */
+  .podium-doll img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .podium-doll.has-look { border-color: transparent; }
   .podium-name { max-width: 100%; margin-top: 6px; font-weight: 700; font-size: 14px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .podium .none .podium-name { font-weight: 400; color: var(--muted); }
@@ -612,6 +615,13 @@
   .doll-group { font-size: 13px; }
   .doll-group[hidden] { display: none; }
   .doll-state { font-size: 12px; color: var(--muted); }
+  /* 排行榜造型的視窗：這個瀏覽器傳過紀錄的角色一個一列，左邊是它現在在頒獎台上的樣子 */
+  .doll-rank-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+    padding: 8px 0; border-top: 1px solid var(--line); }
+  .doll-rank-row:last-child { border-bottom: 1px solid var(--line); }
+  .doll-rank-row .podium-doll { width: 52px; }
+  .doll-rank-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doll-rank-row button { padding: 4px 10px; margin: 0; font-size: 12px; }
   /* 四格儲存：縮圖是存的時候拍的站姿，右上角存檔，點格子套用，套用中的框琥珀色 */
   .doll-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 476px; margin-top: 12px; }
   .doll-slot { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; cursor: pointer;
@@ -863,7 +873,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.34.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.35.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1219,6 +1229,7 @@
           <div class="doll-bar">
             <button class="secondary" id="doll-reset" title="回到目前套用的儲存格">恢復原狀</button>
             <button class="secondary" id="doll-clear">全部脫下</button>
+            <button class="secondary" id="doll-rank-btn" title="把目前的造型設成某個角色在排行榜頒獎台上的樣子" hidden>排行榜造型</button>
             <label class="doll-group" id="doll-group-box" hidden>武器類型 <select id="doll-group"></select></label>
             <span class="doll-state" id="doll-state" aria-live="polite"></span>
           </div>
@@ -1276,6 +1287,12 @@
   <h2>調色盤</h2>
   <div class="doll-pal"><div class="doll-pal-pic"><img id="doll-pal-img" alt="預覽"></div><div class="doll-pal-side" id="doll-palette-body"></div></div>
   <div class="btns"><button type="button" class="secondary" id="doll-palette-close">關閉</button></div>
+</dialog>
+<dialog id="doll-rank-dlg" class="settings" aria-label="排行榜造型">
+  <h2>排行榜造型</h2>
+  <p class="note" id="doll-rank-note" role="status"></p>
+  <div id="doll-rank-list"></div>
+  <div class="btns"><button type="button" class="secondary" id="doll-rank-close">關閉</button></div>
 </dialog>
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
@@ -1872,6 +1889,7 @@ buildHistoryHead();
 // 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
 const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
+const SYNC_KEY_KEY = "mapleexp.syncKey";         // 這個瀏覽器的金鑰：自己產生的一串亂數，上傳時帶著，後端靠它認「這些紀錄是同一個瀏覽器傳的」
 const SYNC_BATCH = 50;
 const SYNC_RETRY_MS = 5 * 60 * 1000;
 const syncApi = (() => {
@@ -1905,6 +1923,19 @@ function recordUid(r) {
     hex += (a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0");
   }
   return hex.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+}
+
+// 金鑰不是登入，只用來決定誰能幫一個角色設排行榜造型（傳過那個角色紀錄的瀏覽器才行）。
+// 清掉網站資料就換一把新的；存不了（瀏覽器不給用 localStorage）就回 null，紀錄照樣傳，只是設不了造型。
+function syncKey() {
+  try {
+    let key = localStorage.getItem(SYNC_KEY_KEY);
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(key || "")) {
+      key = crypto.randomUUID();
+      localStorage.setItem(SYNC_KEY_KEY, key);
+    }
+    return key;
+  } catch { return null; }
 }
 
 // 這一筆會不會上傳：要讀得到角色名字。活躍時間照理都夠（短的進不了歷史），多擋一次免得後端退回來
@@ -1958,7 +1989,7 @@ async function syncRecords() {
       if (!batch.length) break;
       const res = await syncFetch("/api/records", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: batch.map(syncPayload) }),
+        body: JSON.stringify({ key: syncKey() ?? undefined, records: batch.map(syncPayload) }),
       });
       const out = await res.json();
       const ok = new Set(out.accepted);
@@ -3946,26 +3977,39 @@ function dollRestore() {
   doll.sex = raw?.sex === 0 || raw?.sex === 1 ? raw.sex : null;
   dollRenderSexBtn();
 }
+// 目錄（avatar.json）只載一次。紙娃娃頁籤與排行榜的頒獎台都要用，所以跟頁籤的畫面分開：
+// 沒開過紙娃娃頁籤也能畫別人的造型。載失敗下次再叫會重試。
+function dollIndex() {
+  if (!doll.loading) {
+    doll.loading = (async () => {
+      const res = await fetch(DOLL_BASE + "avatar.json");
+      if (!res.ok) throw new Error(res.status);
+      const index = await res.json();
+      index.order.forEach((z, i) => doll.rank.set(z, i));
+      for (const [pack, entries] of index.packs) {
+        let at = 0;
+        for (const [id, json, img] of entries) { doll.where.set(id, { pack, at, json, img }); at += json + img; }
+      }
+      for (const [cat, list] of Object.entries(index.items)) for (const item of list) doll.byId.set(item.id, { ...item, cat });
+      doll.index = index;
+    })();
+    doll.loading.catch(() => { doll.loading = null; });
+  }
+  return doll.loading;
+}
 async function dollOpen() {
-  if (doll.index) { dollRefresh(); return; }
-  if (doll.loading) return;
-  doll.loading = true;
+  if (doll.opened) { dollRefresh(); return; }
+  if (doll.opening) return;
+  doll.opening = true;
   $("doll-state").textContent = "載入中…";
   try {
-    const res = await fetch(DOLL_BASE + "avatar.json");
-    if (!res.ok) throw new Error(res.status);
-    doll.index = await res.json();
+    await dollIndex();
   } catch {
-    doll.loading = null;
+    doll.opening = false;
     $("doll-state").textContent = "讀不到紙娃娃資料。";
     return;
   }
-  doll.index.order.forEach((z, i) => doll.rank.set(z, i));
-  for (const [pack, entries] of doll.index.packs) {
-    let at = 0;
-    for (const [id, json, img] of entries) { doll.where.set(id, { pack, at, json, img }); at += json + img; }
-  }
-  for (const [cat, list] of Object.entries(doll.index.items)) for (const item of list) doll.byId.set(item.id, { ...item, cat });
+  doll.opened = true;
   dollRestore();
   dollRenderActions();
   dollRenderBacks();
@@ -4018,20 +4062,28 @@ function dollMixId(kind) {
   const color = doll.mix[kind], id = color == null ? null : dollStyleOf(kind, doll[kind])?.c[color];
   return id != null && id !== doll[kind] ? id : null;
 }
+// 目前這套造型要用到的檔案：身體、頭、臉、頭髮、穿著的每一件，最後是混色疊上去的那幾個
+function dollNeeds() {
+  const mixes = ["face", "hair"].map(dollMixId).filter((id) => id != null);
+  return { ids: [2000 + doll.skin, 12000 + doll.skin, doll.face, doll.hair, ...Object.values(doll.worn), ...mixes], mixes };
+}
+// 載好的檔案排成 dollCompose 要的樣子；讀不到的那幾件丟掉（也從快取拿掉，下次重抓）
+function dollReady({ ids, mixes }, results) {
+  results.forEach((r, i) => { if (r.status === "rejected") doll.files.delete(ids[i]); });
+  return results.map((r, i) => ({ id: ids[i], file: r.status === "fulfilled" ? r.value : null, mix: i >= ids.length - mixes.length })).filter((x) => x.file);
+}
 // 全部檔案到齊才換畫面，換裝時不會閃一下沒穿衣服
 async function dollRefresh() {
   const token = ++doll.token;
-  const mixes = ["face", "hair"].map(dollMixId).filter((id) => id != null);
-  const ids = [2000 + doll.skin, 12000 + doll.skin, doll.face, doll.hair, ...Object.values(doll.worn), ...mixes];
+  const needs = dollNeeds(), { ids } = needs;
   $("doll-state").textContent = "載入中…";
   dollRenderWorn();
   dollRenderMisses();
   const results = await Promise.allSettled(ids.map(dollLoad));
   if (token !== doll.token) return;
   const failed = results.filter((r) => r.status === "rejected").length;
-  results.forEach((r, i) => { if (r.status === "rejected") doll.files.delete(ids[i]); });
   $("doll-state").textContent = failed ? `有 ${failed} 件讀不到` : "";
-  doll.ready = results.map((r, i) => ({ id: ids[i], file: r.status === "fulfilled" ? r.value : null, mix: i >= ids.length - mixes.length })).filter((x) => x.file);
+  doll.ready = dollReady(needs, results);
   doll.readyToken = token;
   dollPlay();
 }
@@ -4335,12 +4387,15 @@ function dollRenderSlots() {
     <small>${i + 1}</small>${slot?.pic ? `<img src="${slot.pic}" alt="">` : "原始狀態"}
     <button type="button" class="doll-slot-save" data-doll-slot-save="${i}" title="把目前的造型存進儲存格 ${i + 1}" aria-label="存進儲存格 ${i + 1}">${DOLL_SAVE_ICON}</button></div>`).join("");
 }
-// 拍一張站姿（不含特效與背景），切掉透明的邊
-function dollSnapshot() {
+// 拍一張站姿（不含特效與背景）。不給 box 就切掉透明的邊（儲存格的縮圖）；
+// 給 box { w, h, x, y } 就畫在固定大小的框裡、腳底在 (x, y)，超出框的切掉：排行榜上每個人站的位置才會一樣
+function dollSnapshot(box) {
   const parts = dollCompose(dollBasic("stand"), 0).filter((e) => !e.effect);
   if (!parts.length) return "";
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-  for (const { part: [, , w, h, ox, oy], dx, dy } of parts) {
+  if (box) {
+    left = -box.x; top = -box.y; right = left + box.w; bottom = top + box.h;
+  } else for (const { part: [, , w, h, ox, oy], dx, dy } of parts) {
     left = Math.min(left, dx - ox); top = Math.min(top, dy - oy); right = Math.max(right, dx - ox + w); bottom = Math.max(bottom, dy - oy + h);
   }
   const out = document.createElement("canvas");
@@ -4351,6 +4406,27 @@ function dollSnapshot() {
     ctx.drawImage(file.image, x, y, w, h, dx - ox - left, dy - oy - top, w, h);
   }
   return out.toDataURL("image/png");
+}
+// 把任意一套造型畫成站姿的圖（排行榜用），不動頁籤上目前的造型，沒開過紙娃娃頁籤也能畫。
+// 畫圖的函式都直接讀 doll 上的造型，所以把造型暫時換過去、做完馬上換回來；換過去到換回來之間沒有 await，頁籤的動畫插不進來。
+// 先換一次算出要哪些檔案（順便借 dollSetLook 把不認得的編號換成預設），等檔案載好再換一次拍照。
+const DOLL_PORTRAIT = { w: 104, h: 112, x: 52, y: 100 };
+function dollBorrow(look, ready, work) {
+  const keep = { ...dollLook(), ready: doll.ready };
+  try {
+    if (ready) Object.assign(doll, look, { ready });
+    else dollSetLook(look);
+    return work();
+  } finally {
+    Object.assign(doll, keep);
+  }
+}
+async function dollPortrait(raw, box = DOLL_PORTRAIT) {
+  await dollIndex();
+  const { look, needs } = dollBorrow(raw, null, () => ({ look: dollLook(), needs: dollNeeds() }));
+  const ready = dollReady(needs, await Promise.allSettled(needs.ids.map(dollLoad)));
+  if (!ready.some((x) => x.id === needs.ids[0])) throw new Error("讀不到角色的身體");
+  return dollBorrow(look, ready, () => dollSnapshot(box));
 }
 function dollApplySlot(i) {
   doll.slot = i;
@@ -4612,6 +4688,65 @@ $("doll-group").addEventListener("change", (e) => {
   dollSave();
   dollRefresh();
 });
+// ---------------------------------------------------------------- 排行榜造型
+// 紙娃娃頁籤的「排行榜造型」：把目前的造型設成某個角色在排行榜頒獎台上的樣子，一個角色一套。
+// 能設的角色由後端說了算：這個瀏覽器（金鑰）傳過紀錄的那些。同一個角色在別台電腦也有紀錄的話兩邊都能改，後設的蓋掉先設的。
+// 傳上去的是造型的零件編號（dollLook），不是圖。
+const dollRank = { list: [] };
+async function lookApi(path, body = {}) {
+  const key = syncKey();
+  if (!key) throw new Error("瀏覽器不讓網站存資料，沒辦法認出這個瀏覽器");
+  const res = await fetch(syncApi + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, ...body }) });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+  return out;
+}
+function dollRankRender() {
+  $("doll-rank-list").innerHTML = dollRank.list.map((c, i) =>
+    `<div class="doll-rank-row"><div class="podium-doll">${RANK_DOLL}</div><b title="${esc(c.character)}">${esc(c.character)}</b>`
+    + `<button type="button" data-doll-rank-set="${i}">套用目前造型</button>`
+    + `<button type="button" class="secondary" data-doll-rank-clear="${i}"${c.look ? "" : " hidden"}>拿掉</button></div>`).join("");
+  dollRank.list.forEach((c, i) => { if (c.look) paintDoll($("doll-rank-list").children[i].querySelector(".podium-doll"), c.look); });
+}
+async function dollRankOpen() {
+  dollRank.list = [];
+  dollRankRender();
+  $("doll-rank-note").textContent = "載入中…";
+  $("doll-rank-dlg").showModal();
+  try {
+    dollRank.list = (await lookApi("/api/looks/mine")).characters || [];
+    $("doll-rank-note").textContent = dollRank.list.length ? "" : "這個瀏覽器還沒有上傳過練功紀錄，沒有可以設定的角色。";
+    dollRankRender();
+  } catch (err) {
+    $("doll-rank-note").textContent = `讀不到角色清單：${err.message}`;
+  }
+}
+// look 給 null 是拿掉
+async function dollRankSet(i, look) {
+  const c = dollRank.list[i];
+  $("doll-rank-note").textContent = "儲存中…";
+  try {
+    await lookApi("/api/looks", { character: c.character, look });
+    c.look = look;
+    $("doll-rank-note").textContent = look ? `${c.character} 的排行榜造型已更新。` : `${c.character} 的排行榜造型已拿掉。`;
+    rank.cache.clear();       // 排行榜頁籤下次打開時重抓，才看得到新造型
+    dollRankRender();
+  } catch (err) {
+    $("doll-rank-note").textContent = `沒有存成：${err.message}`;
+  }
+}
+$("doll-rank-btn").hidden = !syncApi;
+$("doll-rank-btn").addEventListener("click", dollRankOpen);
+$("doll-rank-close").addEventListener("click", () => $("doll-rank-dlg").close());
+$("doll-rank-list").addEventListener("click", async (e) => {
+  const set = e.target.closest("[data-doll-rank-set]"), clear = e.target.closest("[data-doll-rank-clear]");
+  if (clear) { dollRankSet(Number(clear.dataset.dollRankClear), null); return; }
+  if (!set) return;
+  // 剛換的那件還在載的話，等畫面跟上再存，存下去的才是眼前看到的這一套
+  while (!doll.ready || doll.readyToken !== doll.token) await new Promise((r) => setTimeout(r, 50));
+  dollRankSet(Number(set.dataset.dollRankSet), dollLook());
+});
+
 // ---------------------------------------------------------------- 排行榜
 // 資料是大家上傳的練功紀錄，由後端（server/app.py）算好，這裡只抓來畫。後端網址沒設（SYNC_API 是空的）就把整個頁籤拿掉。
 // 個人排行榜：總累計經驗、最高效率、等級三塊，每塊上面是前三名的頒獎台，下面是完整名單。
@@ -4622,7 +4757,7 @@ const RANK_KEY = "mapleexp.rank-board";
 const RANK_TTL = 60 * 1000;
 const RANK_BAND = 10;      // 等級區間的寬度，跟後端的 LEVEL_BAND 一樣
 const rank = { board: "people", days: "", job: "", level: "", cache: new Map(), turn: 0 };
-// 頒獎台上的角色模型先放一個空的剪影。之後做自訂角色模型時畫在 .podium-doll 裡，data-character 是那個角色的名字。
+// 頒獎台上的角色模型：沒設造型的是這個空的剪影，有設的由 paintPodium 換成他的紙娃娃（.podium-doll 的 data-character 是角色名字）。
 const RANK_DOLL = '<svg viewBox="0 0 44 64" fill="currentColor" aria-hidden="true"><circle cx="22" cy="14" r="11"/><path d="M8 62V41a14 14 0 0 1 28 0v21z"/></svg>';
 const rankNum = (n) => Math.round(n).toLocaleString();
 const rankJoin = (...parts) => parts.filter(Boolean).join(" · ");
@@ -4651,6 +4786,36 @@ function renderPeople(data) {
       `<li><span class="no">${i + 1}</span><span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small></span>`
       + `<span class="val">${esc(board.val(r))}<small>${esc(board.sub(r))}</small></span></li>`).join("");
     box.querySelector(".rank-none").hidden = rows.length > 0;
+  }
+  paintPodium(data?.looks);
+}
+
+// 同一套造型只畫一次：造型（轉成字串當 key）→ 畫好的圖。畫失敗的不留，下次再試
+const rankPics = new Map();
+function rankPortrait(look) {
+  const id = JSON.stringify(look);
+  if (!rankPics.has(id)) {
+    const pic = dollPortrait(look);
+    pic.catch(() => rankPics.delete(id));
+    rankPics.set(id, pic);
+  }
+  return rankPics.get(id);
+}
+// 把一格角色模型換成畫好的造型。等圖的時候那一格可能已經換人（重新整理、切期間），所以畫之前再對一次
+function paintDoll(slot, look) {
+  const id = JSON.stringify(look);
+  slot.dataset.look = id;
+  rankPortrait(look).then((src) => {
+    if (!src || slot.dataset.look !== id || !slot.isConnected) return;
+    slot.innerHTML = `<img src="${src}" alt="">`;
+    slot.classList.add("has-look");
+  }).catch(() => { /* 紙娃娃資料讀不到：維持剪影 */ });
+}
+// 頒獎台上有設造型的角色（後端只附前三名的）換成他的紙娃娃；沒設的維持剪影
+function paintPodium(looks) {
+  for (const slot of document.querySelectorAll("#rank-people .podium-doll[data-character]")) {
+    const look = looks?.[slot.dataset.character];
+    if (look) paintDoll(slot, look);
   }
 }
 

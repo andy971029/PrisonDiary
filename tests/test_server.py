@@ -228,6 +228,113 @@ class TrainingTest(unittest.TestCase):
         self.assertEqual(len(self.store.training()["rows"]), 5)
 
 
+def key(n: int) -> str:
+    """第 n 個瀏覽器的金鑰。"""
+    return f"11111111-1111-4111-8111-{n:012x}"
+
+
+LOOK = {"skin": 1, "hair": 30027, "face": 20100, "mix": {"hair": 3, "face": None},
+        "worn": {"cap": 1002140, "weapon": 1702000}, "group": 30}
+
+
+class LooksTest(unittest.TestCase):
+    def setUp(self):
+        self.store = app.Store(":memory:")
+        self.addCleanup(self.store.close)
+        self.a, self.b = app.owner_of(key(1)), app.owner_of(key(2))
+
+    def owners(self):
+        return dict(self.store._db.execute("SELECT uid, owner FROM records").fetchall())
+
+    def test_look_is_checked_and_trimmed_to_known_fields(self):
+        self.assertEqual(app.validate_look({**LOOK, "extra": "x", "pic": "data:image/png;base64,AAAA"}), LOOK)
+        # 沒寫的混色、部位、武器類型就是沒有
+        self.assertEqual(app.validate_look({"skin": 0, "hair": 30000, "face": 20000}),
+                         {"skin": 0, "hair": 30000, "face": 20000, "mix": {"hair": None, "face": None}, "worn": {}, "group": None})
+        bad = [
+            None, [], "x", {}, {**LOOK, "skin": -1}, {**LOOK, "skin": "1"}, {**LOOK, "skin": True}, {**LOOK, "hair": None},
+            {**LOOK, "face": 1.5}, {**LOOK, "hair": 10 ** 8}, {**LOOK, "mix": []}, {**LOOK, "mix": {"hair": "3"}},
+            {**LOOK, "worn": []}, {**LOOK, "worn": {"cap": "1002140"}}, {**LOOK, "worn": {"cap": None}},
+            {**LOOK, "worn": {"<b>": 1}}, {**LOOK, "worn": {"": 1}}, {**LOOK, "worn": {"x" * 25: 1}},
+            {**LOOK, "worn": {f"part{chr(97 + n)}": 1 for n in range(app.LOOK_PARTS + 1)}}, {**LOOK, "group": "30"},
+        ]
+        for raw in bad:
+            with self.subTest(raw=raw), self.assertRaises(app.Invalid):
+                app.validate_look(raw)
+
+    def test_key_is_stored_hashed(self):
+        self.assertRegex(self.a, r"^[0-9a-f]{64}$")
+        self.assertNotEqual(self.a, self.b)
+        self.assertNotIn(key(1), self.a)
+        for raw in (None, "", "abc", 5, key(10).upper(), key(1) + "x"):      # key(10) 的尾巴是 a，大寫就不合格
+            self.assertIsNone(app.owner_of(raw))
+
+    def test_first_uploader_owns_a_record_and_old_records_are_claimed_on_resend(self):
+        self.store.add([record(1)], "::1", NOW)                    # 這個功能上線前收的：沒有主
+        self.store.add([record(2)], "::1", NOW, owner=self.a)
+        self.assertEqual(self.owners(), {uid(1): None, uid(2): self.a})
+        # 網頁每次開頁都重傳：沒主的歸重傳的人，已經有主的不改
+        self.store.add([record(1), record(2)], "::1", NOW, owner=self.b)
+        self.assertEqual(self.owners(), {uid(1): self.b, uid(2): self.a})
+        self.assertEqual(self.store.count(), 2)
+
+    def test_only_a_browser_with_records_of_the_character_can_set_its_look(self):
+        self.store.add([record(1)], "::1", NOW, owner=self.a)
+        self.assertFalse(self.store.set_look(self.b, "阿明", LOOK, "::1", NOW))
+        self.assertFalse(self.store.set_look(self.a, "別人", LOOK, "::1", NOW))
+        self.assertEqual(self.store.my_looks(self.a), [{"character": "阿明", "look": None}])
+        self.assertTrue(self.store.set_look(self.a, "阿明", LOOK, "203.0.113.9", NOW))
+        self.assertEqual(self.store.my_looks(self.a), [{"character": "阿明", "look": LOOK}])
+        self.assertEqual(self.store.my_looks(self.b), [])
+        self.assertEqual(self.store._db.execute("SELECT owner, ip, updated_at FROM looks").fetchall(),
+                         [(self.a, "203.0.113.9", NOW)])
+
+    def test_two_browsers_with_the_same_character_can_both_change_it(self):
+        self.store.add([record(1)], "::1", NOW, owner=self.a)
+        self.store.add([record(2)], "::1", NOW, owner=self.b)
+        self.store.set_look(self.a, "阿明", LOOK, "::1", NOW)
+        other = {**LOOK, "hair": 30030, "worn": {}}
+        self.assertTrue(self.store.set_look(self.b, "阿明", other, "::1", NOW + 1))
+        # 後設的蓋掉先設的，兩邊看到的都是現在這一套
+        self.assertEqual(self.store.my_looks(self.a), [{"character": "阿明", "look": other}])
+        self.assertTrue(self.store.set_look(self.a, "阿明", None, "::1", NOW + 2))
+        self.assertEqual(self.store.my_looks(self.b), [{"character": "阿明", "look": None}])
+        self.assertEqual(self.store._db.execute("SELECT COUNT(*) FROM looks").fetchone()[0], 0)
+
+    def test_board_carries_the_looks_of_the_podium_only(self):
+        names = ["甲", "乙", "丙", "丁"]
+        self.store.add([record(n + 1, character=name, cumNet=1_000_000 - n * 1000, level=90 - n)
+                        for n, name in enumerate(names)], "::1", NOW, owner=self.a)
+        self.assertEqual(self.store.boards(now_ms=NOW)["looks"], {})
+        for name in ("乙", "丁"):
+            self.store.set_look(self.a, name, {**LOOK, "skin": names.index(name)}, "::1", NOW)
+        # 丁是第四名，不在頒獎台上，造型不送；設完造型快取也要跟著更新
+        self.assertEqual(self.store.boards()["looks"], {"乙": {**LOOK, "skin": 1}})
+        text = json.dumps(self.store.boards(now_ms=NOW))
+        self.assertNotIn(self.a, text)
+        self.assertNotIn(key(1), text)
+
+    def test_database_from_before_gets_the_new_column(self):
+        import sqlite3
+        import tempfile
+
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "old.db"
+        old = sqlite3.connect(path)
+        # v0.34 的資料表：沒有 owner 欄、沒有 looks 表
+        old.executescript(app.SCHEMA.split("CREATE TABLE IF NOT EXISTS looks")[0].replace(",\n    owner       TEXT", ""))
+        old.execute("INSERT INTO records VALUES (?, '阿明', '龍騎士', 70, 'm', '死亡森林', ?, ?, 360000, 3600, 0, '::1', ?)",
+                    (uid(1), NOW - HOUR, NOW, NOW))
+        old.commit()
+        old.close()
+        store = app.Store(path)
+        self.addCleanup(store.close)
+        self.assertEqual(store._db.execute("SELECT uid, owner FROM records").fetchall(), [(uid(1), None)])
+        store.add([record(1)], "::1", NOW, owner=self.a)
+        self.assertTrue(store.set_look(self.a, "阿明", LOOK, "::1", NOW))
+
+
 class LimiterAndIpTest(unittest.TestCase):
     def test_rate_limit_per_ip_and_window(self):
         limiter = app.RateLimiter(limit=2, window=60)
@@ -315,6 +422,38 @@ class HttpTest(unittest.TestCase):
             status, _headers, raw = self.call("POST", "/api/records", batch, {"Content-Type": "application/json"})
             self.assertEqual((status, json.loads(raw)["accepted"]), (200, [uid(1), uid(2), uid(3)]))
         self.assertEqual(self.store.count(), 3)
+
+    def test_looks_over_http(self):
+        now = app.time.time() * 1000
+        post = lambda path, body: self.call("POST", path, body, {"Content-Type": "application/json"})   # noqa: E731
+        recs = [record(1, startAt=now - HOUR, endAt=now)]
+        self.assertEqual(post("/api/records", {"key": key(1), "records": recs})[0], 200)
+        # 別的瀏覽器重傳同一筆、或沒傳過這個角色：都不能設
+        self.assertEqual(post("/api/records", {"key": key(2), "records": recs})[0], 200)
+        status, _headers, raw = post("/api/looks", {"key": key(2), "character": "阿明", "look": LOOK})
+        self.assertEqual((status, "沒有上傳過" in raw.decode("utf-8")), (403, True))
+        self.assertEqual(json.loads(post("/api/looks/mine", {"key": key(2)})[2]), {"characters": []})
+
+        self.assertEqual(json.loads(post("/api/looks", {"key": key(1), "character": " 阿明 ", "look": {**LOOK, "junk": 1}})[2]), {"ok": True})
+        self.assertEqual(json.loads(post("/api/looks/mine", {"key": key(1)})[2]), {"characters": [{"character": "阿明", "look": LOOK}]})
+        raw = self.call("GET", "/api/leaderboard")[2].decode("utf-8")
+        self.assertEqual(json.loads(raw)["looks"], {"阿明": LOOK})
+        for secret in (key(1), app.owner_of(key(1)), uid(1)):
+            self.assertNotIn(secret, raw)
+
+        self.assertEqual(post("/api/looks", {"key": key(1), "character": "阿明", "look": None})[0], 200)
+        self.assertEqual(json.loads(self.call("GET", "/api/leaderboard")[2])["looks"], {})
+
+        bad = [
+            ("/api/looks", {"character": "阿明", "look": LOOK}), ("/api/looks", {"key": "nope", "character": "阿明", "look": LOOK}),
+            ("/api/looks", {"key": key(1), "look": LOOK}), ("/api/looks", {"key": key(1), "character": "x" * 25, "look": LOOK}),
+            ("/api/looks", {"key": key(1), "character": "阿明", "look": {"skin": "x"}}), ("/api/looks", [1]),
+            ("/api/looks/mine", {}), ("/api/looks/mine", {"key": 5}), ("/api/records", {"key": "nope", "records": recs}),
+        ]
+        for path, body in bad:
+            self.assertEqual(post(path, body)[0], 400, (path, body))
+        # 舊版網頁上傳不帶金鑰，照收
+        self.assertEqual(post("/api/records", {"records": [record(3, startAt=now - HOUR, endAt=now)]})[0], 200)
 
     def test_preflight(self):
         status, headers, _ = self.call("OPTIONS", "/api/records", headers={
