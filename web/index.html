@@ -947,7 +947,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -4327,15 +4327,18 @@ function dollEffect(file, action) {
   if (!e) return null;
   return e[action] || ((action === "ladder" || action === "rope") && e.backDefault) || e.default || null;
 }
-// 特效錨在哪。不是腳底：照腳底畫，藍寶石之翼的中心會落在腳邊，會站在地上的跟班（小恐龍波比、狂購神妖精）整隻陷進地面 31 像素。
-// 31 是站姿時身體那張圖的高度，所以錨點是「身體的上緣」：這個動作第一格的身體有多高就往上多少（站著 31、趴下 15），
-// 用這個算，那兩隻跟班在每個動作裡都剛好踩在地上（差在 4 像素以內）。客戶端標成 fixed 的特效不跟著動作走，一律用站姿的高度。
-// 這條規則是從資料對出來的，不是照客戶端的程式；fixed 的名單也是從客戶端的 ItemEff 抄的，重匯紙娃娃資料時再搬進資料裡。
+// 特效錨在哪：身體那張圖的左上角（站姿是腳底往左 16、往上 31），不是腳底。這是從資料對出來的，不是照客戶端的程式：
+// ・垂直：照腳底畫，會站在地上的跟班（小恐龍波比、狂購神妖精）整隻陷進地面 31 像素，31 正好是站姿身體的高度；
+//   改用「這個動作第一格的身體上緣」（站著 31、趴下 15），牠們每個動作都踩在地上（差在 4 像素以內）。
+// ・水平：左右對稱的翅膀，圖上的原點大多在左翼根部、離兩翼中間 20 像素左右；從身體左緣算，兩翼中間才會落在身體上
+//   （藍寶石之翼的中間在身體中心往背後 13 像素），從角色中心算就整對偏到身後去。
+// 客戶端標成 fixed 的特效不跟著動作走，一律用站姿的位置；名單是從客戶端的 ItemEff 抄的，重匯紙娃娃資料時再搬進資料裡。
 const DOLL_FIXED_EFFECTS = new Set([1003965, 1005277, 1005278, 1005576, 1005577, 1102669]);
-function dollEffectY(action, id) {
+function dollEffectAt(action, id) {
   const body = doll.ready.find((x) => x.id === 2000 + doll.skin)?.file;
-  const top = (name) => (body?.a?.[name]?.[0] || []).map((n) => body.p[n]).find((p) => p && (p[6] === "body" || p[6] === "backBody"))?.[5];
-  return -((DOLL_FIXED_EFFECTS.has(id) ? null : top(action)) ?? top("stand1") ?? 31);
+  const part = (name) => (body?.a?.[name]?.[0] || []).map((n) => body.p[n]).find((p) => p && (p[6] === "body" || p[6] === "backBody"));
+  const p = (DOLL_FIXED_EFFECTS.has(id) ? null : part(action)) || part("stand1");
+  return p ? [-p[4], -p[5]] : [-16, -31];
 }
 const dollEffTime = () => performance.now() - doll.effBase;
 function dollEffectFrame(rows, time) {
@@ -4363,7 +4366,7 @@ function dollCompose(action, index) {
   for (const { file, id } of doll.ready) {
     const rows = dollEffect(file, action);
     const n = rows && dollEffectFrame(rows, dollEffTime()).row[0];
-    if (rows && file.p[n]) placed.push({ file, part: file.p[n], dx: 0, dy: dollEffectY(action, id), effect: true });
+    if (rows && file.p[n]) { const [dx, dy] = dollEffectAt(action, id); placed.push({ file, part: file.p[n], dx, dy, effect: true }); }
   }
   for (let moved = true; moved && pending.length;) {
     moved = false;
