@@ -983,7 +983,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.8</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.9</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3850,6 +3850,7 @@ function wmSideHtml() {
   const open = new Set(world.nodes.flatMap(wmOpenMaps));
   const extra = wmParentOnly(world);
   const made = world.nodes.filter((n) => n.via != null).length;
+  if (world.id === WM_ROOT) return `<h3>${esc(world.title)}</h3><p class="note">${open.size} 張已開放的地圖。</p><p>點一塊大陸進去看節點與地圖。</p>`;
   return `<h3>${esc(world.title)}</h3><p class="note">${world.nodes.length - made} 個節點${made ? `，另補 ${made} 個` : ""}，${open.size} 張已開放的地圖。</p>
     <p>滑鼠移到節點看是哪張地圖，點一下看內容。${world.links.length ? "亮起來的區域可以點進去。" : ""}</p>
     ${extra.length ? `<h4>這一區沒有節點的地圖 ${extra.length}</h4><div class="chips">${extra.map((id) => mapChip(id, "goto")).join("")}</div>` : ""}`;
@@ -3872,16 +3873,17 @@ function wmRenderStage() {
     base.alt = world.title;
   }
   stage.style.aspectRatio = `${world.w} / ${world.h}`;
-  // 兩個補的節點互相列著對方，線只畫一次
-  const vias = world.nodes.flatMap((n, index) => (n.via || []).filter((i) => world.nodes[i].via == null || i > index).map((i) => {
+  // 總圖不放節點，只能點大陸進去；兩個補的節點互相列著對方，線只畫一次
+  const bare = world.id === WM_ROOT;
+  const vias = bare ? "" : world.nodes.flatMap((n, index) => (n.via || []).filter((i) => world.nodes[i].via == null || i > index).map((i) => {
     const to = world.nodes[i];
     return `<line x1="${n.x}" y1="${n.y}" x2="${to.x}" y2="${to.y}"/>`;
   })).join("");
-  $("wm-nodes").innerHTML = (vias ? `<svg class="wm-via" viewBox="0 0 ${world.w} ${world.h}" aria-hidden="true">${vias}</svg>` : "") + world.nodes.map((node, index) => {
+  $("wm-nodes").innerHTML = (vias ? `<svg class="wm-via" viewBox="0 0 ${world.w} ${world.h}" aria-hidden="true">${vias}</svg>` : "") + (bare ? [] : world.nodes).map((node, index) => {
     const on = index === wm.node, off = !wmOpenMaps(node).length;
     return `<button type="button" class="wm-node${off ? " off" : ""}${on ? " on" : ""}" data-node="${index}" aria-label="${esc(wmNodeTitle(world, node))}" style="left:${node.x / world.w * 100}%;top:${node.y / world.h * 100}%">${node.via != null ? "<i></i>" : `<img src="worldmap/node${node.type}.png" alt="">`}</button>`;
   }).join("");
-  const here = wm.here != null ? world.nodes.find((n) => n.maps.includes(wm.here)) : null;
+  const here = wm.here != null && !bare ? world.nodes.find((n) => n.maps.includes(wm.here)) : null;
   const cur = $("wm-cur");
   cur.hidden = !here;
   if (here) { cur.style.left = `${here.x / world.w * 100}%`; cur.style.top = `${here.y / world.h * 100}%`; }
@@ -3906,7 +3908,7 @@ function renderMaps() {
   const places = [];
   if (!here) for (const w of wm.worlds.values()) {
     if (w.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}"><small class="pre">區域</small>${esc(w.title)}</button>`);
-    w.nodes.forEach((n, i) => { if (n.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}" data-wm-node="${i}"><small class="pre">${esc(w.title)}</small>${esc(n.title)}</button>`); });
+    if (w.id !== WM_ROOT) w.nodes.forEach((n, i) => { if (n.title.toLowerCase().includes(q)) places.push(`<button type="button" data-wm-world="${w.id}" data-wm-node="${i}"><small class="pre">${esc(w.title)}</small>${esc(n.title)}</button>`); });
   }
   const total = places.length + maps.length;
   const chips = [...places, ...maps.slice(0, WM_RESULT_CAP).map((m) => `<button type="button" data-goto="map" data-id="${m.id}"><small class="pre">${esc(m.street)}</small>${esc(m.name)}</button>`)];
