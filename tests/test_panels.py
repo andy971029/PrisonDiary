@@ -17,6 +17,7 @@ from mapleexp.vision.panels import (
     find_title_bars,
     match_title,
     similarity,
+    title_crop,
     white_mask,
 )
 
@@ -87,6 +88,29 @@ class TestFindTitleBars(unittest.TestCase):
         frame[32:42, 44:84, :3] = 0
         bars = find_title_bars(frame)
         self.assertTrue(any(rect[0] == 40 for rect, _ in bars))
+
+
+class TestTitleCrop(unittest.TestCase):
+    def test_drops_buttons_at_the_right_end(self):
+        """小地圖標題列右端的 −／＋ 按鈕不能跟字一起送 OCR（整條送會讀成「圖 自 叫」）。"""
+        frame = make_frame([(40, 30, 226, 44)])          # 字畫在 43 開始
+        frame[33:41, 200:208, :3] = (90, 60, 40)          # 按鈕：深色框
+        frame[33:41, 210:218, :3] = (90, 60, 40)
+        crop = title_crop(frame, (40, 30, 226, 44))
+        self.assertEqual(crop.shape[0], 14 + 4)
+        self.assertLess(crop.shape[1], 60)                # 只到「123」後面一點
+        self.assertFalse((crop[:, :, :3] == (90, 60, 40)).all(axis=2).any())
+
+    def test_keeps_words_split_by_a_space(self):
+        frame = make_frame([(40, 30, 240, 46)])
+        first = title_crop(frame, (40, 30, 240, 46)).shape[1]
+        start = 38 + first - 2 + 3                         # 第一個字後面隔 3 px 再一個字
+        frame[34:42, start : start + 4, :3] = 0
+        self.assertEqual(title_crop(frame, (40, 30, 240, 46)).shape[1], first + 3 + 4)
+
+    def test_bar_without_ink_is_kept_whole(self):
+        frame = make_frame([(40, 30, 240, 46)], text=False)
+        self.assertEqual(title_crop(frame, (40, 30, 240, 46)).shape[1], 240 - 38 + 2)
 
 
 class TestTitleMatching(unittest.TestCase):

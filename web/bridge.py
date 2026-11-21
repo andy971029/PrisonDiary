@@ -549,7 +549,7 @@ class WebSession:
         self.map_status = f"找到 {len(bars)} 條標題列，辨識文字中…"
         images = []
         for left, top, right, bottom in bars:
-            crop = frame[max(0, top - 2) : bottom + 2, max(0, left - 2) : right + 2]
+            crop = panels.title_crop(frame, (left, top, right, bottom))
             images.append([_png_data_url(ocr.prepare(crop, scale=s, bright_text=False))
                            for s in MINIMAP_TITLE_SCALES])
         self._request_ocr("title:minimap", "text", images,

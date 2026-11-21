@@ -45,6 +45,9 @@ TITLE_MIN_FILL = 0.40
 MATCH_MIN_SCORE = 0.45
 MATCH_MIN_MARGIN = 0.15
 
+# 標題文字：純黑字，最亮的通道低於這個就算字。字跟右端按鈕之間的空白比標題列還高就切掉。
+TITLE_INK_MAX = 110
+
 # 內容區：標題列底下這個範圍（相對於標題列）。
 BODY_PAD_LEFT = 14
 BODY_PAD_RIGHT = 90
@@ -101,6 +104,27 @@ def find_title_bars(frame: np.ndarray) -> list[tuple[tuple[int, int, int, int], 
     return bars
 
 
+def title_crop(frame: np.ndarray, rect: tuple[int, int, int, int]) -> np.ndarray:
+    """標題列送 OCR 的裁圖：只留左邊那一段字（外加 2 px 邊）。
+
+    小地圖的標題列右端有 −／＋ 按鈕，整條一起送 Tesseract 會讀成「圖 自 叫」
+    （實測 1366×768 視窗，三種放大倍率沒有一次讀出「小地圖」），只裁字就三種都對。
+    字之間的空白（「ITEM INVENTORY」的空格）比標題列的高度窄，不會被切斷。
+    """
+    left, top, right, bottom = rect
+    ink = frame[top:bottom, left:right, :3].max(axis=2) < TITLE_INK_MAX
+    cols = np.flatnonzero(ink.any(axis=0))
+    end = right - left
+    if cols.size:
+        end = int(cols[0])
+        for col in cols[1:]:
+            if col - end > bottom - top:
+                break
+            end = int(col)
+        end += 1
+    return frame[max(0, top - 2) : bottom + 2, max(0, left - 2) : min(frame.shape[1], left + end + 2)]
+
+
 def similarity(a: str, b: str) -> float:
     """1 - 正規化編輯距離。用來吸收 OCR 的一兩個字誤差。"""
     a = (a or "").replace(" ", "").upper()
@@ -145,7 +169,7 @@ def find_panels(
     height, width = frame.shape[:2]
     panels: list[Panel] = []
     for (left, top, right, bottom), fill in find_title_bars(frame):
-        crop = frame[max(0, top - 2) : bottom + 2, max(0, left - 2) : right + 2]
+        crop = title_crop(frame, (left, top, right, bottom))
         raw = ocr.recognize_best(crop, scales=(3, 4, 5), bright_text=False)
         raw = raw.replace("\n", "")
         title, score = match_title(raw, titles)
