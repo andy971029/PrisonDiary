@@ -196,6 +196,15 @@
   dialog .btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   dialog.settings { width: min(440px, 94vw); }
   dialog.doll-palette { width: min(720px, 94vw); }
+  dialog.report { width: min(640px, 94vw); }
+  .report textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; min-height: 96px; resize: vertical;
+    font: 500 14px/1.6 var(--body); padding: 8px 10px; color: var(--ink); background: var(--ground);
+    border: 1px solid var(--line); border-radius: 2px; }
+  .report-pic { margin-top: 12px; border: 1px solid var(--line); background: var(--ground); max-height: 40vh; overflow: auto; }
+  .report-pic[hidden] { display: none; }
+  .report-pic img { display: block; width: 100%; height: auto; }
+  .report .note { margin-top: 10px; }
+  .report-code { font: 700 18px var(--mono); color: var(--accent); letter-spacing: .08em; }
   .field { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 700; }
   .field span { flex: 1; }
   .field[hidden] { display: none; }
@@ -989,7 +998,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.44.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.45.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -999,6 +1008,7 @@
       <button id="mini" class="secondary" title="開一個置頂的小視窗，疊在遊戲旁邊看速率與升級倒數"></button>
       <button id="prayer" class="secondary prayer"></button>
       <button id="settings" class="secondary" title="一般設定與神聖祈禱設定"></button>
+      <button id="report" class="secondary" title="把目前的畫面、辨識結果與紀錄送給作者，回報辨識有問題" hidden></button>
       <span id="state" class="pill"><i></i><span>尚未開始</span></span>
     </div>
     <nav class="tabs" role="tablist" aria-label="功能">
@@ -1424,6 +1434,16 @@
     <button id="set-save" class="go">套用</button>
   </div>
 </dialog>
+<dialog id="report-dlg" class="settings report" aria-label="回報問題">
+  <h2>回報問題</h2>
+  <textarea id="report-note" maxlength="2000" placeholder="發生了什麼事？例如：地圖名稱一直讀成別張圖、經驗值停在 --、祈禱倒數不準"></textarea>
+  <div class="report-pic" id="report-pic" title="會跟描述一起送出的畫面" hidden><img id="report-img" alt="會一起送出的畫面"></div>
+  <p class="note" id="report-status" role="status" hidden></p>
+  <div class="btns">
+    <button type="button" id="report-cancel" class="secondary">取消</button>
+    <button type="button" id="report-send" class="go">送出</button>
+  </div>
+</dialog>
 <dialog id="doll-palette" class="settings doll-palette" aria-label="調色盤">
   <h2>調色盤</h2>
   <div class="doll-pal"><div class="doll-pal-pic"><img id="doll-pal-img" alt="預覽"></div><div class="doll-pal-side" id="doll-palette-body"></div></div>
@@ -1638,6 +1658,7 @@ const ICONS = {
   // 神聖祈禱的 buff 圖示（從遊戲畫面取下，左下角的分鐘數用右半邊鏡射蓋掉）。內嵌成 data URI，
   // 小浮窗複製按鈕內容時才不會因為網址不同而載不到。
   prayer: '<img class="ic pi" alt="" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAADW0lEQVR42p2XMWvbQBTHRacSXEoghAZjYWr0BTqmayj4A4TmA5RAKPXUb5AOWestdPESKKH4thAwghLIUPcoFC1BxYsHhyyhUAKiy+t7p7vTu5NkyxU8n/Dd/X/v/3R3toKnLz8Fjx5vw0jEMJGzRjGVP0AeH4L8OoFY/mo8j6IdduHJiw+BhT5kf6HJlSSJgoabLRgf9hU8yzJoep1eJLC1E0LwP9AOQY/7EG5j+x7hV+vDG4MVdIjQrRZIOYKfZ2/gbv4Fer322vDGYA4V6JSABkztus4VWAiBDqQT/mTXrUAYLqzTfRV38wm6DmvBaq6nPxRSg1FUnuwXgQLOYMftBO7vpYLze+7an+trM/BrFN6AIAhUCBLgSQwPVH8qY0jOjiCbfyu1Ua9bgBXsFcYehEzX9JfA5Cj7jSJRlyWx6/QBzCD5fGRLzb/LXe86sDSNnT55dVkGp6nEQW9R7Ma2UfRcCxR9APeV91HU02O/V+j0loONUO4mn9jBbHkfF+QJKHFVmRtHw/bVgamcpoT5pFsUeKfbAbYLFIhsGYtypraft1xrRalTdysgtEhgoJ17Y+ZzCLtd7bQA0j2/KGEHTAeIOvTNytXCyQVCz/dtdHbK0BL8Y9+Zk/1ZlKC0z+3JxcFi2NeTbgthTKIp2MDyeQOlFe60qsF0ZOan00Gp5ASlJCjrVWD1rBHG4b7byrOaw9UeHvat86Zg45Rc5oeGC7Vg+uAXDaCBdOrQJLNqq+AElLOZAzWrXgFRw4euBKsTCLM2z9uUkIRFHCsgh5r+uue6FMyhBPAXF9+7Y4QT1PnOW1xVz7cefI3g48Kt2krPlq9o7p5vKeUatUizFsyhxm32sIDxqJ+XEgEdXVZ+ehnnY11+dY9zaK517cGXgg2UhIyrji6tgfMkxt5zN/C1wGG7Bcn1QAmTiH8+C+3Sd88roKqEGqRVC+ZQ/weARGpPKuaSh7/oVEIMXgLL071SVCWzKhSkQqsa7P0hs4GD29sbEItD6HY28c+/wDcC6UQ7DCEeY3+4aZ3V6TnguosGTTWY//ZWbSPTP0Lw9Ppy6d9cBabXiTq4AU+wTBSUgNladgHpewKaccvA9hWGXqDo5uRcloJ+sE2J4tHBSvCUlZjmVmkSi17a/gGYxnQ7Y3ZNbQAAAABJRU5ErkJggg==">',
+  flag: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3.5 15V2"/><path fill="currentColor" d="M4.3 2.2h9l-2.2 3.4 2.2 3.4h-9z"/></svg>',
   replay: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 8a5 5 0 1 0 1.6-3.7"/><path fill="currentColor" d="M2 1.5v4.5h4.5z"/></svg>',
 };
 function setBtn(id, icon, text) {
@@ -1697,6 +1718,8 @@ async function share(media = navigator.mediaDevices) {
   track.addEventListener("ended", () => stopAndSettle(true));
   const settings = track.getSettings();
   shareSettings = settings;
+  anomalySince.clear();
+  anomalySent.clear();
   sourceW = sourceH = 0;        // 下一格一定重新判斷畫面有沒有被放大
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
@@ -1820,6 +1843,8 @@ function tick() {
   for (const text of out.notices || []) log(text);
   syncMini();
   trackHistory(out);
+  rememberRead(out, performance.now() - started);
+  watchAnomalies(out);
   queueGlyphs(out);
   if (ocr) for (const req of out.ocr || []) runOcr(req);
 }
@@ -1908,11 +1933,13 @@ function trackHistory(out) {
   const key = [character, job, level ?? "", mapId].join("|");
   liveKey = key;
   const at = Date.now();
+  const fresh = !pending[key];
   const seg = pending[key] || (pending[key] = {
     id: `${at}-${seq++}`, character, job, level, mapId, mapName: "",
     startAt: at, endAt: at,
     cumNet: 0, activeSec: 0, idleSec: 0,
   });
+  noteSegmentSnapshot(seg.id, out, fresh);
   seg.cumNet += d.net; seg.activeSec += d.active; seg.idleSec += d.idle;
   if (out.map_name) seg.mapName = out.map_name;
   if (d.active > 0 || d.idle > 0) seg.endAt = at;
@@ -1932,7 +1959,12 @@ function commitPending() {
   const done = pendingSegments();
   discardPending();
   if (!done.length) return;
-  if (uploadOn) ensureUids(done);
+  const snaps = segSnaps;
+  segSnaps = new Map();
+  if (uploadOn) {
+    ensureUids(done);
+    for (const r of done) queueSegmentSnapshot(r, snaps.get(r.id));
+  }
   records.push(...done);
   if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
   else log(`已儲存 ${done.length} 段修練紀錄。`);
@@ -1943,6 +1975,7 @@ function commitPending() {
 function discardPending() {
   pending = {};
   liveKey = "";
+  segSnaps = new Map();
 }
 
 function fmtDuration(sec) {
@@ -2130,6 +2163,7 @@ function startSync() {
   renderHistory();
   syncRecords();
   syncGlyphs();
+  syncSnapshots();
 }
 
 const syncPayload = (r) => ({
@@ -2203,6 +2237,270 @@ async function syncRecords() {
   }
 }
 window.addEventListener("online", syncRecords);
+
+// ---------------------------------------------------------------- 診斷快照與問題回報
+// 辨識讀錯時，光看紀錄查不出是哪裡錯，所以把辨識當下拿到的那幾塊畫面也留下來傳給後端（server/app.py 的 /api/snapshots）：
+// - 每一段紀錄：開始那一格與最後一次（每分鐘更新）各一組，結算存檔時跟著紀錄的 uid 傳上去。段是照「角色 × 職業 × 等級 × 地圖」分的，
+//   讀錯就會多出一段，它開始那一格正好就是讀錯的那一刻。
+// - 辨識一直讀不到東西（地圖名稱、職業、等級、角色名字、經驗值欄位）超過 90 秒：每次分享每種只拍一次。
+// 傳的只有診斷面板那幾塊原尺寸的裁切圖（經驗值、等級、職業、角色名、地圖名稱、楓幣、祈禱）與引擎狀態，沒有整張畫面；
+// 找不到小地圖時另外裁畫面左上角一塊，才看得出為什麼找不到。整張畫面只有使用者自己按「回報問題」才會送（/api/reports）。
+const SNAP_CROP_KEYS = ["exp", "level", "job", "name", "map", "meso", "prayer"];
+const SNAP_CORNER = { w: 360, h: 260 };
+const SNAP_EVERY_MS = 60000;
+const SNAP_QUEUE_KEY = "mapleexp.snapshots.v1";
+const SNAP_QUEUE_MAX = 30;
+const SNAP_KEEPALIVE_MAX = 60000;      // keepalive 的請求內容上限是 64 KB；比這大的就不用 keepalive
+const ANOMALY_MS = 90000;
+const READS_KEEP = 150;
+const REPORT_LOG_MAX = 30000;
+const REPORT_FRAME_MAX = 3 * 1024 * 1024;
+let segSnaps = new Map();              // 暫存段的 id → { first, last, lastAt }；不寫進紀錄，結算時拿出來傳
+let snapQueue = readSnapQueue();
+let snapBusy = false;
+let snapTimer = null;
+let lastOut = null;
+const recentReads = [];
+const anomalySince = new Map();
+const anomalySent = new Set();
+
+function readSnapQueue() {
+  try {
+    const list = JSON.parse(localStorage.getItem(SNAP_QUEUE_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
+
+function writeSnapQueue() {
+  snapQueue = snapQueue.slice(-SNAP_QUEUE_MAX);
+  try { localStorage.setItem(SNAP_QUEUE_KEY, JSON.stringify(snapQueue)); } catch { /* 存不了就只在這次開頁有效 */ }
+}
+
+// 從辨識用的畫面裁一塊原尺寸的 PNG（data URL）；範圍不合理回 null
+function cropPng(rect) {
+  if (!rect || !frame.width || !frame.height) return null;
+  const l = Math.max(0, Math.floor(rect[0])), t = Math.max(0, Math.floor(rect[1]));
+  const r = Math.min(frame.width, Math.ceil(rect[2])), b = Math.min(frame.height, Math.ceil(rect[3]));
+  if (r <= l || b <= t) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = r - l;
+  canvas.height = b - t;
+  canvas.getContext("2d").drawImage(frame, l, t, r - l, b - t, 0, 0, r - l, b - t);
+  return canvas.toDataURL("image/png");
+}
+
+function snapState(out) {
+  const o = out || {};
+  return {
+    version: $("app-version").textContent.replace(/^v/, ""),
+    at: new Date().toISOString(),
+    frame: o.frame_size || null, source: [sourceW, sourceH], view: o.view || null,
+    state: o.state || "", stateKey: o.state_key || "", message: o.message || "",
+    character: o.character || "", job: o.job || "", level: o.level ?? null, levelStatus: o.level_status || "",
+    mapId: o.map_id || "", mapName: o.map_name || "", mapStatus: o.map_status || "",
+    rawExp: o.raw_exp || "", expPct: o.exp_pct ?? null,
+    meso: o.meso ? { raw: o.meso.raw || "", current: o.meso.current, status: o.meso.status || "" } : null,
+    prayer: o.prayer ? { status: o.prayer.status, remaining: o.prayer.remaining ?? null } : null,
+    rois: o.rois || {}, samples: o.samples ?? null, misses: o.misses ?? null,
+    ocr: $("ocr-state").textContent, intervalSec: prefs.intervalSec, idleSec: prefs.idleSec,
+  };
+}
+
+function takeSnapshot(out) {
+  const crops = {};
+  const rois = out?.rois || {};
+  for (const k of SNAP_CROP_KEYS) {
+    const png = cropPng(rois[k]);
+    if (png) crops[k] = png;
+  }
+  if (!rois.map) {
+    const corner = cropPng([0, 0, Math.min(frame.width, SNAP_CORNER.w), Math.min(frame.height, SNAP_CORNER.h)]);
+    if (corner) crops.corner = corner;
+  }
+  return { state: snapState(out), crops };
+}
+
+// 每格由 trackHistory 叫：新的段拍開始那一組，之後每分鐘更新最後那一組
+function noteSegmentSnapshot(id, out, fresh) {
+  if (!uploadOn) return;
+  const now = Date.now();
+  const held = segSnaps.get(id);
+  if (fresh || !held) segSnaps.set(id, { first: takeSnapshot(out), last: null, lastAt: now });
+  else if (now - held.lastAt >= SNAP_EVERY_MS) { held.last = takeSnapshot(out); held.lastAt = now; }
+}
+
+function queueSnapshot(item) {
+  snapQueue.push(item);
+  writeSnapQueue();
+  syncSnapshots();
+}
+
+// 結算存檔時叫：這段的兩組快照合成一份，跟紀錄的 uid 一起排進待送
+function queueSegmentSnapshot(r, held) {
+  if (!held) return;
+  const crops = {};
+  for (const [k, v] of Object.entries(held.first.crops)) crops["first-" + k] = v;
+  for (const [k, v] of Object.entries(held.last?.crops || {})) crops["last-" + k] = v;
+  queueSnapshot({
+    kind: "segment", uid: r.uid || null, reason: r.uid ? "" : "讀不到角色名字",
+    version: held.first.state.version,
+    state: {
+      character: r.character, job: r.job, level: r.level, mapName: r.mapName, mapId: r.mapId,
+      startAt: r.startAt, endAt: r.endAt, cumNet: r.cumNet, activeSec: r.activeSec, idleSec: r.idleSec,
+      first: held.first.state, last: held.last?.state || null,
+    },
+    crops,
+  });
+}
+
+function rememberRead(out, ms) {
+  lastOut = out;
+  recentReads.push({
+    t: Date.now(), ms: Math.round(ms), state: out.state || "", exp: out.raw_exp || "", pct: out.exp_pct ?? null,
+    lv: out.level ?? null, job: out.job || "", ch: out.character || "", map: out.map_name || "", mapId: out.map_id || "",
+    meso: out.meso?.raw || "", prayer: out.prayer?.status || "",
+  });
+  if (recentReads.length > READS_KEEP) recentReads.splice(0, recentReads.length - READS_KEEP);
+}
+
+// 辨識一直讀不到某樣東西超過 90 秒就拍一份；每次分享每種只拍一次
+function watchAnomalies(out) {
+  if (!uploadOn) return;
+  const now = Date.now();
+  const rois = out.rois || {};
+  const field = !!rois.exp;
+  const checks = [
+    ["找不到經驗值欄位", !field],
+    ["讀不到地圖名稱", field && !out.map_name],
+    ["讀不到角色名字", field && !out.character],
+    ["讀不到職業", field && !!out.character && !out.job],
+    ["讀不到等級", field && out.level == null],
+  ];
+  for (const [reason, bad] of checks) {
+    if (!bad) { anomalySince.delete(reason); continue; }
+    if (!anomalySince.has(reason)) { anomalySince.set(reason, now); continue; }
+    if (anomalySent.has(reason) || now - anomalySince.get(reason) < ANOMALY_MS) continue;
+    anomalySent.add(reason);
+    const snap = takeSnapshot(out);
+    queueSnapshot({
+      kind: "anomaly", reason, version: snap.state.version,
+      state: { ...snap.state, reads: recentReads.slice(-30) }, crops: snap.crops,
+    });
+  }
+}
+
+// 待送的快照一份一份送；送成功或後端說格式不對（重送也沒用）就拿掉，其他錯誤五分鐘後再試
+async function syncSnapshots() {
+  if (!uploadOn || snapBusy || !snapQueue.length) return;
+  snapBusy = true;
+  clearTimeout(snapTimer);
+  snapTimer = null;
+  try {
+    while (uploadOn && snapQueue.length) {
+      const item = snapQueue[0];
+      const body = JSON.stringify({ key: syncKey() ?? undefined, ...item });
+      const res = await fetch(syncApi + "/api/snapshots", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body,
+        keepalive: body.length < SNAP_KEEPALIVE_MAX,
+      });
+      if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
+      snapQueue.shift();
+      writeSnapQueue();
+    }
+  } catch {
+    snapTimer = setTimeout(syncSnapshots, SYNC_RETRY_MS);
+  } finally {
+    snapBusy = false;
+  }
+}
+window.addEventListener("online", syncSnapshots);
+
+// 「回報問題」：打開時先把當下的畫面凍結起來給使用者看，送出的就是看到的這張
+let reportPack = null;
+$("report").hidden = !syncApi;
+
+function openReport() {
+  const dlg = $("report-dlg");
+  const sharing = !!stream && frame.width > 0;
+  let image = null;
+  if (sharing) {
+    image = frame.toDataURL("image/jpeg", 0.85);
+    if (image.length * 0.75 > REPORT_FRAME_MAX) image = frame.toDataURL("image/jpeg", 0.6);
+  }
+  const snap = takeSnapshot(sharing ? lastOut : null);
+  reportPack = { image, snap };
+  $("report-pic").hidden = !image;
+  if (image) $("report-img").src = image;
+  $("report-status").hidden = true;
+  $("report-send").hidden = false;
+  $("report-send").disabled = false;
+  $("report-cancel").textContent = "取消";
+  dlg.showModal();
+  $("report-note").focus();
+}
+
+async function sendReport() {
+  if (!reportPack) return;
+  const status = $("report-status");
+  const btn = $("report-send");
+  btn.disabled = true;
+  status.hidden = false;
+  status.textContent = "送出中…";
+  const { image, snap } = reportPack;
+  const body = {
+    key: syncKey() ?? undefined,
+    version: snap.state.version,
+    note: $("report-note").value.trim(),
+    log: $("log").textContent.slice(0, REPORT_LOG_MAX),
+    state: {
+      ...snap.state, reads: recentReads.slice(),
+      sharing: !!stream, stream: shareSettings ? {
+        width: shareSettings.width ?? null, height: shareSettings.height ?? null,
+        frameRate: shareSettings.frameRate ?? null, displaySurface: shareSettings.displaySurface ?? null,
+      } : null,
+      userAgent: navigator.userAgent, devicePixelRatio: window.devicePixelRatio, page: location.hash,
+      prayerOn, records: records.length,
+    },
+    crops: snap.crops,
+    frame: image ?? undefined,
+  };
+  try {
+    const res = await fetch(syncApi + "/api/reports", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let why = `HTTP ${res.status}`;
+      try { why = (await res.json()).error || why; } catch { /* 不是 JSON 就用狀態碼 */ }
+      throw new Error(why);
+    }
+    const out = await res.json();
+    const code = "#" + out.code;
+    let copied = false;
+    // 瀏覽器沒給剪貼簿權限時 writeText 可能一直不回來，最多等一秒
+    try {
+      await Promise.race([navigator.clipboard.writeText(code), new Promise((_, no) => setTimeout(no, 1000))]);
+      copied = true;
+    } catch { /* 不給複製就自己抄 */ }
+    status.innerHTML = "";
+    status.append("已送出，回報代碼 ");
+    const tag = document.createElement("span");
+    tag.className = "report-code";
+    tag.textContent = code;
+    status.append(tag, copied ? "（已複製）。跟作者聯絡時附上這個代碼就好。" : "。跟作者聯絡時附上這個代碼就好。");
+    log(`已送出問題回報 ${code}。`);
+    btn.hidden = true;
+    $("report-cancel").textContent = "關閉";
+    $("report-note").value = "";
+    reportPack = null;
+  } catch (err) {
+    status.textContent = `送不出去：${err.message}。稍後再試一次。`;
+    btn.disabled = false;
+  }
+}
+
+$("report").addEventListener("click", openReport);
+$("report-send").addEventListener("click", sendReport);
+$("report-cancel").addEventListener("click", () => $("report-dlg").close());
 
 // ---------------------------------------------------------------- 回報學到的字形
 // 楓幣與等級的數字內建字形對不上時，辨識程式會用文字辨識讀出來、把那組字形學起來（bridge.py 的 _teach）。
@@ -5664,6 +5962,7 @@ $("set-save").addEventListener("click", () => {
   $("settings-dlg").close();
 });
 setBtn("settings", "gear", "設定");
+setBtn("report", "flag", "回報問題");
 
 // ---------------------------------------------------------------- 神聖祈禱倒數
 // 預設開著：Python 每格到畫面右上角找神聖祈禱的 buff 圖示、讀左下角的數字（vision/prayer.py），再把每格讀到的換算成結束時刻（core/prayer.py）。

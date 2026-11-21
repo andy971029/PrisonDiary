@@ -21,6 +21,12 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 
 這裡只出資料，畫面在網站的「排行榜」頁籤（web/index.html）。
 
+診斷快照與問題回報：網頁每結算一段紀錄、或辨識一直讀不到東西時，會把辨識用到的那幾塊畫面（原尺寸的小裁切圖）
+與當時的引擎狀態傳上來（/api/snapshots）；使用者按「回報問題」時另外帶整張畫面、描述與 log（/api/reports）。
+圖片存在資料檔旁邊的 snapshots/<代碼>/ 資料夾，資料表只記索引。自動快照留 30 天、回報留 180 天，
+全部超過 300 MB 就從最舊的刪。回報另外轉發到 Discord（webhook 網址放在環境變數 PRISONDIARY_DISCORD_WEBHOOK
+或這個檔旁邊的 discord_webhook.txt；沒設就只存在這裡）。這些都只收不出，查看時直接讀資料夾。
+
 路徑：
     POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}], "uncounted": [{uid, reason}]}
                                rejected 是格式不對、沒存的；uncounted 是存了但不算排行榜的（也在 accepted 裡）
@@ -32,6 +38,10 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
     POST   /api/glyphs         {"key"?, "glyphs": [{kind, char, h, w, bits, value, frame, source, version}]}，
                                網頁靠 OCR 學會的字形（楓幣、等級），回 {"accepted": 筆數, "rejected": 筆數}。
                                只收不出：之後直接讀資料檔，整理各台電腦學到的長相、挑出可以放進內建字形的
+    POST   /api/snapshots      {"key"?, "kind": "segment"|"anomaly", "uid"?, "reason"?, "version", "state", "crops": {名稱: PNG}}，
+                               回 {"code"}。segment 是一段紀錄的快照（uid 是那筆紀錄），anomaly 是辨識一直讀不到東西時拍的
+    POST   /api/reports        {"key"?, "version", "note", "state", "log", "crops", "frame": JPEG}，回 {"code", "relayed"}；
+                               relayed 是有沒有設 Discord（轉發在背景做，失敗只寫 log）
     GET    /api/health         {"ok": true, "records": 筆數, "counted": 算進排行榜的筆數}
     GET    /                   轉去網站的排行榜頁籤
     POST   /api/records/delete、DELETE /api/records/<uid>
@@ -47,12 +57,15 @@ import hashlib
 import ipaddress
 import json
 import math
+import os
 import re
+import secrets
 import shutil
 import sqlite3
 import sys
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -76,6 +89,26 @@ GLYPH_MAX_SIDE = 40               # 字形最大邊長；原尺寸的數字是 5
 GLYPH_VALUE = re.compile(r"[0-9]{1,13}\Z")
 
 NAMES_PATH = Path(__file__).resolve().parent / "names.json"
+SNAP_KINDS = ("segment", "anomaly")
+MAX_SNAP_BODY = 256 * 1024        # 自動快照：原尺寸的小裁切圖，一份通常不到 20 KB
+MAX_REPORT_BODY = 6 * 1024 * 1024  # 回報帶整張畫面（JPEG）
+SNAP_CROPS = 16                   # 一段紀錄的快照有開頭、最後各一組，一組最多 8 塊
+SNAP_CROP_BYTES = 96 * 1024
+SNAP_NAME = re.compile(r"[a-z][a-z0-9_-]{0,23}\Z")
+SNAP_STATE_BYTES = 64 * 1024
+REPORT_NOTE = 2000
+REPORT_LOG = 30_000
+REPORT_FRAME_BYTES = 4 * 1024 * 1024
+SNAP_DAILY = 300                  # 一個瀏覽器一天最多幾份自動快照
+REPORT_DAILY = 30                 # 一個瀏覽器一天最多回報幾次
+SNAP_KEEP_MS = 30 * 86_400_000
+REPORT_KEEP_MS = 180 * 86_400_000
+SNAP_MAX_BYTES = 300 * 1024 * 1024
+CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # 沒有 0/O、1/I，念給別人聽不會搞混
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+JPEG_MAGIC = b"\xff\xd8\xff"
+DISCORD_ENV = "PRISONDIARY_DISCORD_WEBHOOK"
+DISCORD_PREFIXES = ("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/")
 UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是壞資料
 DAY_MS = 86_400_000
@@ -119,6 +152,22 @@ CREATE TABLE IF NOT EXISTS glyphs (
     received_at INTEGER NOT NULL,
     PRIMARY KEY (kind, char, h, w, bits, reporter)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS snapshots (
+    code        TEXT PRIMARY KEY,  -- 六個字的代碼，也是 snapshots/ 底下的資料夾名稱
+    kind        TEXT NOT NULL,     -- segment、anomaly 或 report
+    uid         TEXT,              -- segment：那段紀錄的 uid（讀不到角色名字的紀錄沒有）
+    reason      TEXT NOT NULL DEFAULT '',  -- anomaly：讀不到什麼；segment：沒有 uid 的原因
+    note        TEXT NOT NULL DEFAULT '',  -- report：使用者寫的描述
+    character   TEXT NOT NULL DEFAULT '',
+    version     TEXT NOT NULL,
+    reporter    TEXT NOT NULL,     -- 瀏覽器金鑰的雜湊；沒帶金鑰的是 "ip:" 加 IP
+    ip          TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    bytes       INTEGER NOT NULL,  -- 資料夾裡的檔案加起來多大
+    files       TEXT NOT NULL      -- 資料夾裡的檔名，逗號分隔
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS snapshots_uid ON snapshots (uid);
+CREATE INDEX IF NOT EXISTS snapshots_created ON snapshots (created_at);
 CREATE TABLE IF NOT EXISTS looks (
     character  TEXT PRIMARY KEY,
     look       TEXT NOT NULL,
@@ -133,14 +182,15 @@ class Invalid(ValueError):
     """上傳的紀錄不合格；訊息會回給網頁。"""
 
 
-def _text(raw: dict, key: str, limit: int, *, required: bool = False) -> str:
+def _text(raw: dict, key: str, limit: int, *, required: bool = False, multiline: bool = False) -> str:
     value = raw.get(key)
     if value is None:
         value = ""
     if not isinstance(value, str):
         raise Invalid(f"{key} 不是文字")
     value = value.strip()
-    if len(value) > limit or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+    allowed = "\n\t" if multiline else ""
+    if len(value) > limit or any((ord(ch) < 32 and ch not in allowed) or ord(ch) == 127 for ch in value):
         raise Invalid(f"{key} 太長或有控制字元")
     if required and not value:
         raise Invalid(f"{key} 是空的")
@@ -303,6 +353,79 @@ def validate_glyph(raw: object) -> dict:
     }
 
 
+def _blob(value: object, magic: bytes, limit: int, name: str) -> bytes:
+    """base64（可以帶 data: 開頭）解成位元組，檢查檔頭與大小。"""
+    if not isinstance(value, str) or len(value) > limit * 4 // 3 + 64:
+        raise Invalid(f"{name} 不是文字或太大")
+    if value.startswith("data:"):
+        value = value.partition(",")[2]
+    try:
+        data = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        raise Invalid(f"{name} 不是 base64") from None
+    if not data.startswith(magic) or len(data) > limit:
+        raise Invalid(f"{name} 格式不對或太大")
+    return data
+
+
+def _state_json(value: object) -> str:
+    if not isinstance(value, dict):
+        raise Invalid("state 要是物件")
+    text = json.dumps(value, ensure_ascii=False, indent=1)
+    if len(text.encode("utf-8")) > SNAP_STATE_BYTES:
+        raise Invalid("state 太大")
+    return text
+
+
+def validate_snapshot(raw: object, *, report: bool = False) -> dict:
+    """自動快照或問題回報，檢查過轉成要存的內容；不合格丟 Invalid。"""
+    if not isinstance(raw, dict):
+        raise Invalid("不是物件")
+    out = {
+        "kind": "report",
+        "uid": None,
+        "reason": "",
+        "note": "",
+        "version": _text(raw, "version", 24, required=True),
+        "state": _state_json(raw.get("state")),
+        "log": "",
+        "frame": None,
+    }
+    state = raw["state"]
+    character = state.get("character")
+    out["character"] = character.strip()[:24] if isinstance(character, str) else ""
+    if report:
+        out["note"] = _text(raw, "note", REPORT_NOTE, multiline=True)
+        out["log"] = _text(raw, "log", REPORT_LOG, multiline=True)
+        if raw.get("frame") is not None:
+            out["frame"] = _blob(raw["frame"], JPEG_MAGIC, REPORT_FRAME_BYTES, "frame")
+    else:
+        kind = raw.get("kind")
+        if kind not in SNAP_KINDS:
+            raise Invalid("kind 不對")
+        out["kind"] = kind
+        uid = raw.get("uid")
+        if uid is not None and (not isinstance(uid, str) or not UID.match(uid)):
+            raise Invalid("uid 格式不對")
+        out["uid"] = uid
+        out["reason"] = _text(raw, "reason", 48)
+        if kind == "anomaly" and not out["reason"]:
+            raise Invalid("anomaly 要有 reason")
+    crops = raw.get("crops") if raw.get("crops") is not None else {}
+    if not isinstance(crops, dict) or len(crops) > SNAP_CROPS:
+        raise Invalid(f"crops 要是最多 {SNAP_CROPS} 塊的物件")
+    out["crops"] = {}
+    for name, value in crops.items():
+        if not isinstance(name, str) or not SNAP_NAME.match(name):
+            raise Invalid("crops 的名稱不對")
+        out["crops"][name] = _blob(value, PNG_MAGIC, SNAP_CROP_BYTES, f"crops.{name}")
+    return out
+
+
+def new_code() -> str:
+    return "".join(secrets.choice(CODE_CHARS) for _ in range(6))
+
+
 def owner_of(key: object) -> str | None:
     """瀏覽器金鑰的雜湊，資料表裡存的是它；金鑰格式不對回 None。"""
     if not isinstance(key, str) or not UID.match(key):
@@ -314,13 +437,25 @@ class Full(RuntimeError):
     """資料檔或磁碟滿了，不再收新紀錄。"""
 
 
+class Busy(RuntimeError):
+    """同一個瀏覽器今天傳太多快照或回報了。"""
+
+
 class Store:
     """SQLite 的包裝。只有一條連線，所有讀寫排隊（量很小，不需要連線池）。"""
 
-    def __init__(self, path: str | Path, *, names: Names | None = None,
-                 max_bytes: int = MAX_DB_BYTES, min_free: int = MIN_FREE_BYTES) -> None:
+    def __init__(self, path: str | Path, *, names: Names | None = None, snap_dir: str | Path | None = None,
+                 max_bytes: int = MAX_DB_BYTES, min_free: int = MIN_FREE_BYTES,
+                 snap_max_bytes: int = SNAP_MAX_BYTES) -> None:
         self.path = str(path)
         self.names = names or Names.load()
+        # 快照的圖片放在資料檔旁邊；記憶體裡的資料庫（測試）要另外給資料夾，沒給就不收快照
+        if snap_dir is None and self.path != ":memory:":
+            snap_dir = Path(self.path).parent / "snapshots"
+        self.snap_dir = Path(snap_dir) if snap_dir is not None else None
+        if self.snap_dir is not None:
+            self.snap_dir.mkdir(parents=True, exist_ok=True)
+        self.snap_max_bytes = snap_max_bytes
         self.max_bytes = max_bytes
         self.min_free = min_free
         self._lock = threading.Lock()
@@ -472,6 +607,73 @@ class Store:
                 " WHERE r.owner = ? ORDER BY r.character", (owner,)).fetchall()
         return [{"character": c, "look": json.loads(look) if look else None} for c, look in rows]
 
+    def add_snapshot(self, snap: dict, reporter: str, ip: str, now_ms: int | None = None) -> str:
+        """存一份快照或回報，回代碼。圖片寫進 snapshots/<代碼>/，資料表只記索引；順便清掉過期的。"""
+        if self.snap_dir is None:
+            raise Full("沒有放快照的地方")
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        files = {"state.json": snap["state"].encode("utf-8")}
+        if snap["note"] or snap["log"]:
+            files["report.txt"] = f"{snap['note']}\n\n----- log -----\n{snap['log']}\n".encode("utf-8")
+        if snap["frame"]:
+            files["frame.jpg"] = snap["frame"]
+        for name, data in snap["crops"].items():
+            files[f"{name}.png"] = data
+        size = sum(len(data) for data in files.values())
+        report = snap["kind"] == "report"
+        with self._lock:
+            self._check_room()
+            if shutil.disk_usage(self.snap_dir).free < self.min_free:
+                raise Full("磁碟空間不足")
+            daily = self._db.execute(
+                "SELECT COUNT(*) FROM snapshots WHERE reporter = ? AND created_at > ? AND (kind = 'report') = ?",
+                (reporter, now_ms - DAY_MS, report),
+            ).fetchone()[0]
+            if daily >= (REPORT_DAILY if report else SNAP_DAILY):
+                raise Busy("今天傳的已經夠多了，明天再來")
+            code = new_code()
+            while self._db.execute("SELECT 1 FROM snapshots WHERE code = ?", (code,)).fetchone():
+                code = new_code()
+            folder = self.snap_dir / code
+            folder.mkdir(parents=True)
+            for name, data in files.items():
+                (folder / name).write_bytes(data)
+            self._db.execute(
+                "INSERT INTO snapshots (code, kind, uid, reason, note, character, version, reporter, ip, created_at, bytes, files)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (code, snap["kind"], snap["uid"], snap["reason"], snap["note"], snap["character"], snap["version"],
+                 reporter, ip, now_ms, size, ",".join(files)),
+            )
+            self._db.commit()
+            self._prune(now_ms)
+        return code
+
+    def _prune(self, now_ms: int) -> None:
+        """自動快照留 30 天、回報留 180 天；全部超過上限就從最舊的刪（自動快照先刪）。呼叫前要拿著鎖。"""
+        old = self._db.execute(
+            "SELECT code FROM snapshots WHERE (kind = 'report' AND created_at < ?) OR (kind <> 'report' AND created_at < ?)",
+            (now_ms - REPORT_KEEP_MS, now_ms - SNAP_KEEP_MS),
+        ).fetchall()
+        doomed = [code for (code,) in old]
+        total = self._db.execute("SELECT COALESCE(SUM(bytes), 0) FROM snapshots").fetchone()[0]
+        total -= sum(self._db.execute("SELECT bytes FROM snapshots WHERE code = ?", (c,)).fetchone()[0] for c in doomed)
+        if total > self.snap_max_bytes:
+            rest = self._db.execute(
+                "SELECT code, bytes FROM snapshots ORDER BY kind = 'report', created_at"
+            ).fetchall()
+            for code, size in rest:
+                if total <= self.snap_max_bytes:
+                    break
+                if code in doomed:
+                    continue
+                doomed.append(code)
+                total -= size
+        for code in doomed:
+            shutil.rmtree(self.snap_dir / code, ignore_errors=True)
+        if doomed:
+            self._db.executemany("DELETE FROM snapshots WHERE code = ?", [(c,) for c in doomed])
+            self._db.commit()
+
     def count(self, *, counted: bool = False) -> int:
         with self._lock:
             where = " WHERE status = ''" if counted else ""
@@ -582,6 +784,82 @@ class Store:
             return out
 
 
+def discord_webhook() -> str | None:
+    """Discord webhook 網址：環境變數優先，再來是 app.py 旁邊的 discord_webhook.txt；都沒有或格式不對回 None。"""
+    url = os.environ.get(DISCORD_ENV, "").strip()
+    if not url:
+        try:
+            url = (Path(__file__).resolve().parent / "discord_webhook.txt").read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+    return url if url.startswith(DISCORD_PREFIXES) else None
+
+
+def _multipart(payload: dict, files: list[tuple[str, bytes, str]]) -> tuple[bytes, str]:
+    boundary = "prisondiary" + secrets.token_hex(12)
+    chunks = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
+        "Content-Type: application/json\r\n\r\n".encode("utf-8"),
+        json.dumps(payload, ensure_ascii=False).encode("utf-8"), b"\r\n",
+    ]
+    for index, (name, data, ctype) in enumerate(files):
+        chunks += [
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[{index}]\"; filename=\"{name}\"\r\n"
+            f"Content-Type: {ctype}\r\n\r\n".encode("utf-8"),
+            data, b"\r\n",
+        ]
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def discord_message(code: str, snap: dict, state: dict) -> tuple[dict, list[tuple[str, bytes, str]]]:
+    """一則回報要送給 Discord 的內容：文字、整張畫面、狀態與 log、裁切圖（Discord 一則最多 10 個附件）。"""
+    def show(value: object) -> str:
+        return str(value) if value not in (None, "") else "--"
+
+    lines = [
+        f"**回報 #{code}**　v{snap['version']}",
+        f"{show(state.get('character'))}｜{show(state.get('job'))}｜Lv. {show(state.get('level'))}｜{show(state.get('mapName'))}",
+    ]
+    if snap["note"]:
+        lines += ["> " + line for line in snap["note"].splitlines()]
+    content = "\n".join(lines)
+    if len(content) > 1900:
+        content = content[:1900] + "…（完整描述在 report.txt）"
+    files: list[tuple[str, bytes, str]] = []
+    if snap["frame"]:
+        files.append(("frame.jpg", snap["frame"], "image/jpeg"))
+    text = f"{snap['note']}\n\n----- state -----\n{snap['state']}\n\n----- log -----\n{snap['log']}\n"
+    files.append(("report.txt", text.encode("utf-8"), "text/plain; charset=utf-8"))
+    for name, data in list(snap["crops"].items())[: 10 - len(files)]:
+        files.append((f"{name}.png", data, "image/png"))
+    payload = {
+        "content": content,
+        "allowed_mentions": {"parse": []},     # 使用者寫的描述裡有 @everyone 也不會真的通知
+        "attachments": [{"id": i, "filename": name} for i, (name, _, _) in enumerate(files)],
+    }
+    return payload, files
+
+
+def relay_to_discord(url: str, code: str, snap: dict, state: dict) -> None:
+    """在背景執行緒裡送；失敗只寫一行 log（回報已經存在主機上了）。"""
+    payload, files = discord_message(code, snap, state)
+    body, ctype = _multipart(payload, files)
+    request = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": ctype, "User-Agent": "PrisonDiary-backend (https://github.com/andy971029/PrisonDiary, 1)",
+    })
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as res:
+                res.read()
+            return
+        except Exception as err:  # noqa: BLE001 - 網路錯誤、Discord 回 4xx/5xx 都一樣只記下來
+            if attempt:
+                print(f"Discord 轉發 #{code} 失敗：{err}", file=sys.stderr, flush=True)
+            else:
+                time.sleep(5)
+
+
 class RateLimiter:
     """每個 IP 每分鐘最多幾個請求（固定視窗）。只放在記憶體，重開就歸零。"""
 
@@ -631,6 +909,7 @@ class Handler(BaseHTTPRequestHandler):
 
     store: Store
     limiter: RateLimiter
+    discord = staticmethod(discord_webhook)     # 測試換成假的
 
     # ------------------------------------------------------------ 回應
     def _send(self, status: int, body: bytes = b"", ctype: str = "application/json; charset=utf-8") -> None:
@@ -727,15 +1006,17 @@ class Handler(BaseHTTPRequestHandler):
         if ip is None:
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine", "/api/glyphs"):
+        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine", "/api/glyphs",
+                        "/api/snapshots", "/api/reports"):
             self._error(404, "沒有這個路徑")
             return
+        limit = {"/api/snapshots": MAX_SNAP_BODY, "/api/reports": MAX_REPORT_BODY}.get(path, MAX_BODY)
         try:
             length = int(self.headers.get("Content-Length") or "")
         except ValueError:
             self._error(411, "要有 Content-Length")
             return
-        if not 0 < length <= MAX_BODY:
+        if not 0 < length <= limit:
             self._error(413, "內容太大")
             return
         try:
@@ -752,7 +1033,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         # 金鑰：上傳紀錄與回報字形可以不帶（舊版網頁、存不了金鑰的瀏覽器），帶了就要是對的；造型的兩個路徑一定要帶
         owner = owner_of(data.get("key"))
-        if owner is None and (data.get("key") is not None or path not in ("/api/records", "/api/glyphs")):
+        if owner is None and (data.get("key") is not None
+                              or path not in ("/api/records", "/api/glyphs", "/api/snapshots", "/api/reports")):
             self._error(400, "key 沒給或格式不對")
             return
         if path == "/api/records":
@@ -777,6 +1059,28 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(507, str(err))
                 return
             self._json(200, {"accepted": accepted, "rejected": rejected})
+        elif path in ("/api/snapshots", "/api/reports"):
+            report = path == "/api/reports"
+            try:
+                snap = validate_snapshot(data, report=report)
+            except Invalid as err:
+                self._error(400, str(err))
+                return
+            try:
+                code = self.store.add_snapshot(snap, owner or f"ip:{ip}", ip)
+            except Busy as err:
+                self._error(429, str(err))
+                return
+            except Full as err:
+                self._error(507, str(err))
+                return
+            if not report:
+                self._json(200, {"code": code})
+                return
+            url = self.discord()
+            if url:
+                threading.Thread(target=relay_to_discord, args=(url, code, snap, data["state"]), daemon=True).start()
+            self._json(200, {"code": code, "relayed": bool(url)})
         elif path == "/api/looks/mine":
             self._json(200, {"characters": self.store.my_looks(owner)})
         else:
@@ -828,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.db, names=Names.load(args.names))
     server = make_server(args.host, args.port, store)
+    print(f"Discord 轉發：{'有設' if discord_webhook() else '沒設'}", flush=True)
     print(f"listening on http://{args.host}:{args.port}  db={args.db}  records={store.count()} counted={store.count(counted=True)}", flush=True)
     try:
         server.serve_forever()

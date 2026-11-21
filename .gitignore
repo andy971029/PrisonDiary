@@ -9,6 +9,9 @@ web/mapleexp.zip
 # 本機試跑後端（python server/app.py）時的資料檔
 server/data/
 
+# 後端轉發問題回報用的 Discord webhook 網址（放在主機上，不進版本控制）
+server/discord_webhook.txt
+
 # Claude Code
 CLAUDE.md
 CLAUDE.local.md

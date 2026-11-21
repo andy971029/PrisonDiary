@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import sys
 import threading
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -661,3 +663,184 @@ class HttpTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PNG = "data:image/png;base64," + base64.b64encode(app.PNG_MAGIC + b"crop").decode()
+JPEG = base64.b64encode(app.JPEG_MAGIC + b"frame").decode()
+
+
+def snapshot(**over) -> dict:
+    """網頁結算一段紀錄時傳的快照。"""
+    base = {"kind": "segment", "uid": uid(1), "version": "0.45.0",
+            "state": {"character": "阿明", "job": "龍騎士", "level": 70, "mapName": ""},
+            "crops": {"first-exp": PNG, "first-map": PNG}}
+    base.update(over)
+    return base
+
+
+class SnapshotsTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.dir = Path(folder.name)
+        self.store = make_store(snap_dir=self.dir / "snapshots")
+        self.addCleanup(self.store.close)
+
+    def rows(self):
+        return self.store._db.execute(
+            "SELECT code, kind, uid, reason, note, character, reporter, files FROM snapshots ORDER BY created_at").fetchall()
+
+    def test_segment_snapshot_is_written_to_a_folder(self):
+        code = self.store.add_snapshot(app.validate_snapshot(snapshot()), "k", "::1", NOW)
+        self.assertRegex(code, r"^[A-HJ-NP-Z2-9]{6}$")
+        folder = self.dir / "snapshots" / code
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["first-exp.png", "first-map.png", "state.json"])
+        self.assertEqual(json.loads((folder / "state.json").read_text(encoding="utf-8"))["character"], "阿明")
+        self.assertEqual(self.rows(), [(code, "segment", uid(1), "", "", "阿明", "k", "state.json,first-exp.png,first-map.png")])
+
+    def test_report_keeps_frame_note_and_log(self):
+        snap = app.validate_snapshot({"version": "0.45.0", "note": "地圖讀錯\n一直是別張", "log": "[1] a\n[2] b",
+                                      "state": {"character": "阿明"}, "crops": {"exp": PNG}, "frame": JPEG}, report=True)
+        code = self.store.add_snapshot(snap, "k", "::1", NOW)
+        folder = self.dir / "snapshots" / code
+        self.assertEqual((folder / "frame.jpg").read_bytes(), app.JPEG_MAGIC + b"frame")
+        self.assertIn("一直是別張", (folder / "report.txt").read_text(encoding="utf-8"))
+        self.assertEqual(self.rows()[0][1:5], ("report", None, "", "地圖讀錯\n一直是別張"))
+
+    def test_rejects_bad_snapshots(self):
+        bad = [
+            snapshot(kind="report"), snapshot(uid="x"), snapshot(kind="anomaly"), snapshot(version=""),
+            snapshot(state="x"), snapshot(state={"big": "x" * 70_000}),
+            snapshot(crops={"Bad Name": PNG}), snapshot(crops={"a": "not base64!"}),
+            snapshot(crops={"a": JPEG}),       # 檔頭不是 PNG
+            snapshot(crops={f"c{i}": PNG for i in range(17)}),
+            snapshot(reason="\x00"),
+        ]
+        for raw in bad:
+            with self.subTest(raw=str(raw)[:80]), self.assertRaises(app.Invalid):
+                app.validate_snapshot(raw)
+        with self.assertRaises(app.Invalid):
+            app.validate_snapshot({"version": "1", "state": {}, "frame": PNG}, report=True)
+
+    def test_anomaly_needs_a_reason_and_segment_may_have_no_uid(self):
+        snap = app.validate_snapshot(snapshot(kind="anomaly", uid=None, reason="讀不到地圖名稱"))
+        self.assertEqual((snap["kind"], snap["uid"], snap["reason"]), ("anomaly", None, "讀不到地圖名稱"))
+        self.assertIsNone(app.validate_snapshot(snapshot(uid=None, reason="讀不到角色名字"))["uid"])
+
+    def test_daily_limit_per_browser(self):
+        snap = app.validate_snapshot(snapshot())
+        with unittest.mock.patch.object(app, "SNAP_DAILY", 2):
+            self.store.add_snapshot(snap, "k", "::1", NOW)
+            self.store.add_snapshot(snap, "k", "::1", NOW + 1)
+            with self.assertRaises(app.Busy):
+                self.store.add_snapshot(snap, "k", "::1", NOW + 2)
+            self.store.add_snapshot(snap, "other", "::1", NOW + 3)          # 別的瀏覽器不受影響
+            self.store.add_snapshot(snap, "k", "::1", NOW + app.DAY_MS + 2)  # 隔天又可以
+        report = app.validate_snapshot({"version": "1", "state": {}}, report=True)
+        self.store.add_snapshot(report, "k", "::1", NOW + 4)                # 回報另外算
+
+    def test_old_and_oversized_snapshots_are_pruned(self):
+        snap = app.validate_snapshot(snapshot())
+        report = app.validate_snapshot({"version": "1", "state": {}}, report=True)
+        old = self.store.add_snapshot(snap, "a", "::1", NOW - app.SNAP_KEEP_MS - 1)
+        kept_report = self.store.add_snapshot(report, "b", "::1", NOW - app.SNAP_KEEP_MS - 1)
+        fresh = self.store.add_snapshot(snap, "c", "::1", NOW)
+        codes = [r[0] for r in self.rows()]
+        self.assertEqual(codes, [kept_report, fresh])       # 30 天前的自動快照刪了，回報還在
+        self.assertFalse((self.dir / "snapshots" / old).exists())
+        # 超過容量上限：從最舊的自動快照刪起，回報最後才刪
+        self.store.snap_max_bytes = self.store._db.execute(
+            "SELECT bytes FROM snapshots WHERE code = ?", (kept_report,)).fetchone()[0]
+        self.store.add_snapshot(report, "d", "::1", NOW + 1)
+        rows = self.rows()
+        self.assertEqual([r[1] for r in rows], ["report"])
+        self.assertFalse((self.dir / "snapshots" / fresh).exists())
+
+    def test_memory_store_without_folder_refuses(self):
+        store = make_store()
+        self.addCleanup(store.close)
+        with self.assertRaises(app.Full):
+            store.add_snapshot(app.validate_snapshot(snapshot()), "k", "::1", NOW)
+
+    def test_discord_message(self):
+        state = {"character": "阿明", "level": 70, "job": "龍騎士", "mapName": ""}
+        snap = app.validate_snapshot({"version": "0.45.0", "note": "@everyone 救命", "log": "x", "state": state,
+                                      "crops": {f"c{i}": PNG for i in range(12)}, "frame": JPEG}, report=True)
+        payload, files = app.discord_message("ABC234", snap, state)
+        self.assertIn("#ABC234", payload["content"])
+        self.assertIn("阿明｜龍騎士｜Lv. 70｜--", payload["content"])
+        self.assertEqual(payload["allowed_mentions"], {"parse": []})
+        self.assertEqual(len(files), 10)
+        self.assertEqual([f[0] for f in files[:2]], ["frame.jpg", "report.txt"])
+        body, ctype = app._multipart(payload, files)
+        self.assertIn(b'name="files[9]"', body)
+        self.assertTrue(ctype.startswith("multipart/form-data; boundary="))
+
+    def test_webhook_url_must_be_discord(self):
+        with unittest.mock.patch.dict(app.os.environ, {app.DISCORD_ENV: "https://evil.example/x"}):
+            self.assertIsNone(app.discord_webhook())
+        with unittest.mock.patch.dict(app.os.environ, {app.DISCORD_ENV: "https://discord.com/api/webhooks/1/abc"}):
+            self.assertEqual(app.discord_webhook(), "https://discord.com/api/webhooks/1/abc")
+
+
+class SnapshotsHttpTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.store = make_store(snap_dir=Path(folder.name) / "snapshots")
+        self.server = app.make_server("127.0.0.1", 0, self.store, app.RateLimiter(limit=1000))
+        self.server.RequestHandlerClass.log_message = lambda *args: None
+        self.server.RequestHandlerClass.discord = staticmethod(lambda: "https://discord.com/api/webhooks/1/abc")
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+        def stop():
+            self.server.shutdown()
+            self.server.server_close()
+            thread.join(5)
+            self.store.close()
+        self.addCleanup(stop)
+
+    def post(self, path, body):
+        data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(self.base + path, data=data, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return res.status, res.read()
+        except urllib.error.HTTPError as err:
+            with err:
+                return err.code, err.read()
+
+    def test_snapshot_and_report_over_http(self):
+        status, raw = self.post("/api/snapshots", {"key": key(1), **snapshot()})
+        self.assertEqual(status, 200)
+        self.assertRegex(json.loads(raw)["code"], r"^[A-HJ-NP-Z2-9]{6}$")
+        sent = threading.Event()
+        calls = []
+
+        def fake_relay(*args):
+            calls.append(args)
+            sent.set()
+        with unittest.mock.patch.object(app, "relay_to_discord", fake_relay):
+            status, raw = self.post("/api/reports", {"version": "0.45.0", "note": "壞了", "log": "", "state": {},
+                                                     "frame": JPEG})
+            self.assertTrue(sent.wait(5))
+        out = json.loads(raw)
+        self.assertEqual((status, out["relayed"]), (200, True))
+        self.assertEqual((calls[0][0], calls[0][1]), ("https://discord.com/api/webhooks/1/abc", out["code"]))
+        reporter = self.store._db.execute("SELECT reporter FROM snapshots WHERE kind = 'report'").fetchone()[0]
+        self.assertEqual(reporter, "ip:127.0.0.1")
+
+    def test_bad_snapshots_over_http(self):
+        self.assertEqual(self.post("/api/snapshots", snapshot(kind="x"))[0], 400)
+        self.assertEqual(self.post("/api/snapshots", {"key": "bad", **snapshot()})[0], 400)
+        big = json.dumps(snapshot(crops={"a": "A" * (app.MAX_SNAP_BODY + 10)})).encode()
+        self.assertEqual(self.post("/api/snapshots", big)[0], 413)
+        with unittest.mock.patch.object(app, "SNAP_DAILY", 0):
+            self.assertEqual(self.post("/api/snapshots", snapshot())[0], 429)
