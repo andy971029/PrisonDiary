@@ -337,6 +337,49 @@ class LooksTest(unittest.TestCase):
         self.assertTrue(store.set_look(self.a, "阿明", LOOK, "::1", NOW))
 
 
+def glyph(**over) -> dict:
+    """網頁回報的一個字形：楓幣 1,234 學到的「3」（5x9）。"""
+    base = {"kind": "meso", "char": "3", "h": 9, "w": 5, "bits": "dGMYxcBj", "value": "1234",
+            "frame": [1366, 768], "source": [2560, 1599], "version": "0.42.1"}
+    base.update(over)
+    return base
+
+
+class GlyphsTest(unittest.TestCase):
+    def setUp(self):
+        self.store = app.Store(":memory:")
+        self.addCleanup(self.store.close)
+
+    def rows(self):
+        return self.store._db.execute(
+            "SELECT kind, char, reporter, value, frame_w, source_w, version FROM glyphs ORDER BY reporter").fetchall()
+
+    def test_good_glyph_maps_to_columns(self):
+        row = app.validate_glyph(glyph())
+        self.assertEqual((row["kind"], row["char"], row["h"], row["w"]), ("meso", "3", 9, 5))
+        self.assertEqual((row["frame_w"], row["frame_h"], row["source_w"], row["source_h"]), (1366, 768, 2560, 1599))
+
+    def test_rejects_bad_glyphs(self):
+        bad = [
+            {"kind": "exp"}, {"char": "33"}, {"char": "a"}, {"char": "٣"}, {"h": 0}, {"w": 41}, {"h": 9.5},
+            {"bits": "dGMYxcBjGAA="}, {"bits": "!!!"}, {"bits": None}, {"value": "12,34"}, {"value": "1245"},
+            {"frame": [1366]}, {"source": [0, 10]}, {"frame": [True, 768]}, {"version": "x" * 21},
+        ]
+        for over in bad:
+            with self.subTest(over=over):
+                self.assertRaises(app.Invalid, app.validate_glyph, glyph(**over))
+
+    def test_same_browser_reports_a_glyph_once(self):
+        owner = app.owner_of(uid(9))
+        self.assertEqual(self.store.add_glyphs([glyph(), glyph(), {"kind": "x"}], "203.0.113.9", NOW, owner=owner), (2, 1))
+        self.store.add_glyphs([glyph(value="3")], "203.0.113.9", NOW, owner=owner)
+        self.store.add_glyphs([glyph()], "198.51.100.7", NOW)        # 另一台、沒帶金鑰的
+        rows = self.rows()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0][2], owner)
+        self.assertEqual(rows[1][2], "ip:198.51.100.7")
+
+
 class LimiterAndIpTest(unittest.TestCase):
     def test_rate_limit_per_ip_and_window(self):
         limiter = app.RateLimiter(limit=2, window=60)
@@ -424,6 +467,16 @@ class HttpTest(unittest.TestCase):
             status, _headers, raw = self.call("POST", "/api/records", batch, {"Content-Type": "application/json"})
             self.assertEqual((status, json.loads(raw)["accepted"]), (200, [uid(1), uid(2), uid(3)]))
         self.assertEqual(self.store.count(), 3)
+
+    def test_glyphs_over_http(self):
+        post = lambda body: self.call("POST", "/api/glyphs", body, {"Content-Type": "application/json"})   # noqa: E731
+        status, _headers, raw = post({"key": uid(9), "glyphs": [glyph(), glyph(char="9")]})
+        self.assertEqual((status, json.loads(raw)), (200, {"accepted": 1, "rejected": 1}))
+        self.assertEqual(post({"glyphs": [glyph()]})[0], 200)                  # 不帶金鑰也收
+        self.assertEqual(post({"key": "bad", "glyphs": [glyph()]})[0], 400)
+        self.assertEqual(post({"glyphs": []})[0], 400)
+        self.assertEqual(post({"glyphs": [glyph()] * (app.MAX_GLYPHS + 1)})[0], 400)
+        self.assertEqual(self.store._db.execute("SELECT COUNT(*) FROM glyphs").fetchone()[0], 2)
 
     def test_looks_over_http(self):
         now = app.time.time() * 1000

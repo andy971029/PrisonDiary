@@ -394,6 +394,21 @@ class TestIdentityOcr(unittest.TestCase):
         self.assertEqual(session.level, 145)
         self.assertEqual(self.taught, [])
 
+    def test_newly_learned_glyphs_go_out_once(self):
+        """OCR 教會的字形放進 payload 的 learned 給頁面回報；已經會的不再報，送過一次就清掉。"""
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
+        four = np.array([[0, 1, 1], [1, 0, 1], [1, 1, 1], [0, 0, 1]], dtype=bool)
+        five = np.array([[1, 1, 1], [1, 0, 0], [1, 1, 1], [0, 1, 1]], dtype=bool)
+        zone = FakeZone()
+        zone.digits = [four, five]
+        session._finish_level(zone, ["45", "45"])
+        learned = json.loads(session.tick())["learned"]
+        self.assertEqual([(g["kind"], g["char"], g["h"], g["w"], g["value"]) for g in learned],
+                         [("level", "4", 4, 3, "45"), ("level", "5", 4, 3, "45")])
+        self.assertEqual(json.loads(session.tick())["learned"], [])
+        session._finish_level(zone, ["45", "45"])
+        self.assertEqual(json.loads(session.tick())["learned"], [])
+
     def test_character_splits_job_and_name(self):
         session = self.make_session()
         session._finish_character({"key": "k"}, [["獵人\n", "獵人\n"], ["卍 弘法 艾 德 卍\n", "卍 弘法 艾\n"]])

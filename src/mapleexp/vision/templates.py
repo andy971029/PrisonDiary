@@ -129,6 +129,10 @@ class TemplateSet:
     def count_for(self, char: str) -> int:
         return sum(1 for t in self._templates if t.char == char)
 
+    def added_since(self, count: int) -> list[Template]:
+        """第 ``count`` 張之後加進來的模板（``add`` 一律接在最後），拿來知道剛剛學會了哪些字形。"""
+        return list(self._templates[count:])
+
     def masks_for(self, char: str) -> list[np.ndarray]:
         """某個字元的所有模板樣本。自動定位時拿它當錨點比對。"""
         return [t.mask for t in self._templates if t.char == char]
@@ -190,19 +194,11 @@ class TemplateSet:
     # ------------------------------------------------------------------ #
 
     def to_dict(self) -> dict:
-        entries = []
-        for template in self._templates:
-            flat = template.mask.reshape(-1)
-            entries.append(
-                {
-                    "char": template.char,
-                    "h": template.height,
-                    "w": template.width,
-                    "bits": base64.b64encode(np.packbits(flat).tobytes()).decode("ascii"),
-                    # 純粹為了讓人（和 diff）看得懂，載入時不使用。
-                    "preview": preview_lines(template.mask),
-                }
-            )
+        entries = [
+            # preview 純粹為了讓人（和 diff）看得懂，載入時不使用。
+            {**pack(template), "preview": preview_lines(template.mask)}
+            for template in self._templates
+        ]
         return {"version": 1, "meta": dict(self.meta), "templates": entries}
 
     def save(self, path: Path) -> Path:
@@ -250,6 +246,16 @@ class TemplateSet:
         except (OSError, json.JSONDecodeError):
             return cls()
         return cls.from_dict(raw)
+
+
+def pack(template: Template) -> dict:
+    """一張模板的 ``{char, h, w, bits}``：bits 是遮罩逐列攤平、每 8 格一個位元組再 base64。"""
+    return {
+        "char": template.char,
+        "h": template.height,
+        "w": template.width,
+        "bits": base64.b64encode(np.packbits(template.mask.reshape(-1)).tobytes()).decode("ascii"),
+    }
 
 
 def preview_lines(mask: np.ndarray) -> list[str]:

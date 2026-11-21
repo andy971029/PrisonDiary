@@ -989,7 +989,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.42.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.43.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1394,7 +1394,7 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來">
+  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來。開著時也會回報辨識程式靠文字辨識新學會的數字字形（楓幣、等級的 0～9 長相、當時讀到的數字與畫面大小），用來改進內建字形">
     <span>上傳練功紀錄</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
   </div>
   <h3>神聖祈禱（掛7）設定</h3>
@@ -1830,6 +1830,7 @@ function tick() {
   for (const text of out.notices || []) log(text);
   syncMini();
   trackHistory(out);
+  queueGlyphs(out);
   if (ocr) for (const req of out.ocr || []) runOcr(req);
 }
 
@@ -2137,6 +2138,7 @@ function setUpload(on) {
   if (uploadOn && ensureUids(records)) writeRecords();    // 存不了也沒關係，下次算出來的 uid 還是同一個
   renderHistory();
   syncRecords();
+  syncGlyphs();
 }
 
 const syncPayload = (r) => ({
@@ -2202,6 +2204,63 @@ async function syncRecords() {
   }
 }
 window.addEventListener("online", syncRecords);
+
+// ---------------------------------------------------------------- 回報學到的字形
+// 楓幣與等級的數字內建字形對不上時，辨識程式會用文字辨識讀出來、把那組字形學起來（bridge.py 的 _teach）。
+// 學到的每一個都排進這裡、送給後端；各台電腦回報的長相收集一陣子後整理進內建字形，大家就照同一套讀。
+// 待送的存在瀏覽器裡：送不出去（後端停機、沒網路、上傳關著）就留到下次開頁再送，送成功才拿掉。
+const GLYPH_KEY = "mapleexp.glyphs.v1";
+const GLYPH_BATCH = 100;
+const GLYPH_MAX_PENDING = 500;     // 一直送不出去時只留最新的這麼多個
+let glyphQueue = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GLYPH_KEY) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch { return []; }
+})();
+let glyphBusy = false;
+let glyphTimer = null;
+
+function writeGlyphQueue() {
+  try {
+    if (glyphQueue.length) localStorage.setItem(GLYPH_KEY, JSON.stringify(glyphQueue));
+    else localStorage.removeItem(GLYPH_KEY);
+  } catch { /* 存不了就只在這次開頁期間送 */ }
+}
+
+function queueGlyphs(out) {
+  if (!out.learned?.length) return;
+  const version = $("app-version").textContent.replace(/^v/, "");
+  for (const g of out.learned) glyphQueue.push({ ...g, frame: out.frame_size, source: [sourceW, sourceH], version });
+  glyphQueue = glyphQueue.slice(-GLYPH_MAX_PENDING);
+  writeGlyphQueue();
+  syncGlyphs();
+}
+
+async function syncGlyphs() {
+  if (!uploadOn || glyphBusy || !glyphQueue.length) return;
+  glyphBusy = true;
+  clearTimeout(glyphTimer);
+  glyphTimer = null;
+  try {
+    while (uploadOn && glyphQueue.length) {
+      const batch = glyphQueue.slice(0, GLYPH_BATCH);
+      await syncFetch("/api/glyphs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: syncKey() ?? undefined, glyphs: batch }),
+      });
+      // 送的期間可能又排進新的、或超過上限把舊的擠掉，所以照物件拿掉送出去的那幾個，不照位置
+      const sent = new Set(batch);
+      glyphQueue = glyphQueue.filter((g) => !sent.has(g));
+      writeGlyphQueue();
+    }
+  } catch {
+    glyphTimer = setTimeout(syncGlyphs, SYNC_RETRY_MS);    // 不寫 log：這是背景的事，使用者不用知道
+  } finally {
+    glyphBusy = false;
+  }
+}
+window.addEventListener("online", syncGlyphs);
 
 // 可以收合的區塊預設打開，使用者收起來或打開後記在瀏覽器裡，下次照上次的樣子。
 function rememberFold(id, key, onOpen) {

@@ -23,6 +23,9 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
     POST   /api/looks/mine     {"key"}，回這把金鑰名下的角色與各自目前的造型 {"characters": [{character, look}]}
     GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級），looks 是榜上有設造型的角色各自的造型
     GET    /api/training       ?days=7&job=法師&level=35&limit=100，回練功榜：地圖 × 職業 × 等級區間的平均效率
+    POST   /api/glyphs         {"key"?, "glyphs": [{kind, char, h, w, bits, value, frame, source, version}]}，
+                               網頁靠 OCR 學會的字形（楓幣、等級），回 {"accepted": 筆數, "rejected": 筆數}。
+                               只收不出：之後直接讀資料檔，整理各台電腦學到的長相、挑出可以放進內建字形的
     GET    /api/health         {"ok": true, "records": 筆數}
     GET    /                   轉去網站的排行榜頁籤
     POST   /api/records/delete、DELETE /api/records/<uid>
@@ -32,6 +35,8 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import ipaddress
 import json
@@ -59,6 +64,10 @@ LEVEL_BAND = 10                   # 練功榜的等級區間：1–10、11–20�
 SITE = "https://andy971029.github.io/PrisonDiary/"
 LOOK_PARTS = 24                   # 一套造型最多幾個部位；紙娃娃現在有 12 類時裝
 LOOK_PART = re.compile(r"[A-Za-z]{1,24}\Z")
+MAX_GLYPHS = 200                  # 一次最多回報幾個字形；一個約 150 位元組
+GLYPH_KINDS = ("meso", "level")
+GLYPH_MAX_SIDE = 40               # 字形最大邊長；原尺寸的數字是 5x9 上下
+GLYPH_VALUE = re.compile(r"[0-9]{1,13}\Z")
 
 UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是壞資料
@@ -85,6 +94,23 @@ CREATE TABLE IF NOT EXISTS records (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS records_character ON records (character, end_at);
 CREATE INDEX IF NOT EXISTS records_end ON records (end_at);
+CREATE TABLE IF NOT EXISTS glyphs (
+    kind        TEXT NOT NULL,
+    char        TEXT NOT NULL,
+    h           INTEGER NOT NULL,
+    w           INTEGER NOT NULL,
+    bits        TEXT NOT NULL,
+    reporter    TEXT NOT NULL,     -- 瀏覽器金鑰的雜湊；沒帶金鑰的是 "ip:" 加 IP。同一台回報同一個字形只記一次
+    value       TEXT NOT NULL,     -- 學到它的時候 OCR 讀出來的整個數字
+    frame_w     INTEGER NOT NULL,  -- 辨識用的畫面大小（遊戲被放大顯示時是縮回去的大小）
+    frame_h     INTEGER NOT NULL,
+    source_w    INTEGER NOT NULL,  -- 分享進來的原始畫面大小
+    source_h    INTEGER NOT NULL,
+    version     TEXT NOT NULL,
+    ip          TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, char, h, w, bits, reporter)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS looks (
     character  TEXT PRIMARY KEY,
     look       TEXT NOT NULL,
@@ -193,6 +219,47 @@ def validate_look(raw: object) -> dict:
     }
 
 
+def _size(raw: dict, key: str) -> tuple[int, int]:
+    value = raw.get(key)
+    if (not isinstance(value, list) or len(value) != 2
+            or not all(isinstance(v, int) and not isinstance(v, bool) and 0 < v <= 10000 for v in value)):
+        raise Invalid(f"{key} 要是 [寬, 高]")
+    return value[0], value[1]
+
+
+def validate_glyph(raw: object) -> dict:
+    """網頁回報的一個字形，檢查過轉成資料表的欄位；不合格丟 Invalid。"""
+    if not isinstance(raw, dict):
+        raise Invalid("不是物件")
+    kind = raw.get("kind")
+    if kind not in GLYPH_KINDS:
+        raise Invalid("kind 不對")
+    char = raw.get("char")
+    if not isinstance(char, str) or len(char) != 1 or not char.isdigit() or not char.isascii():
+        raise Invalid("char 要是一個數字")
+    h = int(_number(raw, "h", 1, GLYPH_MAX_SIDE))
+    w = int(_number(raw, "w", 1, GLYPH_MAX_SIDE))
+    if raw["h"] != h or raw["w"] != w:
+        raise Invalid("h、w 要是整數")
+    bits = raw.get("bits")
+    try:
+        packed = base64.b64decode(bits, validate=True) if isinstance(bits, str) else None
+    except (ValueError, binascii.Error):
+        packed = None
+    if packed is None or len(packed) != (h * w + 7) // 8:
+        raise Invalid("bits 跟 h、w 對不上")
+    value = raw.get("value")
+    if not isinstance(value, str) or not GLYPH_VALUE.match(value) or char not in value:
+        raise Invalid("value 不對")
+    frame_w, frame_h = _size(raw, "frame")
+    source_w, source_h = _size(raw, "source")
+    return {
+        "kind": kind, "char": char, "h": h, "w": w, "bits": bits, "value": value,
+        "frame_w": frame_w, "frame_h": frame_h, "source_w": source_w, "source_h": source_h,
+        "version": _text(raw, "version", 20),
+    }
+
+
 def owner_of(key: object) -> str | None:
     """瀏覽器金鑰的雜湊，資料表裡存的是它；金鑰格式不對回 None。"""
     if not isinstance(key, str) or not UID.match(key):
@@ -282,6 +349,34 @@ class Store:
                 self._db.commit()
                 self._boards.clear()
         return accepted, rejected
+
+    def add_glyphs(self, raws: list, ip: str, now_ms: int | None = None, *,
+                   owner: str | None = None) -> tuple[int, int]:
+        """存一批回報的字形。回 (收下幾個, 不合格幾個)；同一台已經回報過的同一個字形也算收下。"""
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        rows = []
+        rejected = 0
+        for raw in raws:
+            try:
+                row = validate_glyph(raw)
+            except Invalid:
+                rejected += 1
+                continue
+            row.update(reporter=owner or f"ip:{ip}", ip=ip, received_at=now_ms)
+            rows.append(row)
+        if rows:
+            with self._lock:
+                self._check_room()
+                self._db.executemany(
+                    "INSERT INTO glyphs (kind, char, h, w, bits, reporter, value, frame_w, frame_h,"
+                    " source_w, source_h, version, ip, received_at)"
+                    " VALUES (:kind, :char, :h, :w, :bits, :reporter, :value, :frame_w, :frame_h,"
+                    " :source_w, :source_h, :version, :ip, :received_at)"
+                    " ON CONFLICT DO NOTHING",
+                    rows,
+                )
+                self._db.commit()
+        return len(rows), rejected
 
     def set_look(self, owner: str, character: str, look: dict | None, ip: str, now_ms: int | None = None) -> bool:
         """設（look 是 None 就拿掉）一個角色的造型。這把金鑰沒傳過那個角色的紀錄就不動，回 False。"""
@@ -567,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
         if ip is None:
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine"):
+        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine", "/api/glyphs"):
             self._error(404, "沒有這個路徑")
             return
         try:
@@ -590,9 +685,9 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(data, dict):
             self._error(400, "內容要是一個物件")
             return
-        # 金鑰：上傳紀錄可以不帶（舊版網頁），帶了就要是對的；造型的兩個路徑一定要帶
+        # 金鑰：上傳紀錄與回報字形可以不帶（舊版網頁、存不了金鑰的瀏覽器），帶了就要是對的；造型的兩個路徑一定要帶
         owner = owner_of(data.get("key"))
-        if owner is None and (data.get("key") is not None or path != "/api/records"):
+        if owner is None and (data.get("key") is not None or path not in ("/api/records", "/api/glyphs")):
             self._error(400, "key 沒給或格式不對")
             return
         if path == "/api/records":
@@ -602,6 +697,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 accepted, rejected = self.store.add(records, ip, owner=owner)
+            except Full as err:
+                self._error(507, str(err))
+                return
+            self._json(200, {"accepted": accepted, "rejected": rejected})
+        elif path == "/api/glyphs":
+            glyphs = data.get("glyphs")
+            if not isinstance(glyphs, list) or not 0 < len(glyphs) <= MAX_GLYPHS:
+                self._error(400, f"glyphs 要是 1 到 {MAX_GLYPHS} 個的陣列")
+                return
+            try:
+                accepted, rejected = self.store.add_glyphs(glyphs, ip, owner=owner)
             except Full as err:
                 self._error(507, str(err))
                 return

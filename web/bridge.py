@@ -44,7 +44,7 @@ from mapleexp.vision import scaling
 from mapleexp.core.reading import StatusReading
 from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
 from mapleexp.vision.reader import StatusReader
-from mapleexp.vision.templates import TemplateSet
+from mapleexp.vision.templates import TemplateSet, pack
 from mapleexp.win32.capture import CaptureError, Frame
 
 STATE_LABELS = {
@@ -191,6 +191,8 @@ class WebSession:
         self._pause_verified = False
         self._notices: list[str] = []
         self._ocr_outbox: list[dict] = []
+        # 靠 OCR 新學會的字形（楓幣、等級），頁面收去回報後端：收集各台電腦學到的長相，之後整理進內建字形。
+        self._learned: list[dict] = []
         self._ocr_inflight: dict[str, dict] = {}
         self._ocr_ready = False
         # 每一項資料「從畫面哪一塊讀來的」，頁面拿去裁放大圖，讓人肉眼核對辨識有沒有看對。
@@ -729,7 +731,8 @@ class WebSession:
             self._meso_ocr_misses[key] = self._meso_ocr_misses.get(key, 0) + 1
             return
         self._meso_ocr_misses.pop(key, None)
-        self.meso_reader.teach(zone, int(exact[0]))
+        value = int(exact[0])
+        self._teach("meso", self.meso_reader.templates, lambda: self.meso_reader.teach(zone, value), value)
 
     # ---------------------------------------------------------------- 神聖祈禱
 
@@ -888,6 +891,13 @@ class WebSession:
         elif rid.startswith("meso:"):
             self._finish_meso(ctx["zone"], texts)
 
+    def _teach(self, kind: str, templates: TemplateSet, teach, value: int) -> None:
+        """教字形，並把真的新加進去的那幾張記下來等頁面回報。"""
+        before = len(templates)
+        teach()
+        for template in templates.added_since(before):
+            self._learned.append({"kind": kind, **pack(template), "value": str(value)})
+
     def _level_may_retry(self, key: str) -> bool:
         """連續讀不出來幾次之後改成慢慢重試，而不是永遠放棄。
 
@@ -924,7 +934,7 @@ class WebSession:
         self._level_misses.pop(zone.shape_key, None)
         self.level_status = ""
         if exact:
-            self.level_reader.teach(zone, value)
+            self._teach("level", self.level_reader.templates, lambda: self.level_reader.teach(zone, value), value)
         self.level = value
 
     def _finish_character(self, ctx: dict, texts) -> None:
@@ -955,6 +965,10 @@ class WebSession:
     def _take_notices(self) -> list[str]:
         notices, self._notices = self._notices, []
         return notices
+
+    def _take_learned(self) -> list[dict]:
+        learned, self._learned = self._learned, []
+        return learned
 
     def _take_ocr_outbox(self) -> list[dict]:
         outbox, self._ocr_outbox = self._ocr_outbox, []
@@ -991,6 +1005,7 @@ class WebSession:
             "prayer": self._prayer_payload(),
             "ocr": self._take_ocr_outbox(),
             "notices": self._take_notices(),
+            "learned": self._take_learned(),
             "rois": {"exp": list(rect) if rect else None,
                      "meso": list(self._meso_rect) if self._meso_rect else None,
                      "prayer": self._prayer_rect(),
