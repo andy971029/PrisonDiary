@@ -929,6 +929,23 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, status: int, data: object) -> None:
         self._send(status, json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
+    def _drain(self, cap: int = MAX_REPORT_BODY) -> None:
+        """回錯誤前把沒讀的內容讀掉（最多 cap）：沒讀完就關連線，Windows 會送 RST，對方常常收不到回應。"""
+        try:
+            left = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if not 0 < left <= cap:
+            return
+        try:
+            while left > 0:
+                chunk = self.rfile.read(min(left, 64 * 1024))
+                if not chunk:
+                    break
+                left -= len(chunk)
+        except OSError:
+            pass
+
     def _error(self, status: int, message: str) -> None:
         # 出錯就不保留連線：請求的內容可能還沒讀完，留著會把下一個請求讀歪
         self.close_connection = True
@@ -943,6 +960,7 @@ class Handler(BaseHTTPRequestHandler):
     def _guard(self) -> str | None:
         ip = client_ip(self.client_address[0], self.headers)
         if not self.limiter.allow(ip):
+            self._drain(MAX_BODY)
             self._error(429, "請求太頻繁，稍後再試")
             return None
         return ip
@@ -1008,6 +1026,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine", "/api/glyphs",
                         "/api/snapshots", "/api/reports"):
+            self._drain(MAX_BODY)
             self._error(404, "沒有這個路徑")
             return
         limit = {"/api/snapshots": MAX_SNAP_BODY, "/api/reports": MAX_REPORT_BODY}.get(path, MAX_BODY)
@@ -1017,6 +1036,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(411, "要有 Content-Length")
             return
         if not 0 < length <= limit:
+            self._drain()
             self._error(413, "內容太大")
             return
         try:

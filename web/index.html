@@ -998,7 +998,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.45.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.45.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2242,7 +2242,7 @@ window.addEventListener("online", syncRecords);
 // 辨識讀錯時，光看紀錄查不出是哪裡錯，所以把辨識當下拿到的那幾塊畫面也留下來傳給後端（server/app.py 的 /api/snapshots）：
 // - 每一段紀錄：開始那一格與最後一次（每分鐘更新）各一組，結算存檔時跟著紀錄的 uid 傳上去。段是照「角色 × 職業 × 等級 × 地圖」分的，
 //   讀錯就會多出一段，它開始那一格正好就是讀錯的那一刻。
-// - 辨識一直讀不到東西（地圖名稱、職業、等級、角色名字、經驗值欄位）超過 90 秒：每次分享每種只拍一次。
+// - 辨識一直讀不到東西（地圖名稱、職業、等級、角色名字、經驗值欄位）超過 15 秒：每次分享每種只拍一次。
 // 傳的只有診斷面板那幾塊原尺寸的裁切圖（經驗值、等級、職業、角色名、地圖名稱、楓幣、祈禱）與引擎狀態，沒有整張畫面；
 // 找不到小地圖時另外裁畫面左上角一塊，才看得出為什麼找不到。整張畫面只有使用者自己按「回報問題」才會送（/api/reports）。
 const SNAP_CROP_KEYS = ["exp", "level", "job", "name", "map", "meso", "prayer"];
@@ -2251,7 +2251,7 @@ const SNAP_EVERY_MS = 60000;
 const SNAP_QUEUE_KEY = "mapleexp.snapshots.v1";
 const SNAP_QUEUE_MAX = 30;
 const SNAP_KEEPALIVE_MAX = 60000;      // keepalive 的請求內容上限是 64 KB；比這大的就不用 keepalive
-const ANOMALY_MS = 90000;
+const ANOMALY_MS = 15000;
 const READS_KEEP = 150;
 const REPORT_LOG_MAX = 30000;
 const REPORT_FRAME_MAX = 3 * 1024 * 1024;
@@ -2363,7 +2363,7 @@ function rememberRead(out, ms) {
   if (recentReads.length > READS_KEEP) recentReads.splice(0, recentReads.length - READS_KEEP);
 }
 
-// 辨識一直讀不到某樣東西超過 90 秒就拍一份；每次分享每種只拍一次
+// 辨識一直讀不到某樣東西超過 15 秒就拍一份；每次分享每種只拍一次
 function watchAnomalies(out) {
   if (!uploadOn) return;
   const now = Date.now();
