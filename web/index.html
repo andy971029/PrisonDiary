@@ -989,7 +989,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.16</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.17</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1344,7 +1344,7 @@
     <div class="sec-head">
       <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
       <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
-      <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden" checked><i></i>含隱藏技能</label>
+      <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
     </div>
     <p class="note rank-error" id="job-error" role="alert"></p>
     <div class="job-tree" id="job-tree"></div>
@@ -5327,7 +5327,7 @@ if (syncApi) {
 // 切到這個頁籤才載。選了哪個職業、開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
 const JOB_KEY = "mapleexp.job";
 const JOB_SEARCH_CAP = 80;
-const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: true, want: null };
+const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null };
 // 先不顯示的職業系統（資料裡有，還沒開放）：分頁、技能搜尋、網址或上次選的都不會開到它們
 const JOB_GROUPS_OFF = new Set(["皇家騎士團", "狂狼勇士"]);
 function loadJobs() {
@@ -5358,7 +5358,7 @@ const jobLabel = (job) => job.name + (job.stage ? ` ${job.stage}` : "");
 const jobSkills = (job) => job.skills.filter((skill) => jobBook.hidden || !skill.hidden);
 const jobGroupOf = (id) => jobBook.data.groups.findIndex((g) => g.root === id || g.lines.some((line) => line.includes(id)));
 function jobSave() {
-  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, withHidden: jobBook.hidden })); } catch { /* 存不了就算了 */ }
+  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, showHidden: jobBook.hidden })); } catch { /* 存不了就算了 */ }
 }
 // 圖示：ic 是它在圖集 icons/skills.png 裡的序號（跟道具圖示同一種排法，每格 cell 像素、一列 cols 格）；沒有圖示的用名稱的第一個字
 function skillIcon(skill) {
@@ -5436,8 +5436,8 @@ async function jobOpen() {
   $("job-error").textContent = "";
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(JOB_KEY) || "{}") || {}; } catch { /* 壞了就用預設 */ }
-  // 預設含隱藏技能，只有自己關掉過才不含。舊版存的 hidden 是點職業時順手存的預設值，不算數
-  jobBook.hidden = saved.withHidden !== false;
+  // 預設不含隱藏技能，只有自己打開過才含。withHidden 是預設開著那兩版點職業時順手存的，不算數
+  jobBook.hidden = saved.showHidden === true;
   $("job-hidden").checked = jobBook.hidden;
   // 先看網址指定的，再來是上次選的；都沒有的話，正在分享遊戲畫面而且讀到職業就開那個職業，不然從劍士開始
   const read = $("id-job").textContent.trim();
