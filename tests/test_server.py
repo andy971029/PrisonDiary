@@ -37,6 +37,19 @@ def record(n: int, **over) -> dict:
     return base
 
 
+# 測試用的名稱清單：比真的 names.json 小，地圖用好認的假名字；女神組隊任務那張是真的名字
+PQ_MAP = "隱密之地 雅典娜禁地<倉庫>"
+NAMES = app.Names(
+    jobs=["龍騎士", "槍騎兵", "祭司", "法師"],
+    maps=["死亡森林", "天空之塔", "姑姑鐘", "新地圖", PQ_MAP],
+    no_board_maps=[PQ_MAP],
+)
+
+
+def make_store(path=":memory:", **kwargs):
+    return app.Store(path, names=kwargs.pop("names", NAMES), **kwargs)
+
+
 class ValidateTest(unittest.TestCase):
     def test_good_record_maps_to_columns(self):
         row = app.validate(record(1), NOW)
@@ -69,26 +82,27 @@ class ValidateTest(unittest.TestCase):
 
 class StoreTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.addCleanup(self.store.close)
 
     def rows(self):
         return self.store._db.execute("SELECT uid, character, ip, received_at FROM records ORDER BY uid").fetchall()
 
     def test_add_keeps_ip_and_time(self):
-        accepted, rejected = self.store.add([record(1)], "203.0.113.9", NOW)
+        accepted, rejected, uncounted = self.store.add([record(1)], "203.0.113.9", NOW)
+        self.assertEqual(uncounted, [])
         self.assertEqual((accepted, rejected), ([uid(1)], []))
         self.assertEqual(self.rows(), [(uid(1), "阿明", "203.0.113.9", NOW)])
 
     def test_same_uid_twice_is_one_record(self):
         self.store.add([record(1)], "203.0.113.9", NOW)
         # 重傳（上次的回應沒收到）：照樣回收下，但不多一筆、也不蓋掉原本的
-        accepted, _ = self.store.add([record(1, cumNet=999, character="別人")], "198.51.100.1", NOW + 5)
+        accepted, _, _ = self.store.add([record(1, cumNet=999, character="別人")], "198.51.100.1", NOW + 5)
         self.assertEqual(accepted, [uid(1)])
         self.assertEqual(self.rows(), [(uid(1), "阿明", "203.0.113.9", NOW)])
 
     def test_bad_ones_are_reported_good_ones_kept(self):
-        accepted, rejected = self.store.add([record(1), record(2, cumNet=-1), "x", record(3)], "::1", NOW)
+        accepted, rejected, _ = self.store.add([record(1), record(2, cumNet=-1), "x", record(3)], "::1", NOW)
         self.assertEqual(accepted, [uid(1), uid(3)])
         self.assertEqual([r["uid"] for r in rejected], [uid(2), None])
         self.assertTrue(all(r["reason"] for r in rejected))
@@ -100,13 +114,13 @@ class StoreTest(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         path = Path(folder.name) / "r.db"
-        store = app.Store(path)
+        store = make_store(path)
         store.add([record(1), record(2)], "::1", NOW)
         # 門檻加上去以前收下的短紀錄：現在的 add 存不進這種的，直接改資料表模擬
         store._db.execute("UPDATE records SET active_sec = 599 WHERE uid = ?", (uid(2),))
         store._db.commit()
         store.close()
-        store = app.Store(path)
+        store = make_store(path)
         self.addCleanup(store.close)
         self.assertEqual(store._db.execute("SELECT uid FROM records").fetchall(), [(uid(1),)])
 
@@ -115,16 +129,94 @@ class StoreTest(unittest.TestCase):
 
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        store = app.Store(Path(folder.name) / "r.db", max_bytes=0)
+        store = make_store(Path(folder.name) / "r.db", max_bytes=0)
         self.addCleanup(store.close)
         with self.assertRaises(app.Full):
             store.add([record(1)], "::1", NOW)
         self.assertEqual(store.count(), 0)
 
 
+class CountedTest(unittest.TestCase):
+    """格式對的都收，但只有有等級、合法職業、合法地圖、不是女神組隊任務的才算排行榜。"""
+
+    def setUp(self):
+        self.store = make_store()
+        self.addCleanup(self.store.close)
+
+    def test_reasons(self):
+        cases = {
+            "": record(1),
+            "沒有等級": record(2, level=None),
+            "沒有職業": record(3, job=""),
+            "職業不在清單裡": record(4, job="搶騎兵"),
+            "沒有地圖名稱": record(5, mapName=""),
+            "地圖不在清單裡": record(6, mapName="死亡森林林"),
+            "女神組隊任務的地圖": record(7, mapName=PQ_MAP),
+        }
+        accepted, rejected, uncounted = self.store.add(list(cases.values()), "::1", NOW)
+        self.assertEqual((len(accepted), rejected), (7, []))
+        self.assertEqual({u["uid"]: u["reason"] for u in uncounted},
+                         {r["uid"]: why for why, r in cases.items() if why})
+        self.assertEqual(self.store._db.execute("SELECT status FROM records ORDER BY uid").fetchall(),
+                         [(why,) for why in cases])
+        self.assertEqual((self.store.count(), self.store.count(counted=True)), (7, 1))
+
+    def test_uncounted_records_stay_off_every_board(self):
+        self.store.add([
+            record(1, character="正常", cumNet=100_000),
+            record(2, character="解任務", mapName=PQ_MAP, cumNet=9_000_000),
+            record(3, character="正常", mapName=PQ_MAP, cumNet=9_000_000, level=99, job="祭司",
+                   startAt=NOW - 3 * HOUR, endAt=NOW - 2 * HOUR),
+            record(4, character="沒地圖", mapName="", cumNet=9_000_000),
+        ], "::1", NOW)
+        boards = self.store.boards(now_ms=NOW)
+        for name in ("exp", "rate", "level"):
+            with self.subTest(board=name):
+                self.assertEqual([r["character"] for r in boards[name]], ["正常"])
+        # 職業、等級也不從不算數的那幾段拿
+        self.assertEqual((boards["exp"][0]["job"], boards["level"][0]["level"]), ("龍騎士", 70))
+        self.assertEqual(boards["exp"][0]["exp"], 100_000)
+        rows = self.store.training(now_ms=NOW)["rows"]
+        self.assertEqual([r["mapName"] for r in rows], ["死亡森林"])
+
+    def test_status_is_recomputed_on_start(self):
+        import tempfile
+
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "r.db"
+        store = make_store(path)
+        store.add([record(1), record(2, mapName="姑姑鐘")], "::1", NOW)
+        store.close()
+        # 清單改了（姑姑鐘不算了）：重開時舊紀錄跟著改
+        fewer = app.Names(NAMES.jobs, NAMES.maps, [*NAMES.no_board_maps, "姑姑鐘"])
+        store = make_store(path, names=fewer)
+        self.addCleanup(store.close)
+        self.assertEqual(store._db.execute("SELECT uid, status FROM records ORDER BY uid").fetchall(),
+                         [(uid(1), ""), (uid(2), "女神組隊任務的地圖")])
+
+    def test_names_file_matches_its_sources(self):
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root / "scripts"))
+        try:
+            import export_server_names
+        finally:
+            sys.path.remove(str(root / "scripts"))
+        data = export_server_names.build(root / "web")
+        self.assertEqual((root / "server" / "names.json").read_text(encoding="utf-8"),
+                         export_server_names.render(data),
+                         "server/names.json 跟 mapvocab.json / mapbook.json / JOB_NAMES 對不上，重跑 scripts/export_server_names.py")
+        names = app.Names.load()
+        self.assertEqual(len(names.no_board_maps), 24)
+        self.assertIn(PQ_MAP, names.no_board_maps)
+        self.assertTrue(names.no_board_maps <= names.maps)
+        self.assertIn("天空之城 紅光庭園 II", names.maps)
+        self.assertIn("魔導士(冰、雷)", names.jobs)
+
+
 class BoardsTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.addCleanup(self.store.close)
         self.store.add([
             # 阿明：兩段，後來轉職升等；第二段效率比較高
@@ -174,7 +266,7 @@ class BoardsTest(unittest.TestCase):
 
 class TrainingTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.addCleanup(self.store.close)
         self.store.add([
             # 死亡森林、龍騎士、61–70：兩個人各一小時，合起來算
@@ -239,7 +331,7 @@ LOOK = {"skin": 1, "hair": 30027, "face": 20100, "mix": {"hair": 3, "face": None
 
 class LooksTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.addCleanup(self.store.close)
         self.a, self.b = app.owner_of(key(1)), app.owner_of(key(2))
 
@@ -325,12 +417,12 @@ class LooksTest(unittest.TestCase):
         path = Path(folder.name) / "old.db"
         old = sqlite3.connect(path)
         # v0.34 的資料表：沒有 owner 欄、沒有 looks 表
-        old.executescript(app.SCHEMA.split("CREATE TABLE IF NOT EXISTS looks")[0].replace(",\n    owner       TEXT", ""))
+        old.executescript(app.SCHEMA.split("CREATE TABLE IF NOT EXISTS looks")[0].replace(",\n    owner       TEXT,", "").split("    status ")[0].rstrip() + "\n) WITHOUT ROWID;")
         old.execute("INSERT INTO records VALUES (?, '阿明', '龍騎士', 70, 'm', '死亡森林', ?, ?, 360000, 3600, 0, '::1', ?)",
                     (uid(1), NOW - HOUR, NOW, NOW))
         old.commit()
         old.close()
-        store = app.Store(path)
+        store = make_store(path)
         self.addCleanup(store.close)
         self.assertEqual(store._db.execute("SELECT uid, owner FROM records").fetchall(), [(uid(1), None)])
         store.add([record(1)], "::1", NOW, owner=self.a)
@@ -347,7 +439,7 @@ def glyph(**over) -> dict:
 
 class GlyphsTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.addCleanup(self.store.close)
 
     def rows(self):
@@ -398,7 +490,7 @@ class LimiterAndIpTest(unittest.TestCase):
 
 class HttpTest(unittest.TestCase):
     def setUp(self):
-        self.store = app.Store(":memory:")
+        self.store = make_store(":memory:")
         self.server = app.make_server("127.0.0.1", 0, self.store, app.RateLimiter(limit=1000))
         # 出錯的請求會寫 log，測試裡故意送一堆壞請求，別洗版
         self.server.RequestHandlerClass.log_message = lambda *args: None
@@ -436,6 +528,7 @@ class HttpTest(unittest.TestCase):
         out = json.loads(raw)
         self.assertEqual(out["accepted"], [uid(1)])
         self.assertEqual(out["rejected"][0]["uid"], uid(2))
+        self.assertEqual(out["uncounted"], [])
         # 測試是從本機連的，所以轉送標頭裡的位址算數
         self.assertEqual(self.store._db.execute("SELECT ip FROM records").fetchall(), [("203.0.113.50",)])
 
@@ -446,7 +539,7 @@ class HttpTest(unittest.TestCase):
         self.assertNotIn(uid(1), raw.decode("utf-8"))
         self.assertNotIn("203.0.113.50", raw.decode("utf-8"))
 
-        self.assertEqual(json.loads(self.call("GET", "/api/health")[2]), {"ok": True, "records": 1})
+        self.assertEqual(json.loads(self.call("GET", "/api/health")[2]), {"ok": True, "records": 1, "counted": 1})
 
     def test_old_pages_cannot_delete_any_more(self):
         # 收下的紀錄不刪。舊版網頁還會來叫刪除，照樣回 204（不然它會卡著一直重試、後面的也傳不上來），但什麼都不動

@@ -14,10 +14,16 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
 
 數字是瀏覽器自己算好傳上來的，這裡只擋格式不對與明顯不可能的值，擋不了有心造假。
 
+格式對的紀錄都收下，但只有「算數」的才進排行榜：要有等級、職業在合法清單裡、地圖名稱在合法清單裡、
+而且不是女神組隊任務的地圖（解任務拿的經驗不算練功）。清單在旁邊的 names.json（scripts/export_server_names.py 產生），
+部署時跟這個檔一起複製。不算數的照樣存著，原因記在 status 欄，回應的 uncounted 也會講，之後可以直接查資料檔
+找出是哪裡辨識錯；啟動時每一筆都照目前的清單重算一次，所以清單改了，舊紀錄也會跟著進出排行榜。
+
 這裡只出資料，畫面在網站的「排行榜」頁籤（web/index.html）。
 
 路徑：
-    POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}]}
+    POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}], "uncounted": [{uid, reason}]}
+                               rejected 是格式不對、沒存的；uncounted 是存了但不算排行榜的（也在 accepted 裡）
     POST   /api/records        同上，多帶 "key"（瀏覽器的金鑰）就把這批紀錄記在它名下；已經有、還沒主的紀錄也歸它
     POST   /api/looks          {"key", "character", "look"}，設那個角色的造型；look 給 null 是拿掉。沒傳過那個角色的紀錄回 403
     POST   /api/looks/mine     {"key"}，回這把金鑰名下的角色與各自目前的造型 {"characters": [{character, look}]}
@@ -26,7 +32,7 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
     POST   /api/glyphs         {"key"?, "glyphs": [{kind, char, h, w, bits, value, frame, source, version}]}，
                                網頁靠 OCR 學會的字形（楓幣、等級），回 {"accepted": 筆數, "rejected": 筆數}。
                                只收不出：之後直接讀資料檔，整理各台電腦學到的長相、挑出可以放進內建字形的
-    GET    /api/health         {"ok": true, "records": 筆數}
+    GET    /api/health         {"ok": true, "records": 筆數, "counted": 算進排行榜的筆數}
     GET    /                   轉去網站的排行榜頁籤
     POST   /api/records/delete、DELETE /api/records/<uid>
                                舊版網頁刪紀錄時會叫的；現在不刪了，照樣回 204，舊網頁才不會卡著一直重試
@@ -69,6 +75,7 @@ GLYPH_KINDS = ("meso", "level")
 GLYPH_MAX_SIDE = 40               # 字形最大邊長；原尺寸的數字是 5x9 上下
 GLYPH_VALUE = re.compile(r"[0-9]{1,13}\Z")
 
+NAMES_PATH = Path(__file__).resolve().parent / "names.json"
 UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是壞資料
 DAY_MS = 86_400_000
@@ -90,7 +97,8 @@ CREATE TABLE IF NOT EXISTS records (
     idle_sec    REAL NOT NULL,
     ip          TEXT NOT NULL,
     received_at INTEGER NOT NULL,
-    owner       TEXT
+    owner       TEXT,
+    status      TEXT NOT NULL DEFAULT ''   -- 空字串是算進排行榜；不然是不算的原因（見 status_of）
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS records_character ON records (character, end_at);
 CREATE INDEX IF NOT EXISTS records_end ON records (end_at);
@@ -186,6 +194,41 @@ def validate(raw: object, now_ms: int) -> dict:
     }
 
 
+class Names:
+    """後端認得的職業與地圖名稱（names.json）。"""
+
+    def __init__(self, jobs, maps, no_board_maps=()) -> None:
+        self.jobs = frozenset(jobs)
+        self.maps = frozenset(maps)
+        self.no_board_maps = frozenset(no_board_maps)
+
+    @classmethod
+    def load(cls, path: str | Path | None = None) -> "Names":
+        path = NAMES_PATH if path is None else Path(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        names = cls(data["jobs"], data["maps"], data.get("noBoardMaps", ()))
+        if not names.jobs or not names.maps:
+            raise ValueError(f"{path} 的職業或地圖清單是空的")
+        return names
+
+
+def status_of(row: dict, names: Names) -> str:
+    """一筆紀錄算不算排行榜：算就回空字串，不算回原因。角色名字、10 分鐘在 validate 就擋掉了。"""
+    if row["level"] is None:
+        return "沒有等級"
+    if not row["job"]:
+        return "沒有職業"
+    if row["job"] not in names.jobs:
+        return "職業不在清單裡"
+    if not row["map_name"]:
+        return "沒有地圖名稱"
+    if row["map_name"] not in names.maps:
+        return "地圖不在清單裡"
+    if row["map_name"] in names.no_board_maps:
+        return "女神組隊任務的地圖"
+    return ""
+
+
 def _look_int(value: object, name: str, high: int, *, optional: bool = False) -> int | None:
     if value is None and optional:
         return None
@@ -274,8 +317,10 @@ class Full(RuntimeError):
 class Store:
     """SQLite 的包裝。只有一條連線，所有讀寫排隊（量很小，不需要連線池）。"""
 
-    def __init__(self, path: str | Path, *, max_bytes: int = MAX_DB_BYTES, min_free: int = MIN_FREE_BYTES) -> None:
+    def __init__(self, path: str | Path, *, names: Names | None = None,
+                 max_bytes: int = MAX_DB_BYTES, min_free: int = MIN_FREE_BYTES) -> None:
         self.path = str(path)
+        self.names = names or Names.load()
         self.max_bytes = max_bytes
         self.min_free = min_free
         self._lock = threading.Lock()
@@ -290,6 +335,10 @@ class Store:
         if "owner" not in {row[1] for row in self._db.execute("PRAGMA table_info(records)")}:
             self._db.execute("ALTER TABLE records ADD COLUMN owner TEXT")
         self._db.execute("CREATE INDEX IF NOT EXISTS records_owner ON records (owner, character)")
+        # status 欄也是後來才加的；不管新舊，每次啟動都照目前的名稱清單重算一次
+        if "status" not in {row[1] for row in self._db.execute("PRAGMA table_info(records)")}:
+            self._db.execute("ALTER TABLE records ADD COLUMN status TEXT NOT NULL DEFAULT ''")
+        self._restatus()
         # 門檻是後來才加的：之前收下的短紀錄在啟動時清掉
         self._db.execute("DELETE FROM records WHERE active_sec < ?", (MIN_ACTIVE_SEC,))
         self._db.commit()
@@ -297,6 +346,17 @@ class Store:
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+    def _restatus(self) -> None:
+        cur = self._db.execute("SELECT uid, level, job, map_name, status FROM records")
+        cols = [d[0] for d in cur.description]
+        changes = []
+        for values in cur.fetchall():
+            row = dict(zip(cols, values))
+            status = status_of(row, self.names)
+            if status != row["status"]:
+                changes.append((status, row["uid"]))
+        self._db.executemany("UPDATE records SET status = ? WHERE uid = ?", changes)
 
     def _check_room(self) -> None:
         if self.path == ":memory:":
@@ -308,8 +368,8 @@ class Store:
             raise Full("磁碟空間不足")
 
     def add(self, raws: list, ip: str, now_ms: int | None = None, *,
-            owner: str | None = None) -> tuple[list[str], list[dict]]:
-        """存一批紀錄。回 (收下的 uid, 被拒絕的 {uid, reason})；已經有的 uid 也算收下。
+            owner: str | None = None) -> tuple[list[str], list[dict], list[dict]]:
+        """存一批紀錄。回 (收下的 uid, 被拒絕的 {uid, reason}, 收下但不算排行榜的 {uid, reason})；已經有的 uid 也算收下。
 
         owner 是上傳的瀏覽器（金鑰的雜湊）。已經有、但還沒記主的紀錄（這個功能上線前收的）也歸它；
         已經有主的不改，先傳的人是主。
@@ -317,6 +377,7 @@ class Store:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
         accepted: list[str] = []
         rejected: list[dict] = []
+        uncounted: list[dict] = []
         rows: list[dict] = []
         for raw in raws:
             try:
@@ -328,16 +389,19 @@ class Store:
             row["ip"] = ip
             row["received_at"] = now_ms
             row["owner"] = owner
+            row["status"] = status_of(row, self.names)
             rows.append(row)
             accepted.append(row["uid"])
+            if row["status"]:
+                uncounted.append({"uid": row["uid"], "reason": row["status"]})
         if rows:
             with self._lock:
                 self._check_room()
                 self._db.executemany(
                     "INSERT INTO records (uid, character, job, level, map_id, map_name, start_at, end_at,"
-                    " cum_net, active_sec, idle_sec, ip, received_at, owner)"
+                    " cum_net, active_sec, idle_sec, ip, received_at, owner, status)"
                     " VALUES (:uid, :character, :job, :level, :map_id, :map_name, :start_at, :end_at,"
-                    " :cum_net, :active_sec, :idle_sec, :ip, :received_at, :owner)"
+                    " :cum_net, :active_sec, :idle_sec, :ip, :received_at, :owner, :status)"
                     " ON CONFLICT (uid) DO NOTHING",
                     rows,
                 )
@@ -348,7 +412,7 @@ class Store:
                     )
                 self._db.commit()
                 self._boards.clear()
-        return accepted, rejected
+        return accepted, rejected, uncounted
 
     def add_glyphs(self, raws: list, ip: str, now_ms: int | None = None, *,
                    owner: str | None = None) -> tuple[int, int]:
@@ -408,12 +472,13 @@ class Store:
                 " WHERE r.owner = ? ORDER BY r.character", (owner,)).fetchall()
         return [{"character": c, "look": json.loads(look) if look else None} for c, look in rows]
 
-    def count(self) -> int:
+    def count(self, *, counted: bool = False) -> int:
         with self._lock:
-            return self._db.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+            where = " WHERE status = ''" if counted else ""
+            return self._db.execute(f"SELECT COUNT(*) FROM records{where}").fetchone()[0]
 
     def boards(self, days: int | None = None, limit: int = 50, now_ms: int | None = None) -> dict:
-        """三個榜，每個角色一列。days 給了就只算結束時間在最近這幾天內的紀錄。"""
+        """三個榜，每個角色一列。days 給了就只算結束時間在最近這幾天內的紀錄。不算數的紀錄（status 不是空的）不看。"""
         now = time.monotonic()
         key = (days, limit)
         with self._lock:
@@ -423,24 +488,24 @@ class Store:
             now_ms = int(time.time() * 1000) if now_ms is None else now_ms
             since = now_ms - days * DAY_MS if days else 0
             # 職業取該角色最近一筆有讀到職業的（轉職後名字不變、職業會變）
-            job = ("(SELECT job FROM records j WHERE j.character = r.character AND j.job <> ''"
+            job = ("(SELECT job FROM records j WHERE j.character = r.character AND j.job <> '' AND j.status = ''"
                    " ORDER BY j.end_at DESC LIMIT 1)")
             exp = self._db.execute(
                 f"SELECT character, {job}, MAX(level), SUM(cum_net) AS total, SUM(active_sec), COUNT(*)"
-                " FROM records r WHERE end_at >= ? GROUP BY character ORDER BY total DESC, character LIMIT ?",
+                " FROM records r WHERE end_at >= ? AND status = '' GROUP BY character ORDER BY total DESC, character LIMIT ?",
                 (since, limit),
             ).fetchall()
             # 只有一個 MAX() 時，SQLite 保證沒聚合的欄位取自最大值那一列，所以等級、地圖是那一筆紀錄的
             rate = self._db.execute(
                 "SELECT character, job, level, map_name, MAX(cum_net * 3600.0 / active_sec) AS best,"
                 " active_sec, end_at"
-                " FROM records r WHERE end_at >= ?"
+                " FROM records r WHERE end_at >= ? AND status = ''"
                 " GROUP BY character ORDER BY best DESC, character LIMIT ?",
                 (since, limit),
             ).fetchall()
             level = self._db.execute(
                 f"SELECT character, {job}, MAX(level) AS top, MIN(end_at)"
-                " FROM records r WHERE end_at >= ? AND level IS NOT NULL"
+                " FROM records r WHERE end_at >= ? AND status = ''"
                 " GROUP BY character ORDER BY top DESC, character LIMIT ?",
                 (since, limit),
             ).fetchall()
@@ -470,7 +535,7 @@ class Store:
                  limit: int = 100, now_ms: int | None = None) -> dict:
         """練功榜：同一張地圖、同一個職業、同一個等級區間的紀錄合起來，總經驗 ÷ 總活躍時間，效率高的在前。
 
-        地圖用名字分（同一張圖的像素指紋可能不只一個）；沒讀到地圖、職業或等級的紀錄不算。
+        地圖用名字分（同一張圖的像素指紋可能不只一個）；不算數的紀錄（沒讀到地圖、職業或等級、女神組隊任務等）不看。
         job、level 給了就只看那個職業、那個等級所在的區間。jobs、levels 是這段期間內有資料的選項，給網頁做篩選。
         """
         now = time.monotonic()
@@ -481,7 +546,7 @@ class Store:
                 return hit[1]
             now_ms = int(time.time() * 1000) if now_ms is None else now_ms
             since = now_ms - days * DAY_MS if days else 0
-            base = "end_at >= ? AND map_name <> '' AND job <> '' AND level IS NOT NULL"
+            base = "end_at >= ? AND status = ''"
             band = f"(level - 1) / {LEVEL_BAND}"
             where, args = base, [since]
             if job:
@@ -624,7 +689,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
         elif url.path == "/api/health":
-            self._json(200, {"ok": True, "records": self.store.count()})
+            self._json(200, {"ok": True, "records": self.store.count(), "counted": self.store.count(counted=True)})
         elif url.path == "/api/leaderboard":
             query = parse_qs(url.query)
             try:
@@ -696,11 +761,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, f"records 要是 1 到 {MAX_BATCH} 筆的陣列")
                 return
             try:
-                accepted, rejected = self.store.add(records, ip, owner=owner)
+                accepted, rejected, uncounted = self.store.add(records, ip, owner=owner)
             except Full as err:
                 self._error(507, str(err))
                 return
-            self._json(200, {"accepted": accepted, "rejected": rejected})
+            self._json(200, {"accepted": accepted, "rejected": rejected, "uncounted": uncounted})
         elif path == "/api/glyphs":
             glyphs = data.get("glyphs")
             if not isinstance(glyphs, list) or not 0 < len(glyphs) <= MAX_GLYPHS:
@@ -758,11 +823,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1", help="監聽位址；要讓區網連就給 0.0.0.0（預設只給本機）")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--db", default=str(Path(__file__).resolve().parent / "data" / "records.db"))
+    parser.add_argument("--names", default=str(NAMES_PATH), help="合法職業與地圖清單（scripts/export_server_names.py 產生）")
     args = parser.parse_args(argv)
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
-    store = Store(args.db)
+    store = Store(args.db, names=Names.load(args.names))
     server = make_server(args.host, args.port, store)
-    print(f"listening on http://{args.host}:{args.port}  db={args.db}  records={store.count()}", flush=True)
+    print(f"listening on http://{args.host}:{args.port}  db={args.db}  records={store.count()} counted={store.count(counted=True)}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -989,7 +989,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.43.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.44.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1394,9 +1394,6 @@
   <h3>一般設定</h3>
   <label class="field"><span>每幾秒截圖一次</span><input type="number" id="set-interval" min="1" max="10" step="1" required> 秒</label>
   <label class="field"><span>經驗停多久算閒置</span><input type="number" id="set-idle" min="0" max="600" step="1" required> 秒</label>
-  <div class="field" id="set-upload-row" hidden title="開著時，每次開啟網頁與每次儲存紀錄，歷史紀錄（角色、職業、等級、地圖、時間、經驗）都會連同你的 IP 自動傳到排行榜的伺服器；讀不到角色名字的不傳。關掉就不再傳。已經傳上去的會留在排行榜上，關掉開關或在這裡刪掉紀錄都不會把它拿下來。開著時也會回報辨識程式靠文字辨識新學會的數字字形（楓幣、等級的 0～9 長相、當時讀到的數字與畫面大小），用來改進內建字形">
-    <span>上傳練功紀錄</span><label class="switch"><input type="checkbox" id="set-upload"><i></i>開啟</label>
-  </div>
   <h3>神聖祈禱（掛7）設定</h3>
   <div class="field" title="每格都要到畫面右上角找祈禱圖示；電腦比較吃力或沒在用祈禱時可以關掉，按鈕也會一起藏起來">
     <span>辨識神聖祈禱</span><label class="switch"><input type="checkbox" id="set-prayer"><i></i>開啟</label>
@@ -1420,10 +1417,6 @@
     <output id="set-volume-val"></output>
   </div>
   <label class="field"><span>警示時長</span><input type="number" id="set-alert" min="1" max="30" step="1" required> 秒</label>
-  <div class="field" title="工具會留著最近 2 分鐘畫面右上角 buff 那一排的截圖，連同每一格讀到的秒數；按下去存成一張圖">
-    <span>倒數不準時回報</span><button id="set-sample" class="secondary">匯出樣本</button>
-  </div>
-  <p class="note" id="set-sample-note"></p>
   </div>
   <div class="btns">
     <button id="set-default" class="secondary lead">恢復預設</button>
@@ -1448,7 +1441,7 @@
 <dialog id="settle-dlg">
   <h2>本次修練紀錄</h2>
   <p>確認要把這次的紀錄存進歷史嗎？</p>
-  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；上傳後在這裡刪掉紀錄，排行榜上的不會跟著刪。不想上傳可以到「設定」關掉「上傳練功紀錄」。</p>
+  <p class="note" id="dlg-upload" hidden>儲存後，讀得到角色名字的紀錄（角色、職業、等級、地圖、時間、經驗）會連同你的 IP 自動上傳到排行榜；上傳後在這裡刪掉紀錄，排行榜上的不會跟著刪。女神組隊任務的地圖、讀不到地圖名稱、等級或職業的紀錄會上傳，但不算進排行榜。</p>
   <div class="hist-wrap"><table class="hist"><thead><tr id="dlg-head"></tr></thead><tbody id="dlg-body"></tbody></table></div>
   <p class="note" id="dlg-short" hidden></p>
   <div class="btns">
@@ -1469,7 +1462,6 @@ const DEFAULT_SETTINGS = {
   flashOn: true, flashColor: "#fff200", soundOn: true, sound: "three-tone", volume: 80,
   prayerOn: true,           // 關掉就完全不找祈禱圖示，省效能
   prayerAlertOn: true,      // 祈禱鈕切換；不在設定對話框裡
-  uploadOn: true,           // 開頁與儲存時自動把歷史紀錄上傳排行榜；沒設後端網址（SYNC_API）時這一項沒有作用
 };
 // 警示時長的上限是警示倒數，另外在 normalizeSettings 裡夾。
 const SETTING_LIMITS = { intervalSec: [1, 10], idleSec: [0, 600], warnSec: [1, 30], alertSec: [1, 30], volume: [0, 100] };
@@ -1705,7 +1697,6 @@ async function share(media = navigator.mediaDevices) {
   track.addEventListener("ended", () => stopAndSettle(true));
   const settings = track.getSettings();
   shareSettings = settings;
-  prayerSampleRect = null;      // 換了分享的視窗，上次的圖示位置不能沿用
   sourceW = sourceH = 0;        // 下一格一定重新判斷畫面有沒有被放大
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
@@ -1813,7 +1804,6 @@ function tick() {
   } else {
     frameCtx.drawImage(video, 0, 0, w, h);
   }
-  frameCapturedAt = Date.now();
   const image = frameCtx.getImageData(0, 0, fw, fh);
 
   let out;
@@ -2018,7 +2008,8 @@ function renderHistory() {
   const waiting = records.filter((r) => r.uid && !r.sync && canUpload(r)).length;
   const sent = records.filter((r) => r.sync === "ok").length;
   let where = "只存在這個瀏覽器";
-  if (uploadOn) where = `存在這個瀏覽器，另外自動上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}`;
+  const off = records.filter((r) => r.sync === "ok" && r.offBoard).length;
+  if (uploadOn) where = `存在這個瀏覽器，另外自動上傳排行榜${waiting ? `（${waiting} 段待上傳）` : ""}${off ? `；其中 ${off} 段不算排行榜（女神組隊任務、沒讀到地圖、等級或職業）` : ""}`;
   else if (sent) where = `存在這個瀏覽器，其中 ${sent} 段已上傳排行榜`;
   $("hist-note").textContent = rows.length
     ? `共 ${records.length} 段，${where}。`
@@ -2056,12 +2047,13 @@ buildHistoryHead();
 // ---------------------------------------------------------------- 上傳到排行榜
 // 歷史紀錄另外傳一份到後端（server/app.py）。後端只收、只算排行榜：沒有登入，也不能把紀錄抓回來，
 // 所以這不是備份，歷史紀錄還是以這個瀏覽器存的為準。
-// 開著上傳時，每次開頁把手上的紀錄整批傳一次（這個功能上線前存的、關著上傳時結算的也一起），儲存紀錄時再傳新的那幾筆。
+// 一律上傳（v0.44.0 起沒有開關）：每次開頁把手上的紀錄整批傳一次（這個功能上線前存的、以前關著上傳時結算的也一起），儲存紀錄時再傳新的那幾筆。
 // 後端只靠 uid 認重複，同一個 uid 再傳不會多存一筆。傳上去的就留在後端：在這裡刪掉紀錄只是這個瀏覽器不再存，排行榜上的不會跟著刪。
 // uid 是從紀錄內容算出來的（recordUid），不是亂數：同一筆不管第幾次開頁、在哪個分頁算，都是同一個。
 // 讀不到角色名字的排行榜用不到，不配 uid、不上傳，只留在這個瀏覽器。活躍不滿 10 分鐘的段連歷史都不進（HIST_MIN_SEC），後端也不收。
 // sync 是上傳結果："ok" 後端收下了，"no" 後端不收（數值不合理，重傳也沒用）；沒有就是還沒傳成功，之後會再試。
-// 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著，設定裡的開關也不會出現
+// 後端收下但不算排行榜的（女神組隊任務的地圖、沒有地圖名稱、等級或職業不在清單裡）照樣是 "ok"，原因記在 offBoard。
+// 後端網址（家裡的 Raspberry Pi，經 Tailscale Funnel 對外）；改成空字串就是整個功能關著
 const SYNC_API = "https://prisondiary.tailcfc41e.ts.net";
 const SYNC_API_KEY = "mapleexp.syncApi";         // 本機開發用：網址加 ?api=http://… 指到自己的後端（?api= 取消），記在這台瀏覽器
 const SYNC_KEY_KEY = "mapleexp.syncKey";         // 這個瀏覽器的金鑰：自己產生的一串亂數，上傳時帶著，後端靠它認「這些紀錄是同一個瀏覽器傳的」
@@ -2076,7 +2068,7 @@ const syncApi = (() => {
     return localStorage.getItem(SYNC_API_KEY) || SYNC_API;
   } catch { return SYNC_API; }
 })().replace(/\/+$/, "");
-let uploadOn = false;      // 後端網址有設、設定也開著才是 true；設定在後面才載入，載入後由 setUpload 更新
+const uploadOn = Boolean(syncApi);      // 後端網址有設就上傳，沒有開關
 let syncBusy = false;
 let syncFailed = false;    // 上一次失敗了；只在第一次失敗時寫一行 log，後端停機時不會每五分鐘洗一次
 let syncTimer = null;
@@ -2129,12 +2121,11 @@ function ensureUids(list) {
   return added;
 }
 
-$("set-upload-row").hidden = !syncApi;
 // v0.33 以前刪紀錄會叫後端一起刪，還沒送出去的待刪清單記在這個 key；現在不刪了，清單直接丟掉
 try { localStorage.removeItem("mapleexp.syncDeletes"); } catch { /* 清不掉也無妨，沒有人會再讀它 */ }
 
-function setUpload(on) {
-  uploadOn = Boolean(syncApi) && on;
+// 開頁時呼叫一次：配好 uid、把手上的紀錄與字形送出去
+function startSync() {
   if (uploadOn && ensureUids(records)) writeRecords();    // 存不了也沒關係，下次算出來的 uid 還是同一個
   renderHistory();
   syncRecords();
@@ -2171,11 +2162,19 @@ async function syncRecords() {
       const out = await res.json();
       const ok = new Set(out.accepted);
       const no = new Map((out.rejected || []).map((x) => [x.uid, x.reason]));
+      const off = new Map((out.uncounted || []).map((x) => [x.uid, x.reason]));
       let fresh = 0, refused = 0;      // 這次才第一次收下的、這次被拒絕的；之前傳過的重傳不算，也不用重寫存檔
+      let changed = false;             // 不算排行榜的原因有變（後端的清單改了）
       for (const r of batch) {
         if (ok.has(r.uid)) {
           syncSeen.add(r.uid);
-          if (r.sync !== "ok") { r.sync = "ok"; fresh++; }
+          const why = off.get(r.uid);
+          if (r.sync !== "ok") {
+            r.sync = "ok";
+            fresh++;
+            if (why) log(`${r.character} 在 ${r.mapName || "（沒有地圖名稱）"} 的一段紀錄已上傳，但不算排行榜：${why}`);
+          }
+          if ((r.offBoard || undefined) !== why) { if (why) r.offBoard = why; else delete r.offBoard; changed = true; }
         } else if (no.has(r.uid)) {
           r.sync = "no";
           refused++;
@@ -2183,7 +2182,7 @@ async function syncRecords() {
         }
       }
       if (!batch.some((r) => syncSeen.has(r.uid) || r.sync === "no")) throw new Error("後端的回應看不懂");
-      if (fresh || refused) { writeRecords(); renderHistory(); }
+      if (fresh || refused || changed) { writeRecords(); renderHistory(); }
       if (fresh) {
         log(`已上傳 ${fresh} 段紀錄到排行榜。`);
         added += fresh;
@@ -2433,7 +2432,6 @@ function render(out, elapsedMs) {
   renderMeso(out.meso);
   drawSpecimen("prayer", rois.prayer, prayerSpecimenText(out.prayer));
   updatePrayer(out.prayer);
-  recordPrayerSample(out);
 
   if (!out.state_key) {
     setState(out.state, "");
@@ -5591,7 +5589,7 @@ function loadSettings() {
 }
 
 let prefs = loadSettings();
-setUpload(prefs.uploadOn);      // 開著的話，開頁就把既有的歷史紀錄整批上傳一次
+startSync();      // 開頁就把既有的歷史紀錄整批上傳一次
 
 // 套用馬上生效：閒置門檻下一格就照新的算（已累計的不回頭改），分享中就用新間隔重排計時器。
 function applySettings(next) {
@@ -5602,7 +5600,6 @@ function applySettings(next) {
   log(`設定：每 ${prefs.intervalSec} 秒截圖一次，經驗停 ${prefs.idleSec} 秒算閒置${prefs.idleSec ? "" : "（不判定）"}。`);
   if (prefs.prayerOn !== prayerOn) setPrayer(prefs.prayerOn);
   renderPrayer();
-  setUpload(prefs.uploadOn);
 }
 
 function fillSettings(values) {
@@ -5616,7 +5613,6 @@ function fillSettings(values) {
   $("set-sound-pick").value = values.sound;
   $("set-volume").value = values.volume;
   $("set-prayer").checked = values.prayerOn;
-  $("set-upload").checked = values.uploadOn;
   syncSettingsForm();
 }
 
@@ -5647,7 +5643,6 @@ $("set-preview").addEventListener("click", () => playSound($("set-sound-pick").v
 
 $("settings").addEventListener("click", () => {
   fillSettings(prefs);
-  syncSampleNote();
   $("settings-dlg").showModal();
 });
 $("set-default").addEventListener("click", () => fillSettings(DEFAULT_SETTINGS));
@@ -5665,7 +5660,6 @@ $("set-save").addEventListener("click", () => {
     volume: $("set-volume").value,
     prayerOn: $("set-prayer").checked,
     prayerAlertOn: prefs.prayerAlertOn,
-    uploadOn: $("set-upload").checked,
   }));
   $("settings-dlg").close();
 });
@@ -5698,7 +5692,6 @@ function setPrayer(on) {
   prayerInfo = { status: on ? "searching" : "off", remaining: null, at: performance.now() };
   prayerAlertAt = null;
   prayerSoundKey = "";
-  if (!on) { prayerSamples = []; prayerSampleRect = null; }
   if (session) session.set_prayer(on);
   if (on && !prayerTimer) prayerTimer = setInterval(renderPrayer, PRAYER_FRAME_MS);
   if (!on && prayerTimer) { clearInterval(prayerTimer); prayerTimer = null; }
@@ -5777,155 +5770,6 @@ function renderPrayer() {
   }
   doc.body.style.background = st.flash && prefs.flashOn ? prefs.flashColor : "";
 }
-
-// ---------------------------------------------------------------- 祈禱樣本（倒數不準時回報用）
-// 每格把 buff 那一排的原始像素留下來，連同這一格讀到什麼、按鈕上顯示什麼，只留最近兩分鐘。
-// 覺得不準時到設定按「匯出樣本」，下載一張 PNG：每格一列，左邊是文字、右邊是沒放大也沒壓縮的像素；
-// 同一份資料另外以 JSON 放在 PNG 的 tEXt 區塊（關鍵字 prayer-samples），可以直接拿來重播、當測試資料。
-// 這次分享看到過圖示，就只存那一列附近；還沒看到過就存畫面右上角一大塊，
-// 「明明有祈禱卻找不到圖示」才查得出原因，身上沒有祈禱也能拿別的技能錄倒數數字。
-const SAMPLE_KEEP_MS = 120000;
-const SAMPLE_MAX = 130;         // 最快一秒一格，兩分鐘不會超過這個數；時鐘被往回調時靠這個擋住
-const SAMPLE_NEAR = { width: 352, height: 48, left: 160, above: 9 };    // 圖示 30×30，左右各留五格 buff
-const SAMPLE_BLIND = { width: 640, height: 112 };       // 視窗標題列、上下黑邊底下的那一排都還在裡面
-const SAMPLE_LABEL_W = 360;
-const SAMPLE_HEAD_H = 76;
-let frameCapturedAt = 0;        // 這一格畫面是什麼時候截的；辨識要花時間（偶爾超過一秒），樣本要記截圖當下
-let prayerSamples = [];         // { image: ImageData, meta }，舊的在前
-let prayerSampleRect = null;    // 這次分享最後一次看到圖示的位置；被擋住的那幾格照樣存同一塊
-
-function recordPrayerSample(out) {
-  if (!prayerOn || !out.prayer || !frame.width || !frame.height) return;
-  const fw = frame.width, fh = frame.height;
-  const last = prayerSamples[prayerSamples.length - 1];
-  if (last && (last.meta.frame[0] !== fw || last.meta.frame[1] !== fh)) prayerSampleRect = null;   // 視窗大小變了
-  const icon = out.rois?.prayer || null;
-  if (icon) prayerSampleRect = icon;
-  const near = prayerSampleRect;
-  const w = Math.min(fw, near ? SAMPLE_NEAR.width : SAMPLE_BLIND.width);
-  const h = Math.min(fh, near ? SAMPLE_NEAR.height : SAMPLE_BLIND.height);
-  const x = near ? Math.max(0, Math.min(fw - w, near[0] - SAMPLE_NEAR.left)) : fw - w;
-  const y = near ? Math.max(0, Math.min(fh - h, near[1] - SAMPLE_NEAR.above)) : 0;
-  const p = out.prayer;
-  const now = frameCapturedAt || Date.now();
-  prayerSamples.push({
-    image: frameCtx.getImageData(x, y, w, h),
-    meta: {
-      at: now, x, y, w, h, frame: [fw, fh], icon,
-      status: p.status,
-      remaining: p.remaining == null ? null : Math.round(p.remaining * 100) / 100,
-      shown: prayerText(p.status, p.remaining == null ? null : Math.floor(p.remaining)),
-      read: p.read || null,
-    },
-  });
-  while (prayerSamples.length > SAMPLE_MAX || now - prayerSamples[0].meta.at > SAMPLE_KEEP_MS) prayerSamples.shift();
-  if ($("settings-dlg").open) syncSampleNote();
-}
-
-function syncSampleNote() {
-  const n = prayerSamples.length;
-  $("set-sample").disabled = !n;
-  $("set-sample-note").textContent = n
-    ? `目前留著 ${n} 格（約 ${Math.round((prayerSamples[n - 1].meta.at - prayerSamples[0].meta.at) / 1000)} 秒）。覺得不準時馬上按，把下載的圖用「原檔」傳給作者。圖裡只有畫面右上角 buff 那一排，傳之前可以先打開看。`
-    : "分享畫面後會自動留著最近 2 分鐘 buff 那一排的截圖。覺得倒數不準時回來這裡按匯出。";
-}
-
-function sampleLabel(meta) {
-  const time = new Date(meta.at).toLocaleTimeString("zh-Hant", { hour12: false }) + "." + String(meta.at % 1000).padStart(3, "0");
-  const r = meta.read;
-  const kind = { seconds: "黃色秒數", minutes: "白色分鐘", blank: "沒有數字", unreadable: "讀不出來" };
-  const read = !r ? "沒找到圖示"
-    : `圖示 ${r.score}，${kind[r.kind] || r.kind}${r.value == null ? "" : ` ${r.value}`}（像 ${r.match}，領先 ${r.margin}）`;
-  return [
-    `${time}  顯示 ${meta.shown}`,
-    `狀態 ${meta.status}${meta.remaining == null ? "" : `  剩 ${meta.remaining.toFixed(2)}`}`,
-    read,
-  ];
-}
-
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) {
-    let c = (crc ^ bytes[i]) & 0xff;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    crc = (crc >>> 8) ^ c;
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-// 在 PNG 最後的 IEND 區塊前面插一個 tEXt 區塊。text 只能是 ASCII。
-async function pngWithText(blob, keyword, text) {
-  const png = new Uint8Array(await blob.arrayBuffer());
-  const end = png.length - 12;
-  if (end < 8 || String.fromCharCode(...png.subarray(end + 4, end + 8)) !== "IEND") return blob;
-  const body = new TextEncoder().encode(`tEXt${keyword}\0${text}`);      // 區塊類型 + 資料，CRC 算這一段
-  const chunk = new Uint8Array(body.length + 8);
-  const view = new DataView(chunk.buffer);
-  view.setUint32(0, body.length - 4);
-  chunk.set(body, 4);
-  view.setUint32(body.length + 4, crc32(body));
-  return new Blob([png.subarray(0, end), chunk, png.subarray(end)], { type: "image/png" });
-}
-
-async function exportPrayerSamples() {
-  const rows = prayerSamples.slice();
-  if (!rows.length) return;
-  let bottom = SAMPLE_HEAD_H;
-  const tops = rows.map((row) => { const top = bottom; bottom += row.meta.h + 1; return top; });
-  const sheet = document.createElement("canvas");
-  sheet.width = SAMPLE_LABEL_W + Math.max(...rows.map((row) => row.meta.w));
-  sheet.height = bottom;
-  const ctx = sheet.getContext("2d");
-  ctx.fillStyle = "#14181d";
-  ctx.fillRect(0, 0, sheet.width, sheet.height);
-  ctx.font = '12px Consolas, "Microsoft JhengHei", monospace';
-  ctx.textBaseline = "top";
-  const s = shareSettings || {};
-  const newest = rows[rows.length - 1].meta;
-  const stamp = new Date(newest.at);
-  const version = $("app-version").textContent;
-  const head = [
-    `服刑日誌 ${version} 神聖祈禱樣本  ${stamp.toLocaleString("zh-Hant", { hour12: false })}  共 ${rows.length} 格`,
-    `串流 ${s.width ?? "?"}×${s.height ?? "?"} ${s.displaySurface || "?"}  畫面 ${newest.frame.join("×")}  每 ${prefs.intervalSec} 秒一格  警示倒數 ${prefs.warnSec} 秒`,
-    "每一列是一格：左邊是當時顯示與讀到的內容，右邊是那一格的原始像素（沒有放大）。",
-    "請傳這個檔案的原檔，不要用會壓縮圖片的方式傳。",
-  ];
-  ctx.fillStyle = "#e6e6e6";
-  head.forEach((line, i) => ctx.fillText(line, 6, 6 + i * 16));
-  rows.forEach((row, i) => {
-    ctx.putImageData(row.image, SAMPLE_LABEL_W, tops[i]);
-    ctx.fillStyle = row.meta.read ? "#e6e6e6" : "#ff9a8a";
-    sampleLabel(row.meta).forEach((line, k) => ctx.fillText(line, 6, tops[i] + 3 + k * 14));
-  });
-  const info = {
-    app: version,
-    exportedAt: new Date().toISOString(),
-    userAgent: navigator.userAgent,
-    devicePixelRatio: window.devicePixelRatio,
-    stream: { width: s.width ?? null, height: s.height ?? null, frameRate: s.frameRate ?? null, displaySurface: s.displaySurface ?? null },
-    settings: { intervalSec: prefs.intervalSec, warnSec: prefs.warnSec, alertSec: prefs.alertSec },
-    labelWidth: SAMPLE_LABEL_W,
-    samples: rows.map((row, i) => ({ ...row.meta, sheetY: tops[i] })),
-  };
-  const ascii = JSON.stringify(info).replace(/[^\x20-\x7e]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
-  const plain = await new Promise((resolve) => sheet.toBlob(resolve, "image/png"));
-  if (!plain) throw new Error("瀏覽器沒有產生圖片");
-  const blob = await pngWithText(plain, "prayer-samples", ascii);
-  const pad = (n) => String(n).padStart(2, "0");
-  const name = `prayer-sample-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}`
-    + `-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.png`;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  log(`已匯出祈禱樣本 ${name}：${rows.length} 格。請傳原檔，不要用會壓縮圖片的方式傳。`);
-  return blob;
-}
-
-$("set-sample").addEventListener("click", () => {
-  exportPrayerSamples().catch((err) => log("匯出祈禱樣本失敗：" + err.message));
-});
 
 // 只存這一項，不經過 applySettings（那會重排截圖計時器、寫一行設定紀錄）。
 $("prayer").addEventListener("click", () => {

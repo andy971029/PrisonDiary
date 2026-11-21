@@ -18,11 +18,13 @@ WEB = ROOT / "web"
 VERSION_PY = ROOT / "src" / "mapleexp" / "__init__.py"
 INDEX = WEB / "index.html"
 # 順序不能換：道具反查怪物圖鑑，世界圖鑑要怪物與道具，世界地圖要地圖圖鑑
-EXPORTS = ["export_monsterbook", "export_itembook", "export_worldbook", "export_worldmap", "export_mapvocab", "export_avatar", "export_avatar_effects", "export_skillbook"]
+EXPORTS = ["export_monsterbook", "export_itembook", "export_worldbook", "export_worldmap", "export_mapvocab", "export_avatar", "export_avatar_effects", "export_skillbook", "export_server_names"]
 DATA = [
     "monsterbook.json", "itembook.json", "questbook.json", "npcbook.json", "mapbook.json", "worldmap.json", "mapvocab.json", "avatar.json", "avatar-effects.json", "skillbook.json",
     "mobs", "icons", "npcs", "minimaps", "worldmap", "avatar",
 ]
+# 後端的合法名稱清單：跟著地圖字庫、地圖圖鑑一起變，要跟 app.py 一起部署到主機
+SERVER_NAMES = "server/names.json"
 
 
 def counts(web: Path) -> dict[str, int]:
@@ -91,11 +93,13 @@ def publish(summary: list[str]) -> None:
     set_version(old, new)
     if git("status", "--porcelain", "--", "web/avatar.json", "web/avatar"):
         subprocess.run([sys.executable, str(ROOT / "scripts" / "publish_avatar.py")], cwd=ROOT, check=True)
-    git("add", "-A", "--", *[f"web/{name}" for name in DATA], "web/index.html", "src/mapleexp/__init__.py")
+    git("add", "-A", "--", *[f"web/{name}" for name in DATA], "web/index.html", "src/mapleexp/__init__.py", SERVER_NAMES)
     body = "\n".join(line.strip() for line in summary if "不變" not in line)
     git("commit", "-m", f"Data: refresh the books from the updated game client (v{new})\n\n{body}")
     subprocess.run(["git", "push", "origin", "main"], cwd=ROOT, check=True)
     print(f"\n已推送 v{new}，GitHub Actions 測試通過後會自動部署。")
+    if git("diff", "--name-only", "HEAD~1", "HEAD", "--", SERVER_NAMES):
+        print(f"{SERVER_NAMES} 有變：記得把它跟 app.py 一起複製到主機、重啟後端（README 的「排行榜後端」那一節），新地圖才算得進排行榜。")
 
 
 def main() -> int:
@@ -103,7 +107,7 @@ def main() -> int:
         print("目前不在 main，先切回 main 再更新。")
         return 1
     # 上次匯出沒發布留下的資料不算，重跑會覆蓋
-    dirty = git("status", "--short", "--untracked-files=no", "--", ".", *[f":!web/{name}" for name in DATA])
+    dirty = git("status", "--short", "--untracked-files=no", "--", ".", *[f":!web/{name}" for name in DATA], f":!{SERVER_NAMES}")
     if dirty:
         print("有還沒提交的修改，先提交或還原，免得跟圖鑑資料混在一起：\n" + dirty)
         return 1
