@@ -573,6 +573,38 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(post({"glyphs": [glyph()] * (app.MAX_GLYPHS + 1)})[0], 400)
         self.assertEqual(self.store._db.execute("SELECT COUNT(*) FROM glyphs").fetchone()[0], 2)
 
+    def test_rename_over_http(self):
+        """辨識讀錯名字，使用者修正：只改自己名下的紀錄，造型跟著搬，排行榜馬上看得到。"""
+        now = app.time.time() * 1000
+        post = lambda path, body: self.call("POST", path, body, {"Content-Type": "application/json"})   # noqa: E731
+        mine = [record(1, character="o媚如o", startAt=now - HOUR, endAt=now),
+                record(2, character=",卍米糕玄師寢", startAt=now - HOUR, endAt=now),
+                record(3, character="阿明", startAt=now - HOUR, endAt=now)]
+        self.assertEqual(post("/api/records", {"key": key(1), "records": mine})[0], 200)
+        theirs = [record(4, character="o媚如o", startAt=now - HOUR, endAt=now)]
+        self.assertEqual(post("/api/records", {"key": key(2), "records": theirs})[0], 200)
+        self.assertEqual(post("/api/looks", {"key": key(1), "character": "o媚如o", "look": LOOK})[0], 200)
+
+        status, _headers, raw = post("/api/records/rename", {"key": key(1), "from": ["o媚如o", "o媚媚o"], "to": " o婗婗o "})
+        self.assertEqual((status, json.loads(raw)), (200, {"renamed": 1}))
+        rows = dict(self.store._db.execute("SELECT uid, character FROM records").fetchall())
+        self.assertEqual(rows, {uid(1): "o婗婗o", uid(2): ",卍米糕玄師寢", uid(3): "阿明", uid(4): "o媚如o"})
+        board = json.loads(self.call("GET", "/api/leaderboard")[2])
+        self.assertIn("o婗婗o", [r["character"] for r in board["exp"]])
+        self.assertEqual(board["looks"], {"o婗婗o": LOOK})
+        # 沒有這個名字的紀錄：改了 0 筆，不算錯
+        self.assertEqual(json.loads(post("/api/records/rename", {"key": key(1), "from": ["不存在"], "to": "x"})[2]), {"renamed": 0})
+
+        bad = [
+            {"from": ["o媚如o"], "to": "x"}, {"key": "nope", "from": ["a"], "to": "b"},
+            {"key": key(1), "from": [], "to": "b"}, {"key": key(1), "from": "a", "to": "b"},
+            {"key": key(1), "from": ["a"] * (app.RENAME_MAX + 1), "to": "b"}, {"key": key(1), "from": ["a"], "to": ""},
+            {"key": key(1), "from": ["a"], "to": "x" * 25}, {"key": key(1), "from": [5], "to": "b"},
+            {"key": key(1), "from": ["b"], "to": "b"},
+        ]
+        for body in bad:
+            self.assertEqual(post("/api/records/rename", body)[0], 400, body)
+
     def test_looks_over_http(self):
         now = app.time.time() * 1000
         post = lambda path, body: self.call("POST", path, body, {"Content-Type": "application/json"})   # noqa: E731

@@ -31,6 +31,8 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
     POST   /api/records        {"records": [...]}，回 {"accepted": [uid], "rejected": [{uid, reason}], "uncounted": [{uid, reason}]}
                                rejected 是格式不對、沒存的；uncounted 是存了但不算排行榜的（也在 accepted 裡）
     POST   /api/records        同上，多帶 "key"（瀏覽器的金鑰）就把這批紀錄記在它名下；已經有、還沒主的紀錄也歸它
+    POST   /api/records/rename {"key", "from": [名字], "to": 名字}，把這把金鑰名下、角色叫 from 的紀錄改名成 to
+                               （辨識讀錯名字時，使用者在網頁上修正），回 {"renamed": 筆數}；造型跟著搬
     POST   /api/looks          {"key", "character", "look"}，設那個角色的造型；look 給 null 是拿掉。沒傳過那個角色的紀錄回 403
     POST   /api/looks/mine     {"key"}，回這把金鑰名下的角色與各自目前的造型 {"characters": [{character, look}]}
     GET    /api/leaderboard    ?days=7&limit=50，回三個個人榜（總經驗、最高效率、等級），looks 是榜上有設造型的角色各自的造型
@@ -195,6 +197,25 @@ def _text(raw: dict, key: str, limit: int, *, required: bool = False, multiline:
     if required and not value:
         raise Invalid(f"{key} 是空的")
     return value
+
+
+RENAME_MAX = 20     # 一次改名最多幾個舊名字
+
+
+def validate_rename(raw: dict) -> tuple[list[str], str]:
+    """改名請求：from 是 1 到 RENAME_MAX 個舊名字，to 是新名字（跟紀錄的 character 同一套規則）。"""
+    target = _text(raw, "to", 24, required=True)
+    sources = raw.get("from")
+    if not isinstance(sources, list) or not 0 < len(sources) <= RENAME_MAX:
+        raise Invalid(f"from 要是 1 到 {RENAME_MAX} 個名字")
+    names = []
+    for i, _ in enumerate(sources):
+        name = _text({"from": sources[i]}, "from", 24, required=True)
+        if name != target and name not in names:
+            names.append(name)
+    if not names:
+        raise Invalid("from 跟 to 一樣")
+    return names, target
 
 
 def _number(raw: dict, key: str, low: float, high: float) -> float:
@@ -576,6 +597,26 @@ class Store:
                 )
                 self._db.commit()
         return len(rows), rejected
+
+    def rename(self, owner: str, sources: list[str], target: str) -> int:
+        """這把金鑰名下、角色叫 sources 其中之一的紀錄改名成 target，回改了幾筆。
+
+        辨識把名字讀錯時（罕用字、多讀一個標點），使用者在網頁上修正，傳過的紀錄跟著改；
+        只動自己名下的，別人傳的同名紀錄不碰。舊名字的造型是這把金鑰設的、新名字還沒有造型，就一起搬過去。
+        """
+        marks = ",".join("?" * len(sources))
+        with self._lock:
+            n = self._db.execute(
+                f"UPDATE records SET character = ? WHERE owner = ? AND character IN ({marks})",
+                (target, owner, *sources)).rowcount
+            if n:
+                self._db.execute(
+                    f"UPDATE OR IGNORE looks SET character = ? WHERE owner = ? AND character IN ({marks})"
+                    " AND NOT EXISTS (SELECT 1 FROM looks WHERE character = ?)",
+                    (target, owner, *sources, target))
+                self._boards.clear()
+            self._db.commit()
+        return n
 
     def set_look(self, owner: str, character: str, look: dict | None, ip: str, now_ms: int | None = None) -> bool:
         """設（look 是 None 就拿掉）一個角色的造型。這把金鑰沒傳過那個角色的紀錄就不動，回 False。"""
@@ -1024,8 +1065,8 @@ class Handler(BaseHTTPRequestHandler):
         if ip is None:
             return
         path = urlsplit(self.path).path
-        if path not in ("/api/records", "/api/records/delete", "/api/looks", "/api/looks/mine", "/api/glyphs",
-                        "/api/snapshots", "/api/reports"):
+        if path not in ("/api/records", "/api/records/delete", "/api/records/rename", "/api/looks", "/api/looks/mine",
+                        "/api/glyphs", "/api/snapshots", "/api/reports"):
             self._drain(MAX_BODY)
             self._error(404, "沒有這個路徑")
             return
@@ -1101,6 +1142,13 @@ class Handler(BaseHTTPRequestHandler):
             if url:
                 threading.Thread(target=relay_to_discord, args=(url, code, snap, data["state"]), daemon=True).start()
             self._json(200, {"code": code, "relayed": bool(url)})
+        elif path == "/api/records/rename":
+            try:
+                sources, target = validate_rename(data)
+            except Invalid as err:
+                self._error(400, str(err))
+                return
+            self._json(200, {"renamed": self.store.rename(owner, sources, target)})
         elif path == "/api/looks/mine":
             self._json(200, {"characters": self.store.my_looks(owner)})
         else:

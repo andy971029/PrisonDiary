@@ -114,5 +114,92 @@ class TestBridgeView(unittest.TestCase):
         self.assertIsNone(session.reader)
 
 
+class TestNameFix(unittest.TestCase):
+    """使用者修正名字：同一塊名牌之後直接用修正的名字，OCR 讀成什麼都不管。
+
+    截圖上的角色名是 o婗婗o，Tesseract 不認得「婗」，三個倍率讀成 o媚媚o、o媚如o、o盡媚o。
+    """
+
+    WRONG = [["祭司", "祭司", "和 祭司"], ["o 媚 媚 o", "o 媚 如 o", "o 盡 媚 o"]]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = TemplateSet.load(builtin_templates_path())
+        cls.screen = scaled_screen()
+        session = bridge.WebSession(templates=cls.templates)
+        h, w = cls.screen.shape[:2]
+        session.feed_frame(rgba_bytes(cls.screen), w, h)
+        cls.small = scaling.resample(cls.screen, scaling.View(**json.loads(session.tick())["view"]))
+
+    def read(self, session, screen) -> str:
+        """餵到掛出角色名的 OCR，回那件的 id。"""
+        h, w = screen.shape[:2]
+        for _ in range(4):
+            session.feed_frame(rgba_bytes(screen), w, h)
+            for req in json.loads(session.tick()).get("ocr") or []:
+                if req["id"].startswith("character:"):
+                    return req["id"]
+        self.fail("沒有掛角色名的 OCR")
+
+    def session(self) -> bridge.WebSession:
+        session = bridge.WebSession(templates=self.templates)
+        session.set_ocr_ready(True)
+        return session
+
+    def test_wrong_read_then_fix_applies_at_once(self):
+        session = self.session()
+        rid = self.read(session, self.small)
+        session.ocr_result(rid, json.dumps(self.WRONG))
+        self.assertEqual(session.character, "o媚媚o")
+        self.assertEqual(session.job, "祭司")
+        sig = json.loads(session.name_signature())
+        self.assertEqual(session.set_name_fixes(json.dumps([{**sig, "name": "o婗婗o"}])), 1)
+        self.assertEqual(session.character, "o婗婗o")
+
+    def test_fix_survives_noise_and_beats_ocr(self):
+        first = self.session()
+        self.read(first, self.small)
+        sig = json.loads(first.name_signature())
+        noisy = self.small.copy()
+        rng = np.random.default_rng(7)
+        noisy[..., :3] = np.clip(noisy[..., :3].astype(int) + rng.integers(-3, 4, noisy[..., :3].shape), 0, 255)
+        session = self.session()
+        session.set_name_fixes(json.dumps([{**sig, "name": "o婗婗o"}]))
+        rid = self.read(session, noisy)
+        session.ocr_result(rid, json.dumps(self.WRONG))
+        self.assertEqual(session.character, "o婗婗o")
+        self.assertEqual(session.job, "祭司")
+
+    def test_other_names_do_not_match(self):
+        session = self.session()
+        self.read(session, self.small)
+        mask = session._name_mask
+        self.assertTrue(bridge.masks_match(mask, mask))
+        other = mask.copy()
+        other[:, 8:20] = other[:, 8:20][:, ::-1]          # 換掉一個字
+        self.assertFalse(bridge.masks_match(mask, other))
+        self.assertFalse(bridge.masks_match(mask, mask[:, 9:]))   # 少了開頭的 o
+        packed = bridge.pack_mask(mask)
+        self.assertTrue((bridge.unpack_mask(packed) == mask).all())
+        self.assertIsNone(bridge.unpack_mask({"w": 5, "h": 5, "bits": "zz"}))
+        self.assertIsNone(bridge.unpack_mask({"w": 999, "h": 5, "bits": "00"}))
+
+    def test_bad_fixes_are_ignored(self):
+        session = self.session()
+        self.assertEqual(session.set_name_fixes(json.dumps([{"w": 1}, {"w": 2, "h": 1, "bits": "c0", "name": " , "}])), 0)
+
+
+class TestNameVote(unittest.TestCase):
+    def test_punctuation_is_dropped_and_scales_vote(self):
+        self.assertEqual(bridge.vote_name([",卍米糕玄師寢", "卍米糕玄師卍", "卍 米糕 玄師 卍"]), "卍米糕玄師卍")
+
+    def test_same_length_reads_vote_per_character(self):
+        self.assertEqual(bridge.vote_name(["卍米糕玄師寢", "卍米糕玄帥卍", "卍米糕玄師卍"]), "卍米糕玄師卍")
+
+    def test_falls_back_to_longest(self):
+        self.assertEqual(bridge.vote_name(["卍弘法艾德卍", "卍弘法艾", ""]), "卍弘法艾德卍")
+        self.assertEqual(bridge.vote_name(["", " 。"]), "")
+
+
 if __name__ == "__main__":
     unittest.main()

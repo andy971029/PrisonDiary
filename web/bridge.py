@@ -25,6 +25,8 @@ import difflib
 import hashlib
 import json
 import time
+import unicodedata
+from collections import Counter
 
 import numpy as np
 
@@ -79,6 +81,10 @@ CHARACTER_VERIFY_SEC = 6.0
 # 兩次讀到的名字相似度低於這個值才算換角色。同一隻角色換倍率重讀，偶爾會錯一個字，
 # 不能因為這樣就把統計歸零。
 CHARACTER_SAME_RATIO = 0.5
+# 使用者修正過的名牌：這次的名字墨跡跟存下來的比，不一樣的像素不超過墨跡的這個比例就算同一塊名牌。
+# 串流壓縮會讓字的邊緣差一兩個像素，同一個名字實測遠低於這個數；不同名字（哪怕只差一個字）遠高於它。
+NAME_FIX_TOLERANCE = 0.12
+NAME_FIX_MAX = 20
 # 等級方塊只有 22x13，要多個倍率互相印證。實測 Tesseract 的英文模型在 3/4/6/8 倍
 # 都讀出 45，沒有分歧；中文模型讀同一塊則 4 個倍率只有 2 個有回答，所以數字走英文模型。
 LEVEL_OCR_SCALES = (3, 4, 6, 8)
@@ -189,6 +195,9 @@ class WebSession:
         self._character_checked_at = -CHARACTER_RECHECK_SEC
         self._verify_until: float | None = None
         self._pause_verified = False
+        # 使用者修正過的名字：[(名字那一行的墨跡, 正確的名字)]，名牌長得一樣就直接用，不靠 OCR
+        self._name_fixes: list[tuple[np.ndarray, str]] = []
+        self._name_mask: np.ndarray | None = None      # 最近一次讀的名字那一行的墨跡
         self._notices: list[str] = []
         self._ocr_outbox: list[dict] = []
         # 靠 OCR 新學會的字形（楓幣、等級），頁面收去回報後端：收集各台電腦學到的長相，之後整理進內建字形。
@@ -280,6 +289,35 @@ class WebSession:
         """JS 端的 OCR 引擎載好了才開始掛號；沒載好就掛的號沒人處理，只會卡在待辦裡。"""
         self._ocr_ready = bool(ready)
 
+    def set_name_fixes(self, fixes_json: str) -> int:
+        """載入使用者修正過的名字（``[{w, h, bits, name}]``，見 :func:`pack_mask`），回傳幾筆。
+
+        現在畫面上的名牌就是其中一筆的話，馬上改用那個名字（同一隻角色改名，不重算統計）。
+        """
+        fixes = []
+        for item in json.loads(fixes_json or "[]")[-NAME_FIX_MAX:]:
+            mask = unpack_mask(item)
+            name = clean_name(str(item.get("name") or "")) if isinstance(item, dict) else ""
+            if mask is not None and name:
+                fixes.append((mask, name))
+        self._name_fixes = fixes
+        fixed = self._fixed_name(self._name_mask)
+        if fixed and self.character:
+            self.character = fixed
+        return len(fixes)
+
+    def name_signature(self) -> str:
+        """目前名牌上名字那一行的墨跡（JSON），頁面存成修正用；還沒讀過名字是 ``null``。"""
+        return json.dumps(pack_mask(self._name_mask) if self._name_mask is not None else None)
+
+    def _fixed_name(self, mask: np.ndarray | None) -> str:
+        if mask is None:
+            return ""
+        for known, name in reversed(self._name_fixes):
+            if masks_match(mask, known):
+                return name
+        return ""
+
     def set_map_vocab(self, rows_json: str) -> int:
         """載入網頁附的地圖清單快照（``[[id, street, name], ...]``），回傳筆數。"""
         rows = json.loads(rows_json)
@@ -301,6 +339,7 @@ class WebSession:
         self.character = ""
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
+        self._name_mask = None
         self._verify_until = None
         self._pause_verified = False
         self._level_misses.clear()
@@ -832,12 +871,15 @@ class WebSession:
         bands = ident.text_bands(image)
         if not bands:
             return
+        self._name_mask = name_mask(image, bands[1] if len(bands) >= 2 else bands[0])
         # 職業在上、角色名在下；兩行靠太近時引擎會黏成一行，所以自己切開各辨識。
         images = [
             [_png_data_url(ocr.prepare(image[top:bottom], scale=s)) for s in CHARACTER_OCR_SCALES]
             for top, bottom in bands[:2]
         ]
-        self._request_ocr(f"character:{key}", "text", images, {"key": key})
+        # 使用者修正過這塊名牌：名字照修正的，職業照樣靠 OCR
+        self._request_ocr(f"character:{key}", "text", images,
+                          {"key": key, "fixed": self._fixed_name(self._name_mask)})
 
     def _begin_character_verify(self) -> None:
         """經驗值欄位消失後又回來：可能剛換了角色，強制馬上重讀角色名。"""
@@ -938,18 +980,21 @@ class WebSession:
         self.level = value
 
     def _finish_character(self, ctx: dict, texts) -> None:
-        """``texts`` 是 [[行1各倍率], [行2各倍率]]，每行取字數最多的。"""
+        """``texts`` 是 [[行1各倍率], [行2各倍率]]：職業那行取字數最多的，名字那行各倍率投票。"""
         self._verify_until = None
         if not texts:
             return      # 讀不到就保留上一次的結果，不要把已知的名字洗掉
         lines = []
-        for candidates in texts:
-            best = max((ocr.tidy(c).replace("\n", "") for c in candidates), key=len, default="")
+        for i, candidates in enumerate(texts):
+            if i == len(texts) - 1:
+                best = vote_name(candidates)
+            else:
+                best = max((ocr.tidy(c).replace("\n", "") for c in candidates), key=len, default="")
             if best:
                 lines.append(best)
         if not lines:
             return
-        name = lines[1] if len(lines) >= 2 else lines[0]
+        name = ctx.get("fixed") or (lines[1] if len(lines) >= 2 else lines[0])
         old = self.character
         switched = bool(old) and not _same_character(old, name)
         if switched:
@@ -1068,6 +1113,77 @@ class WebSession:
             "deaths": snapshot.deaths,
         })
         return json.dumps(data, ensure_ascii=False)
+
+
+def clean_name(text: str) -> str:
+    """角色名裡不會有的東西拿掉：空白、標點、控制字元（OCR 常在字旁邊多讀一個逗點或句點）。"""
+    return "".join(ch for ch in text if unicodedata.category(ch)[0] not in "PZC")
+
+
+def vote_name(candidates) -> str:
+    """名字那一行各倍率的讀法投票，回最可信的一個；全都讀不到回空字串。
+
+    以前取字數最多的，結果多讀一個逗點的那個倍率反而勝出（「,卍米糕玄師寢」）。現在先拿掉標點，
+    有兩個以上倍率讀得一樣就用它；都不一樣時，字數相同的那幾個逐字投票；再不行才取最長的。
+    """
+    names = [clean_name(ocr.tidy(c or "")) for c in candidates]
+    names = [n for n in names if n]
+    if not names:
+        return ""
+    best, votes = Counter(names).most_common(1)[0]
+    if votes >= 2:
+        return best
+    length, same = Counter(len(n) for n in names).most_common(1)[0]
+    if same >= 2:
+        group = [n for n in names if len(n) == length]
+        return "".join(Counter(chars).most_common(1)[0][0] for chars in zip(*group))
+    return max(names, key=len)
+
+
+def name_mask(image: np.ndarray, band: tuple[int, int]) -> np.ndarray | None:
+    """名字那一行的墨跡（文字覆蓋率過半的像素），裁到剛好包住字；沒有字回 None。"""
+    top, bottom = band
+    mask = ocr.coverage(image[top:bottom]) >= 0.5
+    if not mask.any():
+        return None
+    ys = np.flatnonzero(mask.any(axis=1))
+    xs = np.flatnonzero(mask.any(axis=0))
+    return mask[ys[0]:ys[-1] + 1, xs[0]:xs[-1] + 1]
+
+
+def masks_match(a: np.ndarray, b: np.ndarray, tolerance: float = NAME_FIX_TOLERANCE) -> bool:
+    """兩塊墨跡是不是同一個名字：大小最多差一個像素，錯開一個像素以內對齊後不一樣的像素夠少。"""
+    if abs(a.shape[0] - b.shape[0]) > 1 or abs(a.shape[1] - b.shape[1]) > 1:
+        return False
+    h, w = max(a.shape[0], b.shape[0]) + 2, max(a.shape[1], b.shape[1]) + 2
+    base = np.zeros((h, w), dtype=bool)
+    base[1:1 + a.shape[0], 1:1 + a.shape[1]] = a
+    allowed = tolerance * max(int(a.sum()), int(b.sum()))
+    for dy in range(3):
+        for dx in range(3):
+            moved = np.zeros((h, w), dtype=bool)
+            moved[dy:dy + b.shape[0], dx:dx + b.shape[1]] = b
+            if int(np.count_nonzero(base ^ moved)) <= allowed:
+                return True
+    return False
+
+
+def pack_mask(mask: np.ndarray) -> dict:
+    return {"w": int(mask.shape[1]), "h": int(mask.shape[0]), "bits": np.packbits(mask.ravel()).tobytes().hex()}
+
+
+def unpack_mask(item) -> np.ndarray | None:
+    """:func:`pack_mask` 的反向；格式不對回 None（localStorage 裡的東西不一定可信）。"""
+    try:
+        w, h = int(item["w"]), int(item["h"])
+        if not (0 < w <= 400 and 0 < h <= 60):
+            return None
+        bits = np.unpackbits(np.frombuffer(bytes.fromhex(item["bits"]), dtype=np.uint8))
+        if bits.size < w * h:
+            return None
+        return bits[:w * h].reshape(h, w).astype(bool)
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _same_character(a: str, b: str) -> bool:
