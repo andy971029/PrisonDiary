@@ -267,21 +267,6 @@ ssh <使用者>@<主機> systemctl --user restart prisondiary-api
 
 網頁與後端都要改的時候先更新後端：舊網頁還會被瀏覽器快取一陣子，後端要同時認得新舊兩種請求。
 
-#### 待部署：v0.43.0 的字形回報
-
-網頁 v0.43.0 起會呼叫 `POST /api/glyphs`，主機上的 `app.py` 還是舊版的話這個路徑回 `404`，網頁會把字形留在瀏覽器裡、每五分鐘再試，不影響其他功能。部署步驟：
-
-1. 在連得到主機的電腦上（同一個區網，或裝了 Tailscale、登入同一個 tailnet）拉最新的 main。
-2. 先備份資料檔（見下表「備份資料檔」），再照上面兩行 `scp`、`ssh ... restart`。服務設定檔沒有改，不用 `daemon-reload`。
-3. 確認：`systemctl --user status prisondiary-api` 是 `active (running)`；`curl https://prisondiary.tailcfc41e.ts.net/api/health` 回 `{"ok": true, ...}`，筆數跟部署前一樣。
-4. 確認新路徑：送一個測試字形，應該回 `{"accepted": 1, "rejected": 0}`：
-   ```bash
-   curl -s -X POST https://prisondiary.tailcfc41e.ts.net/api/glyphs -H "Content-Type: application/json" \
-     -d '{"glyphs":[{"kind":"meso","char":"3","h":9,"w":5,"bits":"dGMYxcBj","value":"1234","frame":[1366,768],"source":[1366,768],"version":"deploy-check"}]}'
-   ```
-   測完在主機上刪掉它：`python3 -c "import sqlite3; db = sqlite3.connect('prisondiary-api/data/records.db'); db.execute(\"DELETE FROM glyphs WHERE version = 'deploy-check'\"); db.commit()"`
-5. 部署完把這一節刪掉。
-
 | 要做的事 | 指令（在主機上） |
 | --- | --- |
 | 看服務狀態 | `systemctl --user status prisondiary-api` |
