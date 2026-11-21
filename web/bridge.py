@@ -40,6 +40,7 @@ from mapleexp.vision import identity as ident
 from mapleexp.vision import meso as mesovision
 from mapleexp.vision import prayer as prayervision
 from mapleexp.vision import ocr, panels, pngio
+from mapleexp.vision import scaling
 from mapleexp.core.reading import StatusReading
 from mapleexp.vision.locate import closing_bracket_columns, locate_exp_field
 from mapleexp.vision.reader import StatusReader
@@ -57,6 +58,9 @@ STATE_LABELS = {
 RELOCATE_AFTER_MISSES = 5
 RELOCATE_INTERVAL_SEC = 10.0
 WIDEN_CHECK_SEC = 10.0
+# 經驗值欄位找不到時，多久猜一次「遊戲是不是把小畫面放大顯示」（2560 寬的視窗實測是
+# 1366x768 放大 1.874 倍）。要把整張畫面縮幾次再找，瀏覽器裡要一秒上下，不能每格都做。
+VIEW_PROBE_SEC = 5.0
 
 # 速率與「最近累計」用同一個時間窗。注意它是**活躍時間**窗（閒置時鐘會停），
 # 所以掛機或發呆的那幾分鐘不會把速率拉低；整場平均也是除以活躍時間，跟桌面版一致。
@@ -168,6 +172,9 @@ class WebSession:
         self.rect: tuple[int, int, int, int] | None = None
         self._relocated_at = 0.0
         self._widen_checked_at = 0.0
+        # 遊戲被放大顯示時，原始畫面上要縮回原大小的那個框；頁面照它縮好畫面再送進來。
+        self.view: scaling.View | None = None
+        self._view_probed_at = -VIEW_PROBE_SEC
 
         # 身分：等級、職業、角色名
         self.level_reader = ident.LevelReader()
@@ -318,6 +325,8 @@ class WebSession:
         if self.reader is None:
             self._locate(force=True)
             if self.reader is None:
+                self._maybe_probe_view()
+            if self.reader is None:
                 return self._payload(None)
 
         try:
@@ -397,6 +406,41 @@ class WebSession:
             self.rect = auto.located.rect
         if auto.ok and self.reader is None:
             self.reader = StatusReader(self.capturer, self.cfg.reader, self.templates)
+
+    def source_changed(self) -> None:
+        """分享的畫面大小變了（換視窗、視窗縮放）：之前猜的放大倍率作廢，下一格起送進來的是原始畫面。"""
+        if self.view is not None:
+            self.view = None
+            self._forget_positions()
+        self._view_probed_at = -VIEW_PROBE_SEC
+
+    def _maybe_probe_view(self) -> None:
+        """原始畫面找不到經驗值欄位：猜是不是遊戲把小畫面放大了，猜中就縮回去、從這一格就照原大小讀。"""
+        frame = self.capturer.frame
+        now = time.monotonic()
+        if self.view is not None or frame is None or now - self._view_probed_at < VIEW_PROBE_SEC:
+            return
+        self._view_probed_at = now
+        view = scaling.find_view(frame, self.templates)
+        if view is None:
+            return
+        self.view = view
+        self._forget_positions()
+        self.capturer.frame = np.ascontiguousarray(scaling.resample(frame, view))
+        self._locate(force=True)
+        self._notices.append(f"遊戲畫面是 {view.width}x{view.height} 放大顯示的，改成縮回原大小辨識。")
+
+    def _forget_positions(self) -> None:
+        """畫面座標換了一套：記下的位置（經驗值、楓幣框、小地圖、祈禱圖示）都要重找。"""
+        self.reader = None
+        self.rect = None
+        self.cfg.reader.exp_roi = Roi()
+        self._meso_rect = None
+        self._meso_searched_at = -MESO_SEARCH_INTERVAL_SEC
+        self._forget_minimap()
+        self._minimap_searched_at = -MINIMAP_SEARCH_INTERVAL_SEC
+        self._prayer_size = None
+        self._rois = dict(EMPTY_ROIS)
 
     def _reject_if_occluded(self, reading: StatusReading) -> StatusReading:
         """欄位右端的綠色 ``]`` 不見了：資料不齊全，寧可這格不算，也不要把讀到一半的數字記進去。"""
@@ -933,6 +977,7 @@ class WebSession:
             "message": self.message,
             "rect": list(rect) if rect else None,
             "frame_size": [int(frame.shape[1]), int(frame.shape[0])] if frame is not None else None,
+            "view": self.view.to_dict() if self.view is not None else None,
             "raw_exp": raw_exp,
             "level": self.level,
             "job": self.job,

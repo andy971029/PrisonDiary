@@ -989,7 +989,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.17</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.42.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1497,6 +1497,10 @@ const frameCtx = frame.getContext("2d", { willReadFrequently: true });
 let pyodide = null;
 let session = null;
 let stream = null;
+// 遊戲把小畫面放大顯示時（2560 寬的視窗是 1366x768 放大 1.874 倍），Python 回傳原始畫面上的遊戲範圍
+// 與它原本的大小，之後每格都照它縮回去再送：狀態列的字才會是內建字形的大小。sourceW/H 變了就作廢。
+let view = null;
+let sourceW = 0, sourceH = 0;
 let shareSettings = null;   // 這次分享的串流設定（解析度、分享的是視窗還是螢幕）；匯出祈禱樣本時附上
 let timer = null;
 let lastMessage = "";
@@ -1702,6 +1706,7 @@ async function share(media = navigator.mediaDevices) {
   const settings = track.getSettings();
   shareSettings = settings;
   prayerSampleRect = null;      // 換了分享的視窗，上次的圖示位置不能沿用
+  sourceW = sourceH = 0;        // 下一格一定重新判斷畫面有沒有被放大
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
     $("hint").hidden = false;
@@ -1794,19 +1799,32 @@ function tick() {
   if (!w || !h) return;
   const started = performance.now();
 
-  if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
-  frameCtx.drawImage(video, 0, 0, w, h);
+  if (w !== sourceW || h !== sourceH) {
+    sourceW = w; sourceH = h;
+    view = null;
+    session.source_changed();
+  }
+  const fw = view ? view.width : w, fh = view ? view.height : h;
+  if (frame.width !== fw || frame.height !== fh) { frame.width = fw; frame.height = fh; }
+  if (view) {
+    // 最近鄰取樣（取每個輸出像素中心那一點），跟 Python 的 scaling.resample 一樣；平滑會把字形糊掉。
+    frameCtx.imageSmoothingEnabled = false;
+    frameCtx.drawImage(video, view.x, view.y, view.w, view.h, 0, 0, fw, fh);
+  } else {
+    frameCtx.drawImage(video, 0, 0, w, h);
+  }
   frameCapturedAt = Date.now();
-  const image = frameCtx.getImageData(0, 0, w, h);
+  const image = frameCtx.getImageData(0, 0, fw, fh);
 
   let out;
   try {
-    session.feed_frame(image.data, w, h);
+    session.feed_frame(image.data, fw, fh);
     out = JSON.parse(session.tick());
   } catch (err) {
     log("Python 錯誤：" + err.message);
     return;
   }
+  view = out.view;
   render(out, performance.now() - started);
   // 換角色時 tracker 已經歸零；歷史暫存以角色為 key，舊角色那段照樣留著等結算。
   for (const text of out.notices || []) log(text);
