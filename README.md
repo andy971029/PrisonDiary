@@ -30,6 +30,8 @@ cd PrisonDiary
 ## 功能
 
 - **經驗值與速率：** 用字元模板比對讀經驗值，不用 OCR。實測 OCR 讀數字幾乎全錯。
+- **遊戲放大顯示：** 視窗開得比遊戲的解析度大時，遊戲不是多畫一點，而是把整張畫面放大、補黑邊（實測 2560x1599 的視窗是 1366x768 放大 1.874 倍），狀態列的字跟著變大，內建字形就比不到。經驗值欄位找不到時，每 5 秒猜一次原本的解析度（1366x768、1920x1080、1280x720、1600x900、1024x768）：從非黑色的範圍量出遊戲畫面，用最近鄰取樣縮回去，找得到經驗值欄位的就是它（`src/mapleexp/vision/scaling.py`）。之後網頁每格都照那個框縮好才送進辨識（`drawImage` 關掉平滑，取樣點與 `scaling.resample` 相同），經驗、楓幣、祈禱、小地圖都照原尺寸讀；分享的畫面大小一變就重新判斷。放大後小數點落在最下面兩列，內建字形另有一組這樣的 `.0`～`.9`。
+- **字形回報：** 楓幣與等級的數字內建字形對不上時，用 OCR 讀出來再把那組字形學起來；學會的每一個字形（形狀、讀到的整個數字、畫面大小、網頁版本）會排進瀏覽器的待送清單（localStorage 的 `mapleexp.glyphs.v1`，最多留最新 500 個）、送到後端的 `POST /api/glyphs`：開頁、學到新的、恢復連線時送，失敗五分鐘後再試，送成功才從清單拿掉。跟排行榜共用「上傳練功紀錄」開關。目的是收集各台電腦實際學到的長相，整理後放進內建字形，讓大家照同一套讀；學字形本身留著當沒見過的情況的備案。v0.43.0 以前學到的字形只在記憶體裡，沒有回報。
 - **楓幣收益：** 背包視窗開著時讀背包底部的楓幣欄位，算楓幣/hr、最近 10 分鐘與整場的累計。背包可以放在畫面任何位置，程式會自己找（認「楓幣框＋楓葉點數框」上下成對的白框）；拖走或關掉後會重新找。背包關著的時間不計入，短暫被滑鼠擋住則照算。數字用模板比對，沒看過的字形先交給 OCR 讀、讀對了再學起來。
 - **角色、職業、等級、地圖：** 用 Tesseract.js 辨識。中文走 `chi_tra`，等級的數字走英文模型。語言檔第一次要下載幾十 MB，之後存在瀏覽器的 IndexedDB。
 - **歷史紀錄：** 以「角色 × 地圖」為一段，結算時確認才存進瀏覽器的 localStorage。活躍不滿 10 分鐘的段不記錄：結算時直接丟掉（結算視窗會說有幾段），以前存下來的短紀錄開頁時也會移除。只存在這個瀏覽器，可以匯出 JSON。
@@ -165,6 +167,7 @@ SQLite   ~/prisondiary-api/data/records.db
 | `POST /api/looks/mine` | `{"key"}` | `{"characters": [{"character", "look"}]}`：這把金鑰名下的角色與各自目前的造型（沒設是 `null`） |
 | `GET /api/leaderboard` | `?days=7&limit=50`；`days` 不給就是全部，`limit` 最多 200 | `{"days", "exp": [...], "rate": [...], "level": [...], "looks": {角色: 造型}}` |
 | `GET /api/training` | `?days=7&job=法師&level=35&limit=100`；都可以不給，`level` 給區間裡任何一級都行 | `{"days", "jobs": [...], "levels": [...], "rows": [...]}` |
+| `POST /api/glyphs` | `{"key", "glyphs": [...]}`，1 到 200 個；每個是 `{kind, char, h, w, bits, value, frame, source, version}`，`key` 可以不帶 | `200`，`{"accepted": 個數, "rejected": 個數}`；同一個瀏覽器回報過的同一個字形也算 accepted。只收不出，沒有讀回來的路徑 |
 | `GET /api/health` | | `{"ok": true, "records": 筆數}` |
 | `GET /` | | `302` 轉去網站的排行榜頁籤 |
 | `POST /api/records/delete`、`DELETE /api/records/<uid>` | v0.33 以前的網頁刪紀錄時會叫 | `204`，但什麼都不刪；留著是因為舊網頁收到錯誤會一直重試、後面的紀錄也傳不上來 |
@@ -199,6 +202,34 @@ uid、IP 與金鑰（連雜湊）不會出現在任何回應裡。
 | `look` | 造型，一段 JSON：`skin`、`hair`、`face`、`mix`（髮色與瞳色的混色）、`worn`（部位 → 時裝編號）、`group`（武器類型） |
 | `owner`、`ip`、`updated_at` | 最後一次是哪把金鑰、從哪個 IP、什麼時候設的 |
 
+`glyphs` 一個瀏覽器回報的一個字形一列（網頁靠 OCR 學會的數字字形）：
+
+| 欄位 | 內容 |
+| --- | --- |
+| `kind` | `meso`（楓幣框）或 `level`（等級方塊） |
+| `char` | 哪個數字，`0`～`9` |
+| `h`、`w`、`bits` | 字形的高、寬與遮罩：逐列攤平、每 8 格一個位元組（`numpy.packbits`）再 base64，跟 `builtin_templates.json` 同一種寫法 |
+| `reporter` | 回報的瀏覽器：金鑰的 SHA-256；沒帶金鑰的是 `ip:` 加 IP |
+| `value` | 學到它的時候 OCR 讀出來的整個數字 |
+| `frame_w`、`frame_h` | 辨識用的畫面大小（遊戲被放大顯示時是縮回去的大小） |
+| `source_w`、`source_h` | 分享進來的原始畫面大小 |
+| `version`、`ip`、`received_at` | 網頁版本、IP、收到的時間（毫秒） |
+
+主鍵是 `(kind, char, h, w, bits, reporter)`：同一個瀏覽器回報同一個長相只記一次，所以「有幾個 reporter 回報同一個長相」就是有幾台電腦學到它。服務啟動時 `CREATE TABLE IF NOT EXISTS` 會自動建這張表，舊的資料檔不用另外處理。
+
+整理時直接讀資料檔，例如列出每個長相有幾台電腦回報：
+
+```bash
+python3 - <<'PY'
+import sqlite3
+db = sqlite3.connect('prisondiary-api/data/records.db')
+sql = """SELECT kind, char, h, w, bits, COUNT(*) AS n, GROUP_CONCAT(DISTINCT frame_w || 'x' || frame_h)
+         FROM glyphs GROUP BY kind, char, h, w, bits ORDER BY kind, char, n DESC"""
+for row in db.execute(sql):
+    print(*row)
+PY
+```
+
 ### 重複與刪除
 
 後端只靠 `uid` 認重複，內容不比對：`INSERT ... ON CONFLICT (uid) DO NOTHING`，同一個 `uid` 再來幾次都只有一筆，IP 與收到時間留第一次的。網頁每次開啟都會把手上的紀錄整批重傳，靠的就是這個；`uid` 由網頁的 `recordUid()` 從紀錄編號、角色、起訖時間、經驗算出來，同一筆不管重傳幾次、在哪個分頁算都一樣。
@@ -216,7 +247,8 @@ uid、IP 與金鑰（連雜湊）不會出現在任何回應裡。
 ### 限制
 
 - 每個 IP 每分鐘最多 120 個請求，超過回 `429`。
-- 一個請求的內容最多 128 KB，一批最多 100 筆。
+- 一個請求的內容最多 128 KB，一批最多 100 筆紀錄或 200 個字形。
+- 字形只收 `0`～`9`、邊長 1 到 40、`bits` 的長度要跟 `h × w` 對得上、`value` 裡要有那個數字、畫面大小 1 到 10000。
 - 資料檔超過 200 MB 或磁碟剩不到 100 MB 就不再收新紀錄，回 `507`；排行榜照常。
 - 活躍不滿 10 分鐘的紀錄不收（網頁連存都不存）；這個門檻加上去以前收下的短紀錄，服務啟動時會清掉。
 - 每筆紀錄擋掉格式不對與明顯不可能的值：角色最多 24 字、等級 1 到 300、時間不早於 2020 年也不晚於現在加一天、活躍與閒置各不超過 30 天、經驗是正數且不超過 10 的 13 次方。
@@ -234,6 +266,21 @@ ssh <使用者>@<主機> systemctl --user restart prisondiary-api
 ```
 
 網頁與後端都要改的時候先更新後端：舊網頁還會被瀏覽器快取一陣子，後端要同時認得新舊兩種請求。
+
+#### 待部署：v0.43.0 的字形回報
+
+網頁 v0.43.0 起會呼叫 `POST /api/glyphs`，主機上的 `app.py` 還是舊版的話這個路徑回 `404`，網頁會把字形留在瀏覽器裡、每五分鐘再試，不影響其他功能。部署步驟：
+
+1. 在連得到主機的電腦上（同一個區網，或裝了 Tailscale、登入同一個 tailnet）拉最新的 main。
+2. 先備份資料檔（見下表「備份資料檔」），再照上面兩行 `scp`、`ssh ... restart`。服務設定檔沒有改，不用 `daemon-reload`。
+3. 確認：`systemctl --user status prisondiary-api` 是 `active (running)`；`curl https://prisondiary.tailcfc41e.ts.net/api/health` 回 `{"ok": true, ...}`，筆數跟部署前一樣。
+4. 確認新路徑：送一個測試字形，應該回 `{"accepted": 1, "rejected": 0}`：
+   ```bash
+   curl -s -X POST https://prisondiary.tailcfc41e.ts.net/api/glyphs -H "Content-Type: application/json" \
+     -d '{"glyphs":[{"kind":"meso","char":"3","h":9,"w":5,"bits":"dGMYxcBj","value":"1234","frame":[1366,768],"source":[1366,768],"version":"deploy-check"}]}'
+   ```
+   測完在主機上刪掉它：`python3 -c "import sqlite3; db = sqlite3.connect('prisondiary-api/data/records.db'); db.execute(\"DELETE FROM glyphs WHERE version = 'deploy-check'\"); db.commit()"`
+5. 部署完把這一節刪掉。
 
 | 要做的事 | 指令（在主機上） |
 | --- | --- |
