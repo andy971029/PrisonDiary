@@ -47,7 +47,8 @@
                "mobs": [[100100, 3]], "npcs": [1012000], "to": [100000001], "away": 0,
                "mini": {"w": 211, "h": 196, "npcs": [[1012000, 120, 80]], "portals": [[100000001, 30, 90]]}}, …]}
 
-``mobs`` 每筆是 ``[怪物, 生成點數]``；``to`` 是傳送點通往的、客戶端有資料的地圖；``away`` 是通往沒資料
+``mobs`` 每筆是 ``[怪物, 生成點數]``，生成點的 ``mobTime``（重生秒數，客戶端的值，伺服器不一定照用）最長的
+有 ``RESPAWN_MIN`` 秒以上就多一格 ``[怪物, 生成點數, 秒數]``（BOSS 這類久久才出一隻的）；``to`` 是傳送點通往的、客戶端有資料的地圖；``away`` 是通往沒資料
 （還沒開放）地圖的傳送點數。``mini`` 是小地圖（``web/minimaps/<id>.png``，匯出腳本裁的）的像素尺寸與上面的
 標記，座標是小地圖像素：``npcs`` 每筆 ``[NPC, x, y]``，``portals`` 每筆 ``[目標地圖, x, y]``，目標沒資料（還沒開放）
 是 0；沒小地圖的沒有這個欄位。
@@ -76,6 +77,7 @@ NPC_MARKER = struct.pack("<i", 7) + b"0002100\0"          # 莎麗，菇菇村�
 NPCLOC_ASSET = "NpcLocation"
 NPCLOC_MARKER = struct.pack("<i", len(NPCLOC_ASSET)) + NPCLOC_ASSET.encode() + b"\0"
 NO_MAP = 999999999
+RESPAWN_MIN = 600
 
 # 客戶端的職業代碼（100 劍士、200 法師…）→ 網頁用的職業位元，跟裝備的一樣
 JOB_BIT_BY_HUNDRED = {1: 1, 2: 2, 3: 4, 4: 8, 5: 16}
@@ -315,9 +317,14 @@ def build_maps(
             continue
         info = tree.get("info") if isinstance(tree.get("info"), dict) else {}
         mobs = Counter()
+        respawn: dict[int, int] = {}
         for entry in _values(tree.get("life")):
             if isinstance(entry, dict) and entry.get("type") == "m" and isinstance(entry.get("id"), str) and entry["id"].isdigit():
-                mobs[int(entry["id"])] += 1
+                mob = int(entry["id"])
+                mobs[mob] += 1
+                secs = _int(entry.get("mobTime")) or 0
+                if secs >= RESPAWN_MIN:
+                    respawn[mob] = max(respawn.get(mob, 0), secs)
         to: list[int] = []
         away = 0
         for portal in _values(tree.get("portal")):
@@ -338,7 +345,7 @@ def build_maps(
             "limit": _int(info.get("fieldLimit")) or 0,
             "bgm": bgm.split("/", 1)[1] if "/" in bgm else bgm,
             "desc": quest_text(rec.get("mapDesc"), {}),
-            "mobs": sorted([[mob, count] for mob, count in mobs.items()]),
+            "mobs": sorted([[mob, count, respawn[mob]] if mob in respawn else [mob, count] for mob, count in mobs.items()]),
             "npcs": by_map.get(map_id, []),
             "to": sorted(to), "away": away,
             **({"mini": mini} if mini else {}),

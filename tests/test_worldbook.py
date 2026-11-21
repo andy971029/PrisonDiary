@@ -111,7 +111,9 @@ class Jobs(unittest.TestCase):
 FIELDS = {
     "100000000": {"info": {"town": 1, "returnMap": 100000000, "mapMark": "Henesys", "bgm": "Bgm00/FloralLife", "fieldLimit": 0},
                   "portal": {"0": {"tm": 999999999}, "1": {"tm": 100000001}, "2": {"tm": 100000001}, "3": {"tm": 100000000}, "4": {"tm": 200000000}},
-                  "life": {"0": {"type": "n", "id": "1012000"}, "1": {"type": "m", "id": "0100100"}, "2": {"type": "m", "id": "0100100"},
+                  "life": {"0": {"type": "n", "id": "1012000"}, "1": {"type": "m", "id": "0100100", "mobTime": 0}, "2": {"type": "m", "id": "0100100"},
+                           "5": {"type": "m", "id": "6130101", "mobTime": 1800}, "6": {"type": "m", "id": "6130101", "mobTime": 300},
+                           "7": {"type": "m", "id": "0100101", "mobTime": 300},
                            "3": {"type": "n", "id": "1012000"}, "4": {"type": "n", "id": "9999999", "hide": 1}}},
     "100000001": {"info": {"returnMap": 100000000, "mapMark": "Henesys", "bgm": "Bgm00/FloralLife"}, "foothold": {}, "life": {"0": {"type": "n", "id": "1012002"}}},
     "100000002": {"info": {"returnMap": 100000000}, "foothold": {}},                  # 字串表沒名字：不要
@@ -152,7 +154,7 @@ class NpcsAndMaps(unittest.TestCase):
         self.assertEqual(sorted(maps), [100000000, 100000001])
         town = maps[100000000]
         self.assertEqual((town["street"], town["name"], town["town"], town["mark"], town["bgm"]), ("維多利亞", "弓箭手村", True, "Henesys", "FloralLife"))
-        self.assertEqual(town["mobs"], [[100100, 2]])
+        self.assertEqual(town["mobs"], [[100100, 2], [100101, 1], [6130101, 2, 1800]])   # 重生不到十分鐘的不記
         self.assertEqual(town["npcs"], [1012000])
         self.assertEqual((town["to"], town["away"]), ([100000001], 1))     # 自己、沒目標的不算；天空之城沒資料算 away
         self.assertEqual(town["desc"], "可以轉職成為弓箭手。")

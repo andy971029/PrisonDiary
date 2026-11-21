@@ -603,6 +603,7 @@
   .chips .ic { margin: 0; }
   .chips .mob-pic { width: 32px; height: 24px; margin: 0; }
   .chips small { color: var(--muted); }
+  .chips small.respawn { margin-left: 4px; color: var(--accent); }
   .drop-groups { display: flex; flex-direction: column; gap: 10px; }
   .drop-groups h5 { margin: 0 0 4px; font: 700 12px var(--body); color: var(--muted); }
   .drop-groups h5 small { font-weight: 400; margin-left: 4px; }
@@ -983,7 +984,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.9</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.10</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2976,7 +2977,7 @@ function dropGroups(m, q) {
 }
 function bookDetail(m, q, here) {
   const drops = dropGroups(m, q);
-  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
+  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id), respawnTag(wbook.respawn.get(`${m.id}:${id}`))));
   const portrait = picTag(m, 240, 200, ' decoding="async"');
   const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
   return `<div class="mob-detail">
@@ -3379,7 +3380,7 @@ async function loadItemBookNow() {
 // questbook.json、npcbook.json、mapbook.json 是客戶端資料的快照（scripts/export_worldbook.py），worldmap.json 是世界地圖
 // （scripts/export_worldmap.py），四份一起載（約 900 KB）。
 // 要先有怪物與道具圖鑑才對得到名字；道具與裝備的「任務獎勵」、怪物的出現地圖小卡也靠這些。
-const wbook = { data: null, promise: null, questById: new Map(), npcById: new Map(), mapById: new Map(),
+const wbook = { data: null, promise: null, questById: new Map(), npcById: new Map(), mapById: new Map(), respawn: new Map(),
   questsByItem: new Map(), questsByNpc: new Map(), questsByMob: new Map(), questsByNext: new Map() };
 const TODAY = new Date().toISOString().slice(0, 10);
 const AUTO_TEXT = { start: "自動開始", accept: "自動接受", complete: "自動完成" };
@@ -3397,24 +3398,26 @@ function npcPicTag(n, maxW, maxH, extra = "") {
   return `<img data-pk="npcs/${n.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(n.name)}"${extra}>`;
 }
 const countTag = (n, title = "") => n > 1 ? `<small class="n"${title ? ` title="${title}"` : ""}>×${fmtInt(n)}</small>` : "";
+// 重生時間：地圖生成點的 mobTime（客戶端的值，只記十分鐘以上的），整點的寫小時、其他寫分鐘
+const respawnTag = (secs) => secs ? `<small class="respawn" title="重生時間（客戶端資料，伺服器不一定照這個）">重生 ${secs % 3600 ? `${Math.round(secs / 60)} 分` : `${secs / 3600} 小時`}</small>` : "";
 // 道具 chip：道具圖鑑有的帶圖示、點了彈小卡；沒有的（現金道具之類）只列名字
 function itemChip(id, count = 1, act = "tip", extra = "") {
   const eq = ibook.equipById.get(id), e = eq || ibook.itemById.get(id);
   if (!e) return `<span>${esc(itemName(id))}${countTag(count)}${extra}</span>`;
   return `<button type="button" data-${act}="${eq ? "equip" : "item"}" data-id="${id}">${iconTag(e, eq ? "equips" : "items", 24)}${esc(e.name)}${countTag(count)}${extra}</button>`;
 }
-const mobChipById = (id, count = 1, act = "tip", title = "") => {
-  const m = ibook.mobById.get(id);
-  return m ? mobChip(m, act, countTag(count, title)) : `<span>${esc(String(id))}${countTag(count, title)}</span>`;
+const mobChipById = (id, count = 1, act = "tip", title = "", secs = 0) => {
+  const m = ibook.mobById.get(id), extra = countTag(count, title) + respawnTag(secs);
+  return m ? mobChip(m, act, extra) : `<span>${esc(String(id))}${extra}</span>`;
 };
 const questChip = (q, act = "tip") => `<button type="button" data-${act}="quest" data-id="${q.id}">${q.lv[0] ? `<small class="pre">Lv.${q.lv[0]}</small>` : ""}${esc(q.name)}${q.live ? "" : `<i class="soon">${q.expired ? "已結束" : "接不到"}</i>`}</button>`;
 const npcChip = (n, act = "tip") => `<button type="button" data-${act}="npc" data-id="${n.id}"><span class="npc-pic">${npcPicTag(n, 32, 32, ' loading="lazy" decoding="async"')}</span>${esc(n.name)}${n.func ? `<small>${esc(n.func)}</small>` : ""}${n.maps.length ? "" : '<i class="soon">不在場</i>'}</button>`;
 const npcChipById = (id, act = "tip") => { const n = wbook.npcById.get(id); return n ? npcChip(n, act) : `<span>NPC ${id}</span>`; };
 // 地圖 chip：地圖圖鑑有的點了彈小卡；沒有的（圖鑑卡上列的、還沒開放的）只列名字
-function mapChip(id, act = "tip", hit = false) {
+function mapChip(id, act = "tip", hit = false, extra = "") {
   const m = wbook.mapById.get(id);
   const [street, name] = m ? [m.street, m.name] : (book.data.maps[id] || ["", String(id)]);
-  const inner = `${street ? `<small class="pre">${esc(street)}</small>` : ""}${esc(name)}`;
+  const inner = `${street ? `<small class="pre">${esc(street)}</small>` : ""}${esc(name)}${extra}`;
   if (!m) return `<span class="${hit ? "hit" : ""}">${inner}${wbook.data ? '<i class="soon">未開放</i>' : ""}</span>`;
   return `<button type="button" class="${hit ? "hit" : ""}" data-${act}="map" data-id="${id}">${inner}</button>`;
 }
@@ -3458,9 +3461,15 @@ async function loadWorldNow() {
       // 地圖的生成清單留著一些客戶端沒有名字也沒有資料的 NPC，不列
       m.npcs = m.npcs.filter((id) => wbook.npcById.has(id));
       // 怪的複本算本尊，生成點數加在一起
-      const mobs = new Map();
-      for (const [id, n] of m.mobs) { const main = book.alias.get(id)?.id ?? id; mobs.set(main, (mobs.get(main) || 0) + n); }
-      m.mobs = [...mobs];
+      // 重生秒數取最長的，另外記一份「怪:地圖」給怪物圖鑑的出現地圖用
+      const mobs = new Map(), secs = new Map();
+      for (const [id, n, t = 0] of m.mobs) {
+        const main = book.alias.get(id)?.id ?? id;
+        mobs.set(main, (mobs.get(main) || 0) + n);
+        if (t > (secs.get(main) || 0)) secs.set(main, t);
+      }
+      m.mobs = [...mobs].map(([id, n]) => [id, n, secs.get(id) || 0]);
+      for (const [id, t] of secs) wbook.respawn.set(`${id}:${m.id}`, t);
       if (m.mini) m.mini.npcs = m.mini.npcs.filter(([id]) => wbook.npcById.has(id));
       const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
       m.lvLo = levels.length ? Math.min(...levels) : null;
@@ -3544,7 +3553,7 @@ function mapDetail(m) {
   return `<div class="mob-detail">
     ${m.desc ? `<div class="portrait"><div class="desc"><p>${esc(m.desc)}</p></div></div>` : ""}
     ${m.mini ? miniMapHtml(m) : ""}
-    <div><h4>怪物 ${m.mobs.length}</h4>${m.mobs.length ? `<div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "tip", "生成點數")).join("")}</div>` : '<p class="note">沒有怪會生成。</p>'}</div>
+    <div><h4>怪物 ${m.mobs.length}</h4>${m.mobs.length ? `<div class="chips">${m.mobs.map(([id, n, t]) => mobChipById(id, n, "tip", "生成點數", t)).join("")}</div>` : '<p class="note">沒有怪會生成。</p>'}</div>
     <div><h4>NPC ${m.npcs.length}</h4>${m.npcs.length ? `<div class="chips">${m.npcs.map((id) => npcChipById(id)).join("")}</div>` : '<p class="note">沒有 NPC。</p>'}</div>
     <div><h4>通往 ${m.to.length}</h4>${m.to.length ? `<div class="chips">${m.to.map((id) => mapChip(id)).join("")}</div>` : '<p class="note">沒有通往別張圖的傳送點。</p>'}${m.away ? `<p class="note">另有 ${m.away} 個傳送點通往還沒開放的地圖。</p>` : ""}</div>
     <p class="note">${[m.street, `地圖 ID ${m.id}`].filter(Boolean).join(" · ")}</p>
@@ -3976,7 +3985,7 @@ const tipSources = (e) => sourceChips(e, "goto");
 // 怪物小卡：名字與圖下面分三個頁籤，掉落物與出現地圖跟怪物圖鑑展開的一樣，chip 點了再彈小卡；上次看哪個頁籤就開哪個
 let tipMobTab = "drops";
 function mobTip(m) {
-  const here = hereMaps(), drops = dropGroups(m), maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
+  const here = hereMaps(), drops = dropGroups(m), maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id), respawnTag(wbook.respawn.get(`${m.id}:${id}`))));
   const tabs = [["drops", "掉落物", m.drops.length], ["maps", m.live ? "出現地圖" : "還沒開放", m.live ? m.spawn.length : ""], ["info", "基本資料", ""]];
   const panels = {
     drops: drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>',
@@ -4027,7 +4036,7 @@ function mapTip(m) {
     + (m.mini ? miniMapHtml(m, 200) : "")
     + tipRows([["NPC", m.npcs.map(npcName).join("、")], ["通往", m.to.map((id) => wbook.mapById.get(id)?.name || id).join("、")],
       ["回程", m.ret && m.ret !== m.id ? wbook.mapById.get(m.ret)?.name || "" : ""]])
-    + (m.mobs.length ? `<h5>怪物</h5><div class="chips">${m.mobs.map(([id, n]) => mobChipById(id, n, "goto", "生成點數")).join("")}</div>` : "")
+    + (m.mobs.length ? `<h5>怪物</h5><div class="chips">${m.mobs.map(([id, n, t]) => mobChipById(id, n, "goto", "生成點數", t)).join("")}</div>` : "")
     + (m.desc ? `<p>${esc(m.desc)}</p>` : "");
 }
 // 小卡裡點了怪物：關小卡、切到怪物圖鑑，放寬到看得見牠的篩選，展開那一列並捲到眼前
