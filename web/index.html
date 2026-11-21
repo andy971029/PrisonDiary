@@ -591,6 +591,7 @@
   .mob-detail .portrait { grid-column: 1 / -1; display: flex; gap: 16px; align-items: flex-start; }
   .mob-detail .portrait img { flex: none; }
   .mob-detail .desc { flex: 1 1 auto; min-width: 0; }
+  .mob-detail .desc p + h4 { margin-top: 14px; }
   /* 掉落物、會掉的怪：縮圖 chip，點了彈出小卡。裝備依職業、道具依類別分組 */
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .chips[hidden] { display: none; }                    /* display: flex 會蓋掉 hidden，收起來的未開放怪要真的藏住 */
@@ -984,7 +985,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.10</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.41.11</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2977,9 +2978,12 @@ function dropGroups(m, q) {
 }
 function bookDetail(m, q, here) {
   const drops = dropGroups(m, q);
-  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id), respawnTag(wbook.respawn.get(`${m.id}:${id}`))));
+  const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
   const portrait = picTag(m, 240, 200, ' decoding="async"');
-  const desc = m.desc ? `<div class="desc"><h4>圖鑑說明</h4><p>${esc(m.desc)}</p></div>` : "";
+  // 重生時間列在圖鑑說明底下：只有十分鐘以上的生成點有（BOSS 這類），每張圖一顆 chip
+  const respawn = (m.live ? m.spawn : []).filter((id) => wbook.respawn.has(`${m.id}:${id}`))
+    .map((id) => mapChip(id, "tip", !!here?.has(id), respawnTag(wbook.respawn.get(`${m.id}:${id}`))));
+  const desc = m.desc || respawn.length ? `<div class="desc">${m.desc ? `<h4>圖鑑說明</h4><p>${esc(m.desc)}</p>` : ""}${respawn.length ? `<h4 title="客戶端資料，伺服器不一定照這個">重生時間</h4><div class="chips">${respawn.join("")}</div>` : ""}</div>` : "";
   return `<div class="mob-detail">
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
