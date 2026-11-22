@@ -559,13 +559,42 @@ class TestCharacterSwitch(FeedMixin, unittest.TestCase):
         self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]", "624456[12.36%]"])
         session.job, session.character = "獵人", "舊角色"
         self.assertGreater(session.tracker.snapshot().cum_net, 0)
-        session._finish_character({"key": "k2"}, [["法師\n"], ["新的人\n"]])
+        session._finish_character({"key": "k2", "break": True}, [["法師\n"], ["新的人\n"]])
         self.assertEqual(session.character, "新的人")
         self.assertEqual(session.tracker.snapshot().cum_net, 0)
         out = self.feed(session, "100[1.00%]")
         self.assertEqual(out["exp_abs"], 100, out["message"])
         self.assertEqual(out["totals"]["cum_net"], 0)
         self.assertEqual(len(out["notices"]), 1)
+
+    def test_other_name_without_the_selection_screen_is_ignored(self):
+        """經驗值欄位一直都在（沒經過選角畫面），名牌讀到別的名字多半是被蓋到：不換角色、不歸零。"""
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]"])
+        session.job, session.character = "魔導士(冰、雷)", "夜黎"
+        session._finish_character({"key": "k2"}, [["法師\n"], ["白色兔子\n"]])
+        self.assertEqual(session.character, "夜黎")
+        self.assertEqual(session.job, "魔導士(冰、雷)")
+        self.assertGreater(session.tracker.snapshot().cum_net, 0)
+        self.assertEqual(len(session._take_notices()), 1)
+
+    def test_same_other_name_read_three_times_switches(self):
+        session = self.make_session()
+        self.feed_over_time(session, ["623456[12.34%]", "623956[12.35%]"])
+        session.character = "夜黎"
+        for key in ("k2", "k3"):
+            session._finish_character({"key": key}, [["法師\n"], ["新的人\n"]])
+            self.assertEqual(session.character, "夜黎")
+        session._finish_character({"key": "k4"}, [["法師\n"], ["新的人\n"]])
+        self.assertEqual(session.character, "新的人")
+        self.assertEqual(session.tracker.snapshot().cum_net, 0)
+
+    def test_different_misreads_never_add_up(self):
+        session = self.make_session()
+        session.character = "夜黎"
+        for i, name in enumerate(["白色兔子", "卍翔雷一波卍", "黑衣怪客", "白色兔子"]):
+            session._finish_character({"key": f"k{i}"}, [["法師\n"], [name + "\n"]])
+        self.assertEqual(session.character, "夜黎")
 
     def test_one_misread_character_does_not_reset(self):
         """同一隻角色重讀時錯一個字，不能把統計歸零。"""
@@ -617,3 +646,143 @@ class TestVersion(unittest.TestCase):
 
         html = (WEB / "index.html").read_text(encoding="utf-8")
         self.assertIn(f'id="app-version">v{mapleexp.__version__}<', html)
+
+
+def _mapbook(*maps) -> str:
+    return json.dumps({"maps": [
+        {"id": i, "street": "島", "name": name, "to": to, "ret": ret} for i, name, to, ret in maps
+    ]}, ensure_ascii=False)
+
+
+class TestMapPlausibility(unittest.TestCase):
+    """小地圖讀到的新地圖要接得上原本的圖（兩個傳送點以內、或回村地圖），不然先當作讀錯。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = testfont.build_template_set()
+
+    def make_session(self) -> bridge.WebSession:
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
+        # A ─ B ─ C ─ D 一條線，A 的回村地圖是 村
+        session.set_map_links(_mapbook(
+            (1, "A", [2], 9), (2, "B", [3], 9), (3, "C", [4], 9), (4, "D", [], 9), (9, "村", [], 9),
+        ))
+        self.see(session, "a", "島 A")
+        return session
+
+    @staticmethod
+    def see(session, fid: str, name: str) -> None:
+        if name:
+            session._map_names[fid] = name
+        session._seen_map_id = fid
+        session._settle_map()
+
+    def test_two_portals_away_is_accepted(self):
+        session = self.make_session()
+        self.see(session, "c", "島 C")
+        self.assertEqual((session.map_id, session.map_name), ("c", "島 C"))
+
+    def test_return_map_is_accepted(self):
+        session = self.make_session()
+        self.see(session, "v", "島 村")
+        self.assertEqual(session.map_name, "島 村")
+
+    def test_far_map_waits_then_is_accepted(self):
+        session = self.make_session()
+        with mock.patch.object(bridge.time, "monotonic", return_value=100.0):
+            self.see(session, "d", "島 D")
+        self.assertEqual((session.map_id, session.map_name), ("a", "島 A"))
+        self.assertEqual(len(session._take_notices()), 1)
+        with mock.patch.object(bridge.time, "monotonic", return_value=100.0 + bridge.MAP_CONFIRM_SEC - 1):
+            session._settle_map()
+        self.assertEqual(session.map_name, "島 A")
+        with mock.patch.object(bridge.time, "monotonic", return_value=100.0 + bridge.MAP_CONFIRM_SEC):
+            session._settle_map()
+        self.assertEqual((session.map_id, session.map_name), ("d", "島 D"))
+
+    def test_unknown_name_is_held_and_going_back_clears_it(self):
+        session = self.make_session()
+        self.see(session, "x", "楓之島 菇菇村訓練所入口")
+        self.assertEqual(session.map_name, "島 A")
+        self.see(session, "a", "")
+        self.assertEqual(session._map_candidate, "")
+        self.assertEqual(session.map_name, "島 A")
+
+    def test_unread_name_keeps_the_old_map(self):
+        session = self.make_session()
+        self.see(session, "b", "")
+        self.assertEqual((session.map_id, session.map_name), ("a", "島 A"))
+        self.see(session, "b", "島 B")
+        self.assertEqual((session.map_id, session.map_name), ("b", "島 B"))
+
+    def test_same_name_on_a_new_fingerprint_keeps_the_old_id(self):
+        session = self.make_session()
+        self.see(session, "a2", "島 A")
+        self.assertEqual(session.map_id, "a")
+
+    def test_character_switch_lets_any_map_in(self):
+        session = self.make_session()
+        session.character = "舊角色"
+        session._switch_character("舊角色", "新角色")
+        self.see(session, "d", "島 D")
+        self.assertEqual(session.map_name, "島 D")
+        self.see(session, "a", "島 A")       # 只放行一次：之後照樣檢查（D 走不到 A）
+        self.assertEqual(session.map_name, "島 D")
+
+    def test_without_map_data_everything_is_accepted(self):
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
+        self.see(session, "a", "島 A")
+        self.see(session, "d", "島 D")
+        self.assertEqual(session.map_name, "島 D")
+
+    def test_real_mapbook(self):
+        """夜黎的紀錄裡，紅光庭園 II 練到一半冒出「菇菇村訓練所入口」：接不上，先當作讀錯。"""
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
+        self.assertGreater(session.set_map_links((WEB / "mapbook.json").read_text(encoding="utf-8")), 400)
+        near = session._map_near["天空之城 紅光庭園 II"]
+        self.assertIn("艾納斯大陸 天空之城", near)          # 回村
+        self.assertNotIn("楓之島 菇菇村訓練所入口", near)
+        self.assertNotIn("隱密之地 忍耐之林（一層）", near)
+
+
+class TestLevelFloor(unittest.TestCase):
+    """等級不會降：這隻角色以前讀到的等級以下的答案都是讀錯。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.templates = testfont.build_template_set()
+
+    def make_session(self) -> bridge.WebSession:
+        session = bridge.WebSession(templates=self.templates, require_bracket=False)
+        self.taught: list[int] = []
+        session.level_reader.teach = lambda zone, level: self.taught.append(level) or 0
+        return session
+
+    def test_history_rules_out_lower_answers(self):
+        session = self.make_session()
+        self.assertEqual(session.set_level_floors(json.dumps({"尼可拉絲麻吉": 71, "壞": "x"})), 1)
+        session.character = "尼可拉絲麻吉"
+        session._finish_level(FakeZone(), ["72", "72", "52", "22"])
+        self.assertEqual(session.level, 72)
+        self.assertEqual(self.taught, [72])            # 剔除後剩下的全部一致，照樣教
+
+    def test_floor_only_applies_to_that_character(self):
+        session = self.make_session()
+        session.set_level_floors(json.dumps({"別人": 71}))
+        session.character = "尼可拉絲麻吉"
+        session._finish_level(FakeZone(), ["72", "72", "52", "52"])
+        self.assertIsNone(session.level)
+
+    def test_everything_below_the_floor_is_a_miss(self):
+        session = self.make_session()
+        session.set_level_floors(json.dumps({"夜黎": 94}))
+        session.character = "夜黎"
+        session._finish_level(FakeZone(), ["44", "44", "44", "44"])
+        self.assertIsNone(session.level)
+        self.assertEqual(session._level_misses["zone-a"], 1)
+
+    def test_level_read_this_time_is_a_floor_too(self):
+        session = self.make_session()
+        session.level = 45
+        session._finish_level(FakeZone(), ["25", "25", "45", "45"])
+        self.assertEqual(session.level, 45)

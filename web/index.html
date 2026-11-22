@@ -1092,7 +1092,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.48.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.49.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1681,12 +1681,21 @@ async function boot() {
     session.set_timing(prefs.intervalSec, prefs.idleSec);
     session.set_prayer(prayerOn);
     session.set_name_fixes(JSON.stringify(loadNameFixes()));
+    pushLevelFloors();
     // 地圖清單快照（scripts/export_mapvocab.py 匯出）；載不到就退回原始 OCR 文字。
     try {
       const vocab = await fetch("mapvocab.json", { cache: "no-store" });
       if (vocab.ok) log(`地圖清單 ${session.set_map_vocab(await vocab.text())} 張`);
     } catch (err) {
       log("地圖清單載入失敗，地圖名稱會用原始辨識結果：" + err.message);
+    }
+    // 地圖之間的傳送點（圖鑑用的 mapbook.json）：小地圖讀到離原本的圖太遠的地圖，先當作讀錯。
+    // 載不到就不檢查，跟以前一樣。
+    try {
+      const book = await fetch("mapbook.json");
+      if (book.ok) log(`地圖相鄰資料 ${session.set_map_links(await book.text())} 張`);
+    } catch (err) {
+      log("地圖相鄰資料載入失敗，換地圖不檢查遠近：" + err.message);
     }
 
     $("share").disabled = false;
@@ -2081,8 +2090,20 @@ function commitPending() {
   records.push(...done);
   if (!writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
   else log(`已儲存 ${done.length} 段修練紀錄。`);
+  pushLevelFloors();
   renderHistory();
   syncRecords();
+}
+
+// 每隻角色以前讀到的最高等級交給辨識程式：等級不會降，比它低的讀法都是讀錯
+function pushLevelFloors() {
+  if (!session) return;
+  const floors = {};
+  for (const r of [...records, ...Object.values(pending)]) {
+    if (!r.character || r.character === UNKNOWN_CHAR || !Number.isInteger(r.level)) continue;
+    floors[r.character] = Math.max(floors[r.character] || 0, r.level);
+  }
+  session.set_level_floors(JSON.stringify(floors));
 }
 
 function discardPending() {
@@ -2748,6 +2769,7 @@ async function saveNameFix() {
   for (const r of records) if (sources.has(r.character)) { r.character = target; renamed++; }
   if (renamed && !writeRecords()) log("存檔失敗：瀏覽器不允許寫入 localStorage。");
   renamePending(sources, target);
+  pushLevelFloors();
   // 正在分享、畫面上讀到的名字不對：記下這塊名牌
   if (session && nameFixFrom && nameFixFrom !== target) {
     const sig = JSON.parse(session.name_signature());

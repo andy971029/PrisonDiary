@@ -81,6 +81,9 @@ CHARACTER_VERIFY_SEC = 6.0
 # 兩次讀到的名字相似度低於這個值才算換角色。同一隻角色換倍率重讀，偶爾會錯一個字，
 # 不能因為這樣就把統計歸零。
 CHARACTER_SAME_RATIO = 0.5
+# 名牌重讀出一個不像的名字，經驗值欄位卻沒消失過（沒經過選角畫面）：多半是名牌被特效、聊天框、
+# 別的玩家蓋到讀錯了，不當作換角色。同一個新名字連續讀到這麼多次才信（萬一真的換了卻沒看到欄位消失）。
+CHARACTER_CONFIRM_READS = 3
 # 使用者修正過的名牌：這次的名字墨跡跟存下來的比，不一樣的像素不超過墨跡的這個比例就算同一塊名牌。
 # 串流壓縮會讓字的邊緣差一兩個像素，同一個名字實測遠低於這個數；不同名字（哪怕只差一個字）遠高於它。
 NAME_FIX_TOLERANCE = 0.12
@@ -98,6 +101,11 @@ MINIMAP_MAX_BARS = 6
 MAP_LOST_TICKS = 5
 MAP_NAME_RETRY_SEC = 5.0
 MAP_OCR_SCALES = (3, 4, 6)
+# 換地圖只能走傳送點、或回村（回村卷軸、死亡都回到這張圖的 returnMap）。小地圖讀到的新地圖
+# 離原本的圖超過這麼多個傳送點、也不是原本那張圖的回村地圖，多半是讀錯：先當作還在原地，
+# 新地圖連續看到 MAP_CONFIRM_SEC 秒才信（搭船、計程車、指定村莊的回城卷軸）。換角色時不檢查。
+MAP_NEAR_HOPS = 2
+MAP_CONFIRM_SEC = 60.0
 # 同一組字形辨識失敗幾次就放棄（字形變了會重新計算）。
 OCR_RETRY_LIMIT = 3
 LEVEL_SLOW_RETRY_SEC = 10.0
@@ -198,6 +206,11 @@ class WebSession:
         # 使用者修正過的名字：[(名字那一行的墨跡, 正確的名字)]，名牌長得一樣就直接用，不靠 OCR
         self._name_fixes: list[tuple[np.ndarray, str]] = []
         self._name_mask: np.ndarray | None = None      # 最近一次讀的名字那一行的墨跡
+        # 名牌讀到跟現在不像的名字、但沒經過選角畫面：記著它連續讀到幾次
+        self._rival_name = ""
+        self._rival_reads = 0
+        # 每隻角色以前讀到的最高等級（頁面從歷史紀錄算好交進來）：等級不會降，比它低的答案都是讀錯
+        self._level_floors: dict[str, int] = {}
         self._notices: list[str] = []
         self._ocr_outbox: list[dict] = []
         # 靠 OCR 新學會的字形（楓幣、等級），頁面收去回報後端：收集各台電腦學到的長相，之後整理進內建字形。
@@ -210,8 +223,15 @@ class WebSession:
 
         # 地圖：先找到小地圖面板，再從面板內容區定位名稱區；指紋連續穩定才算換圖。
         self.map_watcher = ident.MapWatcher()
+        # map_id／map_name 是確認過的地圖（統計、頁面都用它）；_seen_map_id 是小地圖這一格的指紋，
+        # 名字讀出來、跟原本的圖接得上（_settle_map）才換過去。
         self.map_id = ""
         self.map_name = ""
+        self._seen_map_id = ""
+        self._map_candidate = ""
+        self._map_candidate_since = 0.0
+        self._map_free = False          # 剛換角色：下一張圖不檢查遠近
+        self._map_near: dict[str, set[str]] = {}
         self._map_names: dict[str, str] = {}
         self._map_scores: dict[str, float] = {}
         self.map_vocab = MapVocabulary()
@@ -327,6 +347,49 @@ class WebSession:
         )
         return len(self.map_vocab)
 
+    def set_map_links(self, mapbook_json: str) -> int:
+        """載入 mapbook.json（傳送點 ``to``、回村地圖 ``ret``），算出每張圖附近的地圖，回傳張數。"""
+        maps = json.loads(mapbook_json).get("maps", [])
+        names = {m["id"]: f"{m.get('street', '')} {m.get('name', '')}".strip() for m in maps if "id" in m}
+        links: dict[str, set[str]] = {}
+        back: dict[str, set[str]] = {}
+        for m in maps:
+            me = names.get(m.get("id"))
+            if not me:
+                continue
+            links.setdefault(me, set())
+            for target in m.get("to") or []:
+                if target in names:
+                    # 傳送點有時只有單向資料，兩邊都算
+                    links[me].add(names[target])
+                    links.setdefault(names[target], set()).add(me)
+            if m.get("ret") in names:
+                back.setdefault(me, set()).add(names[m["ret"]])
+        near = {}
+        for name in links:
+            reach = {name}
+            edge = {name}
+            for _ in range(MAP_NEAR_HOPS):
+                edge = set().union(*(links.get(n, set()) for n in edge)) - reach
+                reach |= edge
+            near[name] = reach | back.get(name, set())
+        self._map_near = near
+        return len(near)
+
+    def set_level_floors(self, floors_json: str) -> int:
+        """每隻角色以前讀到的最高等級（``{名字: 等級}``），回傳幾隻。"""
+        floors = {}
+        for name, level in (json.loads(floors_json or "{}") or {}).items():
+            if isinstance(level, int) and 1 <= level <= ident.MAX_LEVEL:
+                floors[str(name)] = level
+        self._level_floors = floors
+        return len(floors)
+
+    def _level_floor(self) -> int:
+        """現在這隻角色的等級不可能低於多少：以前的紀錄、這次已經讀到的等級。"""
+        floor = self._level_floors.get(self.character, 0) if self.character else 0
+        return max(floor, self.level or 0)
+
     def resume(self) -> None:
         """暫停／重新分享後呼叫：下一筆讀數只當新基準，空窗期間的經驗與時間都不算。"""
         self.tracker.mark_discontinuity()
@@ -340,6 +403,8 @@ class WebSession:
         self._character_key = ""
         self._character_checked_at = -CHARACTER_RECHECK_SEC
         self._name_mask = None
+        self._rival_name = ""
+        self._rival_reads = 0
         self._verify_until = None
         self._pause_verified = False
         self._level_misses.clear()
@@ -347,6 +412,8 @@ class WebSession:
         self._forget_minimap()
         self.map_watcher = ident.MapWatcher()
         self.map_id = self.map_name = ""
+        self._seen_map_id = self._map_candidate = ""
+        self._map_free = False
         self._map_scores.clear()
 
     def reset(self) -> None:
@@ -569,7 +636,7 @@ class WebSession:
             self._rois_size = size
             self._forget_minimap()
             self.map_watcher = ident.MapWatcher()
-            self.map_id = self.map_name = ""
+            self._seen_map_id = self._map_candidate = ""
         job_rect, name_rect = _band_rects(found.name_rect, found.name_image)
         for key, value in (("level", found.level_rect), ("job", job_rect), ("name", name_rect)):
             if value is not None:
@@ -578,6 +645,8 @@ class WebSession:
         zone = found.zone
         if zone is not None and zone.digits:
             value = self.level_reader.read_templates(zone)
+            if value is not None and value < self._level_floor():
+                value = None        # 等級不會降：模板認錯了，交給 OCR
             if value is not None:
                 self.level = value
             elif self._ocr_ready and self._level_may_retry(zone.shape_key):
@@ -609,11 +678,11 @@ class WebSession:
         self._map_misses = 0
         self._rois["map"] = found.map_rect
         if self.map_watcher.feed(found.map_id, found.map_image):
-            self.map_id = self.map_watcher.map_id
-            self.map_name = self._map_names.get(self.map_id, "")
+            self._seen_map_id = self.map_watcher.map_id
+        self._settle_map()
         # 有清單時，沒讀到滿分就隔一陣子重讀（OCR 在這個字級下每次結果會跳動，換圖當下
         # 剛好讀壞名字就會一路錯下去；桌面版 _maybe_refresh_map_name 同一個理由）。
-        if self.map_id and self._ocr_ready and self._map_scores.get(self.map_id, -1.0) < (
+        if self._seen_map_id and self._ocr_ready and self._map_scores.get(self._seen_map_id, -1.0) < (
             1.0 if self.map_vocab else 0.0
         ):
             self._maybe_request_map_name()
@@ -685,7 +754,7 @@ class WebSession:
         ]
         bars = trailing_numeral_bars(image, bands[min(1, len(bands) - 1)])
         self._request_ocr(
-            f"map:{self.map_id}", "text", images, {"map_id": self.map_id, "bars": bars}
+            f"map:{self._seen_map_id}", "text", images, {"map_id": self._seen_map_id, "bars": bars}
         )
 
     def _finish_map_name(self, ctx: dict, texts) -> None:
@@ -712,6 +781,47 @@ class WebSession:
         self._map_scores[map_id] = score
         if map_id == self.map_id:
             self.map_name = name
+        if map_id == self._seen_map_id:
+            self._settle_map()
+
+    def _map_is_near(self, old: str, new: str) -> bool:
+        """從 old 走得到 new 嗎（MAP_NEAR_HOPS 個傳送點以內，或 old 的回村地圖）。沒有資料可查就當作可以。"""
+        if not self._map_near or old not in self._map_near:
+            return True
+        return new in self._map_near[old]
+
+    def _settle_map(self) -> None:
+        """小地圖這一格的指紋跟名字，決定要不要換掉確認過的地圖。"""
+        seen = self._seen_map_id
+        if not seen:
+            return
+        name = self._map_names.get(seen, "")
+        if seen == self.map_id or not self.map_id or not self.map_name:
+            # 同一個指紋（名字重讀變好）、或還沒有確認過的地圖
+            self.map_id, self.map_name = seen, name or (self.map_name if seen == self.map_id else "")
+            self._map_candidate = ""
+            return
+        if not name:
+            return      # 新指紋的名字還沒讀出來：先當作還在原地
+        if name == self.map_name:
+            # 同一張圖換了指紋（框框偏 1px、半透明底下的場景）：沿用原本的，頁面的分段才不會斷
+            self._map_candidate = ""
+            return
+        now = time.monotonic()
+        if self._map_free or self._map_is_near(self.map_name, name):
+            self._accept_map(seen, name)
+            return
+        if self._map_candidate != seen:
+            self._map_candidate = seen
+            self._map_candidate_since = now
+            self._notices.append(f"小地圖讀到「{name}」，離「{self.map_name}」太遠，先當作還在原地。")
+        elif now - self._map_candidate_since >= MAP_CONFIRM_SEC:
+            self._accept_map(seen, name)
+
+    def _accept_map(self, seen: str, name: str) -> None:
+        self.map_id, self.map_name = seen, name
+        self._map_candidate = ""
+        self._map_free = False
 
     # ---------------------------------------------------------------- 楓幣
 
@@ -867,6 +977,7 @@ class WebSession:
         self._character_checked_at = now
         key = ident.fingerprint(image)
         if key == self._character_key and self.character:
+            self._rival_name, self._rival_reads = "", 0     # 名牌又是原本那塊：剛才讀到的不像名字是被蓋到
             return
         bands = ident.text_bands(image)
         if not bands:
@@ -879,7 +990,8 @@ class WebSession:
         ]
         # 使用者修正過這塊名牌：名字照修正的，職業照樣靠 OCR
         self._request_ocr(f"character:{key}", "text", images,
-                          {"key": key, "fixed": self._fixed_name(self._name_mask)})
+                          {"key": key, "fixed": self._fixed_name(self._name_mask),
+                           "break": self._verify_until is not None})
 
     def _begin_character_verify(self) -> None:
         """經驗值欄位消失後又回來：可能剛換了角色，強制馬上重讀角色名。"""
@@ -908,6 +1020,7 @@ class WebSession:
         self.level = None
         self._level_misses.clear()
         self.level_status = ""
+        self._map_free = True       # 換角色會登入到那隻角色所在的地圖，不檢查遠近
         self._notices.append(f"換角色：{old} → {new}，統計重新計算。")
 
     def _request_ocr(self, rid: str, kind: str, images: list, ctx: dict) -> None:
@@ -970,6 +1083,11 @@ class WebSession:
         self.level_status = "OCR：" + " / ".join(t or "空" for t in raw)
         # 位數對的答案優先；一個都沒有時，全體一致的答案仍採用但不拿來教模板
         # （字形切分很可能是錯的，教進去會記住錯字形）。
+        # 等級不會降：比這隻角色以前的等級（或這次已經讀到的）低的答案都是讀錯，先剔除再投票。
+        # 實測 72 讀成 72 / 72 / 52 / 22，以前的紀錄是 71，剔除後剩下的全部一致。
+        floor = self._level_floor()
+        exact = [v for v in exact if v >= floor]
+        valid = [v for v in valid if v >= floor]
         answers = Counter(exact or valid).most_common()
         key = zone.shape_key
         value, votes = answers[0] if answers else (None, 0)
@@ -991,6 +1109,7 @@ class WebSession:
 
     def _finish_character(self, ctx: dict, texts) -> None:
         """``texts`` 是 [[行1各倍率], [行2各倍率]]：職業那行取字數最多的，名字那行各倍率投票。"""
+        came_back = bool(ctx.get("break")) or self._verify_until is not None    # 剛經過選角畫面（欄位消失又回來）
         self._verify_until = None
         if not texts:
             return      # 讀不到就保留上一次的結果，不要把已知的名字洗掉
@@ -1007,6 +1126,17 @@ class WebSession:
         name = ctx.get("fixed") or (lines[1] if len(lines) >= 2 else lines[0])
         old = self.character
         switched = bool(old) and not _same_character(old, name)
+        if switched and not came_back:
+            # 沒經過選角畫面（經驗值欄位一直都在）：多半是名牌被蓋到讀錯，同一個名字連續讀到才信
+            if self._rival_name and _same_character(self._rival_name, name):
+                self._rival_reads += 1
+            else:
+                self._rival_name, self._rival_reads = name, 1
+            if self._rival_reads < CHARACTER_CONFIRM_READS:
+                if self._rival_reads == 1:
+                    self._notices.append(f"名牌讀到「{name}」，但沒經過選角畫面，先當作還是「{old}」。")
+                return
+        self._rival_name, self._rival_reads = "", 0
         if switched:
             self._switch_character(old, name)
             self.job = ""
