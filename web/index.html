@@ -96,6 +96,7 @@
     #tab-job:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #tab-job > * { flex: none; }
     #tab-job > .job-skills, #tab-job > .job-guide { flex: 1; min-height: 160px; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
+    #tab-job > .job-guide { padding-bottom: 24px; }
   }
   /* 視窗太矮（手機橫放）時頂列會吃掉大半畫面，改回整頁捲動 */
   @media (max-height: 520px) { main { height: auto; } .page-scroll { overflow: visible; } }
@@ -531,9 +532,7 @@
   .job-card { position: relative; min-height: 300px; }
   .job-card .sec-head { align-items: center; flex-wrap: wrap; }
   .job-card .sec-head .switch { min-width: 0; font-size: 13px; }
-  .job-card .sec-head .sec-sub { margin-left: auto; }
-  .job-card .sec-head input[type="search"] { flex: 1 1 160px; max-width: 260px; min-width: 0; font: 500 14px var(--body); padding: 6px 10px;
-    color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 2px; }
+  .job-card .sec-head { justify-content: flex-start; gap: 10px 14px; }
   /* 分支圖：左邊是起點的職業，拉一條線到主幹，主幹分岔到每一條路，同一條路一轉一轉往右用線串起來 */
   .job-tree { display: flex; align-items: center; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); overflow-x: auto; }
   .job-tree:empty { display: none; }
@@ -552,25 +551,83 @@
     font: 700 14px var(--body); text-align: left; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
   .job-node:hover { border-color: var(--ink); }
   #tab-job [hidden] { display: none !important; }
-  /* 攻略：web/jobguide.md 的內容，選到的職業從一轉一路印到它自己，每個職業一塊 */
+  /* 攻略：一條轉職路線一頁。上面是路線，左邊目錄，右邊一個章節一張卡片；配點是一格一格帶技能圖示的條，NPC、裝備、怪物、地圖是帶圖的小籤 */
   .job-guide { font: 400 14px/1.75 var(--body); color: var(--ink); }
-  .job-guide > section + section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
-  .job-guide h3 { margin: 0 0 6px; font: 700 18px var(--body); letter-spacing: .04em; }
-  .job-guide h3:not(:first-child) { margin-top: 24px; }
-  .job-guide h3 small { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
-  .job-guide h4 { margin: 16px 0 4px; font: 700 15px var(--body); }
-  .job-guide h5 { margin: 12px 0 4px; font: 700 13px var(--body); letter-spacing: .08em; color: var(--muted); }
-  .job-guide p, .job-guide ul { margin: 4px 0 8px; }
-  .job-guide ul { padding-left: 20px; }
-  .job-guide li + li { margin-top: 2px; }
-  .job-guide a { color: var(--accent); }
-  .job-guide .tbl { overflow-x: auto; margin: 6px 0 10px; }
+  .gd-head { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .gd-lines { display: flex; flex-wrap: wrap; gap: 6px; }
+  .gd-lines button { padding: 5px 14px; margin: 0; font: 700 13px var(--body); color: var(--muted); background: var(--ground); border: 1px solid var(--line); border-radius: 999px; }
+  .gd-lines button:hover { color: var(--ink); border-color: var(--ink); }
+  .gd-lines button[aria-selected="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+  .gd-path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .gd-job { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; background: var(--ground); border: 1px solid var(--line); border-radius: 6px; }
+  .gd-job b { display: block; font-size: 15px; line-height: 1.3; }
+  .gd-job small { display: block; font-size: 11px; line-height: 1.3; color: var(--muted); }
+  .gd-job.off { opacity: .5; border-style: dashed; }
+  .gd-arrow { font: 700 18px var(--body); color: var(--muted); }
+  .gd-body { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .gd-toc { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; }
+  .gd-toc button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin: 0; font: 600 13px var(--body); text-align: left;
+    color: var(--muted); background: none; border: 0; border-left: 2px solid var(--line); border-radius: 0; }
+  .gd-toc button:hover { color: var(--accent); border-left-color: var(--accent); }
+  .gd-ico { width: 18px; height: 18px; flex: none; }
+  .gd-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .gd-ch { padding: 16px 20px 18px; background: var(--ground); border: 1px solid var(--line); border-radius: 8px; }
+  .gd-ch > h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding-bottom: 10px; font: 700 17px var(--body); letter-spacing: .06em; border-bottom: 1px solid var(--line); }
+  .gd-ch > h3 .gd-ico { width: 30px; height: 30px; padding: 6px; color: var(--on-accent); background: var(--accent); border-radius: 50%; }
+  .gd-ch h4 { margin: 18px 0 8px; padding-left: 10px; font: 700 15px var(--body); border-left: 3px solid var(--accent); }
+  .gd-ch > h3 + h4 { margin-top: 4px; }
+  .gd-ch h5 { margin: 14px 0 4px; font: 700 13px var(--body); letter-spacing: .08em; color: var(--muted); }
+  .gd-ch p, .gd-ch ul { margin: 6px 0; }
+  .gd-ch ul { padding-left: 20px; }
+  .gd-ch li + li { margin-top: 4px; }
+  .gd-ch a { color: var(--accent); }
+  .gd-card { margin: 10px 0; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+  .gd-card-h { margin-bottom: 8px; font: 700 14px var(--body); color: var(--accent); }
+  .gd-card > p:last-child { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+  /* 配點條：一步一格，格子之間用 › 隔開 */
+  .gd-build { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 0; margin: 6px 0 8px; padding: 0; list-style: none; }
+  .gd-step { display: inline-flex; flex-direction: column; align-items: flex-start; }
+  .gd-step + .gd-step { position: relative; margin-left: 18px; }
+  .gd-step + .gd-step::before { content: "›"; position: absolute; left: -13px; top: 8px; font: 700 16px var(--body); color: var(--muted); }
+  .gd-step > button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 3px; margin: 0; font: 600 13px var(--body); color: var(--ink);
+    background: var(--ground); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  .gd-step > button:hover, .gd-step > button.on { border-color: var(--accent); }
+  .gd-step .lv { min-width: 22px; padding: 0 6px; font: 700 12px/20px var(--mono); text-align: center; color: var(--on-accent); background: var(--accent); border-radius: 4px; }
+  .gd-step small { max-width: 160px; margin-top: 2px; padding-left: 4px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+  .gd-step.plain > span { display: inline-block; padding: 6px 10px; font-size: 13px; line-height: 1.5; background: var(--ground); border: 1px dashed var(--line); border-radius: 6px; }
+  .gd-sic { display: inline-grid; place-items: center; flex: none; font: 700 12px var(--body); color: var(--muted); background-repeat: no-repeat; image-rendering: pixelated; border-radius: 4px; }
+  /* 行內小籤 */
+  .gd-chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 3px; margin: 1px 1px; vertical-align: middle; font: 600 13px/24px var(--body);
+    color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+  .gd-chip:hover, .gd-chip.on { border-color: var(--accent); }
+  .gd-chip small { font-weight: 500; font-size: 11px; color: var(--muted); }
+  .gd-chip .ic { margin: 0; }
+  .gd-chip .gd-pic { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; }
+  .gd-chip .gd-pic img { max-height: 24px; }
+  .gd-chip.gd-map { padding-left: 6px; }
+  .gd-chip.gd-map .gd-ico { width: 14px; height: 14px; color: var(--accent); }
+  /* 大圖：教官、武器 */
+  .gd-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 8px 0 10px; }
+  .gd-fig { display: flex; align-items: center; gap: 12px; padding: 10px; margin: 0; text-align: left; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .gd-fig:hover, .gd-fig.on { border-color: var(--accent); }
+  .gd-fig-pic { width: 84px; height: 88px; flex: none; display: grid; place-items: center; background: var(--ground); border-radius: 6px; }
+  .gd-fig-pic .ic { margin: 0; transform: scale(1.6); image-rendering: pixelated; }
+  .gd-fig-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.5; }
+  .gd-fig-txt b { font-size: 15px; }
+  .gd-fig-txt em { font-style: normal; font-size: 13px; font-weight: 600; color: var(--accent); }
+  .gd-fig-txt small { font-size: 12px; color: var(--muted); }
+  .job-guide .tbl { overflow-x: auto; margin: 8px 0 10px; }
   .job-guide table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.6; }
-  .job-guide th, .job-guide td { padding: 6px 10px; text-align: left; vertical-align: top; border: 1px solid var(--line); }
-  .job-guide th { font-weight: 700; color: var(--muted); background: var(--ground); white-space: nowrap; }
-  .job-guide td:first-child { min-width: 5em; font-weight: 600; }
-  .job-guide .go { display: inline-block; margin-top: 14px; font-size: 13px; }
+  .job-guide th, .job-guide td { padding: 7px 10px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+  .job-guide th { font-weight: 700; color: var(--muted); background: var(--surface); white-space: nowrap; }
+  .job-guide td:first-child { min-width: 4.5em; font-weight: 700; white-space: nowrap; }
   .job-guide .note { margin: 0; }
+  @media (max-width: 760px) {
+    .gd-body { grid-template-columns: minmax(0, 1fr); }
+    .gd-toc { position: static; flex-direction: row; flex-wrap: wrap; }
+    .gd-toc button { border-left: 0; border-bottom: 2px solid var(--line); }
+  }
   .job-node.empty { opacity: .55; }
   .job-node[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); opacity: 1; }
   /* 技能：一個技能一張卡片，只放圖示、名稱、最高等級與說明；每一級的效果點了才彈小卡（跟圖鑑的小卡同一個） */
@@ -1031,7 +1088,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.47.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.48.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1385,12 +1442,11 @@
   <!-- 職業：每個職業的轉職分支與技能，資料是客戶端的快照 web/skillbook.json（見下面的「職業」那一段程式） -->
   <div id="tab-job" class="tab-panel book-card job-card" role="tabpanel" aria-labelledby="tab-btn-job" hidden>
     <div class="sec-head">
-      <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
       <nav class="subtabs" id="job-view" role="tablist" aria-label="技能或攻略">
         <button role="tab" data-job-view="skills" aria-selected="true">技能</button><button role="tab" data-job-view="guide" aria-selected="false">攻略</button>
       </nav>
-      <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
       <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
+      <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
     </div>
     <p class="note rank-error" id="job-error" role="alert"></p>
     <div class="job-tree" id="job-tree"></div>
@@ -5906,13 +5962,12 @@ if (syncApi) {
 }
 
 // ---------------------------------------------------------------- 職業
-// skillbook.json 是客戶端技能資料的快照（scripts/export_skillbook.py）：groups 是每個系統的轉職分支，jobs 是每個職業的技能。
+// 「技能」：skillbook.json 是客戶端技能資料的快照（scripts/export_skillbook.py）：groups 是每個系統的轉職分支，jobs 是每個職業的技能。
 // 技能每一級的效果是一個句型（h，例如「消耗MP#mpCon，攻擊力#damage%」）加上每個代號在各級的值（lv），這裡把代號換成數值；
 // 少數技能沒有句型、每一級各寫一句（texts）。句型裡有、lv 裡沒有的代號是匯出時算不出來的，印「？」。
 // 技能排成卡片，只有圖示、名稱、最高等級與說明；點卡片彈小卡（skillTip，走圖鑑那套 data-tip），裡面才是每一級的效果。
 // 切到這個頁籤才載。選了哪個職業、開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
 const JOB_KEY = "mapleexp.job";
-const JOB_SEARCH_CAP = 80;
 const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null,
   view: "skills", guide: null, guidePromise: null };
 // 先不顯示的職業系統（資料裡有，還沒開放）：分頁、技能搜尋、網址或上次選的都不會開到它們
@@ -5970,24 +6025,22 @@ function skillTip(job, skill) {
     + `<h5>各等級效果</h5><div class="job-levels">${levels}</div>`;
 }
 function renderJobSkills() {
-  const q = $("job-q").value.trim().toLowerCase(), job = jobBook.byId.get(jobBook.job);
-  let list, more = 0;
-  if (q) {
-    // 搜尋是跨職業的：名字裡有這幾個字的技能都列，每個標上是哪個職業的
-    list = jobBook.data.jobs.flatMap((j) => jobSkills(j).filter((skill) => skill.name.toLowerCase().includes(q)).map((skill) => [j, skill]));
-    more = Math.max(0, list.length - JOB_SEARCH_CAP);
-    list = list.slice(0, JOB_SEARCH_CAP);
-  } else {
-    list = job ? jobSkills(job).map((skill) => [job, skill]) : [];
-  }
-  $("job-skills").innerHTML = (list.map(([j, skill]) => skillHtml(j, skill, Boolean(q))).join("")
-    || `<p class="note">${q ? "找不到名字符合的技能。" : job && job.skills.length ? "這個職業的技能都是隱藏的，打開「含隱藏技能」才會列。" : "這個職業沒有技能。"}</p>`)
-    + (more ? `<p class="note">還有 ${more} 個沒列出來，再多打幾個字。</p>` : "");
+  const job = jobBook.byId.get(jobBook.job);
+  const list = job ? jobSkills(job) : [];
+  $("job-skills").innerHTML = list.map((skill) => skillHtml(job, skill, false)).join("")
+    || `<p class="note">${job && job.skills.length ? "這個職業的技能都是隱藏的，打開「含隱藏技能」才會列。" : "這個職業沒有技能。"}</p>`;
   $("job-skills").scrollTop = 0;
 }
+// 技能與攻略兩種看法：技能看分支圖上選的那個職業；攻略看一整條轉職路線，分支圖收起來，路線在攻略上面切
 function renderJobs() {
   const data = jobBook.data;
   if (!data) return;
+  const guide = jobBook.view === "guide";
+  for (const btn of $("job-view").querySelectorAll("[data-job-view]")) btn.setAttribute("aria-selected", String(btn.dataset.jobView === jobBook.view));
+  $("job-hidden").closest("label").hidden = guide;
+  $("job-tree").hidden = guide;
+  $("job-skills").hidden = guide;
+  $("job-guide").hidden = !guide;
   $("job-groups").innerHTML = data.groups.map((g, i) => `<button role="tab" data-job-group="${i}" aria-selected="${i === jobBook.group}">${esc(g.name)}</button>`).join("");
   const g = data.groups[jobBook.group];
   const node = (id) => {
@@ -5997,14 +6050,9 @@ function renderJobs() {
   const link = '<span class="job-link" aria-hidden="true"></span>';
   $("job-tree").innerHTML = (g.root != null ? node(g.root) : "")
     + (g.lines.length ? `<div class="job-lines">${g.lines.map((line) => `<div class="job-line">${line.map(node).join(link)}</div>`).join("")}</div>` : "");
+  if (guide) { renderJobGuide(); return; }
   fitJobNodes();
-  for (const btn of $("job-view").querySelectorAll("[data-job-view]")) btn.setAttribute("aria-selected", String(btn.dataset.jobView === jobBook.view));
-  const guide = jobBook.view === "guide";
-  $("job-q").hidden = guide;
-  $("job-hidden").closest("label").hidden = guide;
-  $("job-skills").hidden = guide;
-  $("job-guide").hidden = !guide;
-  if (guide) renderJobGuide(); else renderJobSkills();
+  renderJobSkills();
 }
 // 分支圖的框都改成這個系統裡最寬的名字那麼寬：先讓每個框照字縮到剛好，量最寬的，再全部設成那個寬度
 function fitJobNodes() {
@@ -6017,7 +6065,23 @@ function fitJobNodes() {
 }
 document.fonts?.ready.then(() => { if (jobBook.data) fitJobNodes(); });
 const jobUrl = () => { if (!$("tab-job").hidden) history.replaceState(null, "", `#job/${jobBook.job}${jobBook.view === "guide" ? "/guide" : ""}`); };
-// ---------- 攻略：web/jobguide.md，「# @職業代號」分段，切到攻略才載
+
+// ---------- 攻略：web/jobguide.md（格式寫在檔案開頭）。切到攻略才載，連圖鑑資料一起載：NPC、裝備、怪物、地圖要畫成帶圖的小籤
+// 一條路線的攻略 = 起點職業、二轉、三轉、@common 四塊，依章節排；每個章節一張卡片，左邊是目錄
+const GUIDE_ICONS = {
+  intro: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  stat: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  skill: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6l-5.4 2.9 1.2-6-4.5-4.2 6.1-.7z"/>',
+  advance: '<path d="M4 20h5v-5h5v-5h5V5"/><path d="M15 5h4v4"/>',
+  gear: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>',
+  train: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>',
+  quest: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  note: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  source: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+};
+const GUIDE_CHAPTERS = [["intro", "職業介紹"], ["stat", "能力值"], ["skill", "技能配點"], ["advance", "轉職"], ["gear", "裝備"],
+  ["train", "練功地圖"], ["quest", "必解任務"], ["note", "版本與資料說明"], ["source", "來源"]];
+const guideIcon = (kind) => `<svg class="gd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GUIDE_ICONS[kind]}</svg>`;
 function loadGuide() {
   if (!jobBook.guidePromise) {
     jobBook.guidePromise = (async () => {
@@ -6029,75 +6093,160 @@ function loadGuide() {
   }
   return jobBook.guidePromise;
 }
-// 只認幾種寫法：## 標題、### 小標、- 條列、| 表格 |（第一列是表頭）、**粗體**、[文字](網址)，其他當段落
+// 拆成 { 代號或 "common": [{ kind, title, lines }] }，畫的時候才轉成 HTML（技能小籤要看是哪條路線）
 function parseGuide(md) {
   const out = new Map();
-  let id = null, lines = [];
-  const flush = () => { if (id != null) out.set(id, guideBlocks(lines)); };
+  let parts = null, part = null;
   for (const line of md.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/)) {
-    const m = line.match(/^# @(\d+)\s*$/);
-    if (m) { flush(); id = Number(m[1]); lines = []; } else lines.push(line);
+    const at = line.match(/^# @(\w+)\s*$/), sec = line.match(/^## (\w+)(?:\s+(.*))?$/);
+    if (at) { parts = []; part = null; out.set(/^\d+$/.test(at[1]) ? Number(at[1]) : at[1], parts); }
+    else if (sec && parts) { part = { kind: sec[1], title: (sec[2] || "").trim(), lines: [] }; parts.push(part); }
+    else if (part) part.lines.push(line);
   }
-  flush();
   return out;
 }
-const guideInline = (s) => esc(s)
+// 技能圖示縮成 size 像素（圖集一格是 cell）
+function skillIconAt(skill, size) {
+  const { cell, cols } = jobBook.data;
+  if (skill.ic == null || !cell) return `<span class="gd-sic" style="width:${size}px;height:${size}px">${esc([...skill.name][0] || "")}</span>`;
+  const k = size / cell;
+  return `<span class="gd-sic" style="width:${size}px;height:${size}px;background-image:url(icons/skills.png);background-size:${cols * cell * k}px auto;background-position:-${(skill.ic % cols) * cell * k}px -${Math.floor(skill.ic / cols) * cell * k}px"></span>`;
+}
+// 行內的 [[...]]：技能先找這條路線上的職業，找不到再找全部職業；圖鑑的東西沒載到就只印名字
+function guideToken(body, ctx) {
+  const [ref, label] = body.split("|").map((s) => s.trim());
+  const m = ref.match(/^(npc|mob|eq|it|map):(\d+)$/);
+  if (!m) {
+    const hit = ctx.skills.get(ref);
+    return hit ? `<button type="button" class="gd-chip" data-tip="skill" data-id="${hit.id}">${skillIconAt(hit, 20)}${esc(label || ref)}</button>` : esc(label || ref);
+  }
+  const [, kind, idText] = m, id = Number(idText);
+  if (kind === "npc") {
+    const n = wbook.npcById?.get(id);
+    return n ? `<button type="button" class="gd-chip" data-tip="npc" data-id="${id}"><span class="gd-pic">${npcPicTag(n, 24, 24, ' loading="lazy" decoding="async"')}</span>${esc(label || n.name)}</button>` : esc(label || `NPC ${id}`);
+  }
+  if (kind === "mob") {
+    const mob = ibook.mobById?.get(id);
+    return mob ? `<button type="button" class="gd-chip" data-tip="mob" data-id="${id}"><span class="gd-pic">${picTag(mob, 28, 22, ' loading="lazy" decoding="async"')}</span>${esc(label || mob.name)}<small>Lv.${mob.level}</small></button>` : esc(label || String(id));
+  }
+  if (kind === "eq" || kind === "it") {
+    const e = (kind === "eq" ? ibook.equipById : ibook.itemById)?.get(id);
+    return e ? `<button type="button" class="gd-chip" data-tip="${kind === "eq" ? "equip" : "item"}" data-id="${id}">${iconTag(e, kind === "eq" ? "equips" : "items", 20)}${esc(label || e.name)}</button>` : esc(label || String(id));
+  }
+  const map = wbook.mapById?.get(id);
+  return map ? `<button type="button" class="gd-chip gd-map" data-tip="map" data-id="${id}">${guideIcon("train")}${esc(label || map.name)}</button>` : esc(label || String(id));
+}
+const guideInline = (s, ctx) => esc(s)
+  .replace(/\[\[([^\]]+)\]\]/g, (_, body) => guideToken(body.replace(/&amp;/g, "&"), ctx))
   .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-function guideBlocks(lines) {
-  let html = "", para = [], list = [], rows = [];
+// 一條配點：「技能 等級（說明）」用 → 串起來；技能名稱對得到就畫圖示，對不到（文字步驟）就印成一格字
+function guideBuild(text, ctx) {
+  const steps = text.split(/\s*→\s*/).map((raw) => {
+    const m = raw.match(/^(.+?)\s*(\d+(?:[～~]\d+)?|滿)?\s*((?:（[^）]*）)*)$/);
+    const hit = m && ctx.skills.get(m[1].trim());
+    if (!hit) return `<li class="gd-step plain"><span>${guideInline(raw, ctx)}</span></li>`;
+    const note = m[3] ? m[3].replace(/^（|）$/g, "") : "";
+    return `<li class="gd-step"><button type="button" data-tip="skill" data-id="${hit.id}">${skillIconAt(hit, 32)}<span class="nm">${esc(hit.name)}</span>`
+      + `${m[2] ? `<b class="lv">${esc(m[2])}</b>` : ""}</button>${note ? `<small>${esc(note)}</small>` : ""}</li>`;
+  });
+  return `<ol class="gd-build">${steps.join("")}</ol>`;
+}
+// 大圖：NPC、怪物、裝備、道具，旁邊兩行說明
+function guideFigure(text, ctx) {
+  const [ref, ...caption] = text.split("|").map((s) => s.trim());
+  const m = ref.match(/^(npc|mob|eq|it):(\d+)$/);
+  if (!m) return "";
+  const id = Number(m[2]);
+  let pic = "", name = "", tipKind = "";
+  if (m[1] === "npc") { const n = wbook.npcById?.get(id); if (n) { pic = npcPicTag(n, 76, 84, ' loading="lazy" decoding="async"'); name = n.name; tipKind = "npc"; } }
+  else if (m[1] === "mob") { const mob = ibook.mobById?.get(id); if (mob) { pic = picTag(mob, 84, 84, ' loading="lazy" decoding="async"'); name = mob.name; tipKind = "mob"; } }
+  else { const e = (m[1] === "eq" ? ibook.equipById : ibook.itemById)?.get(id); if (e) { pic = iconTag(e, m[1] === "eq" ? "equips" : "items"); name = e.name; tipKind = m[1] === "eq" ? "equip" : "item"; } }
+  if (!name) return "";
+  const lines = caption.filter(Boolean).map((c, i) => i ? `<small>${guideInline(c, ctx)}</small>` : `<em>${guideInline(c, ctx)}</em>`).join("");
+  return `<button type="button" class="gd-fig" data-tip="${tipKind}" data-id="${id}"><span class="gd-fig-pic">${pic}</span><span class="gd-fig-txt"><b>${esc(name)}</b>${lines}</span></button>`;
+}
+function guideBlocks(lines, ctx) {
+  let html = "", para = [], list = [], rows = [], figs = [];
   const close = () => {
-    if (para.length) html += `<p>${guideInline(para.join(""))}</p>`;
-    if (list.length) html += `<ul>${list.map((t) => `<li>${guideInline(t)}</li>`).join("")}</ul>`;
+    if (para.length) html += `<p>${guideInline(para.join(""), ctx)}</p>`;
+    if (list.length) html += `<ul>${list.map((t) => `<li>${guideInline(t, ctx)}</li>`).join("")}</ul>`;
     if (rows.length) {
       const [head, ...body] = rows;
-      html += `<div class="tbl"><table><thead><tr>${head.map((c) => `<th>${guideInline(c)}</th>`).join("")}</tr></thead>`
-        + `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${guideInline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      html += `<div class="tbl"><table><thead><tr>${head.map((c) => `<th>${guideInline(c, ctx)}</th>`).join("")}</tr></thead>`
+        + `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${guideInline(c, ctx)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     }
-    para = []; list = []; rows = [];
+    if (figs.length) html += `<div class="gd-figs">${figs.map((f) => guideFigure(f, ctx)).join("")}</div>`;
+    para = []; list = []; rows = []; figs = [];
   };
-  for (const raw of lines) {
-    const line = raw.trim(), h = line.match(/^(#{2,3}) (.+)$/);
-    if (!line) close();
-    else if (h) { close(); html += h[1].length === 2 ? `<h3>${guideInline(h[2])}</h3>` : `<h4>${guideInline(h[2])}</h4>`; }
-    else if (line.startsWith("- ")) { if (para.length || rows.length) close(); list.push(line.slice(2)); }
-    else if (line.startsWith("|")) { if (para.length || list.length) close(); rows.push(line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim())); }
-    else { if (list.length || rows.length) close(); para.push(line); }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith(":::") && line.length > 3) {             // 卡片：收到下一個 ::: 為止
+      close();
+      const inner = [];
+      while (++i < lines.length && lines[i].trim() !== ":::") inner.push(lines[i]);
+      html += `<div class="gd-card"><div class="gd-card-h">${guideInline(line.slice(3).trim(), ctx)}</div>${guideBlocks(inner, ctx)}</div>`;
+      continue;
+    }
+    if (!line) { close(); continue; }
+    if (line.startsWith("### ")) { close(); html += `<h5>${guideInline(line.slice(4), ctx)}</h5>`; continue; }
+    if (line.startsWith(">> ")) { close(); html += guideBuild(line.slice(3), ctx); continue; }
+    const kind = line.startsWith("!! ") ? "fig" : line.startsWith("- ") ? "list" : line.startsWith("|") ? "row" : "para";
+    if ((kind !== "fig" && figs.length) || (kind !== "list" && list.length) || (kind !== "row" && rows.length) || (kind !== "para" && para.length)) close();
+    if (kind === "fig") figs.push(line.slice(3));
+    else if (kind === "list") list.push(line.slice(2));
+    else if (kind === "row") rows.push(line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+    else para.push(line);
   }
   close();
   return html;
 }
-// 從系統的起點沿著那條路走到這個職業：十字軍是 劍士 → 狂戰士 → 十字軍
-function jobPath(id) {
-  const g = jobBook.data.groups[jobGroupOf(id)];
-  if (!g) return [id];
-  const line = g.lines.find((l) => l.includes(id)) || [];
-  return [g.root, ...line.slice(0, line.indexOf(id) + 1)].filter((x) => x != null);
+// 攻略看的是一條路線：選到起點職業時看第一條，選到四轉的照樣看它那條
+function guideLine() {
+  const g = jobBook.data.groups[jobBook.group];
+  return g.lines.find((l) => l.includes(jobBook.job)) || g.lines[0] || [];
 }
 async function renderJobGuide() {
   const box = $("job-guide");
-  if (!jobBook.guide) {
+  if (!jobBook.guide || !wbook.data) {
     $("job-mask").hidden = false;
-    try { await loadGuide(); } catch (err) { box.innerHTML = `<p class="note">讀不到攻略（${esc(err.message)}）。</p>`; return; }
-    finally { $("job-mask").hidden = true; }
+    try {
+      await Promise.all([loadGuide(), loadWorld().catch(() => { /* 圖鑑載不到就只印名字 */ })]);
+    } catch (err) {
+      box.innerHTML = `<p class="note">讀不到攻略（${esc(err.message)}）。</p>`;
+      return;
+    } finally { $("job-mask").hidden = true; }
     if (jobBook.view !== "guide") return;
   }
-  const parts = jobPath(jobBook.job).map((id) => {
-    const job = jobBook.byId.get(id), html = jobBook.guide.get(id);
-    if (html) return `<section>${html}</section>`;
-    if (job?.stage === "四轉") return `<section><h3>${esc(job.name)}（四轉）</h3><p class="note">四轉尚未開放。</p></section>`;
-    return "";
+  const g = jobBook.data.groups[jobBook.group], line = guideLine();
+  const path = [g.root, ...line].filter((id) => id != null);
+  const open = path.filter((id) => jobBook.byId.get(id)?.stage !== "四轉");
+  const ctx = { skills: new Map() };
+  for (const id of [...open].reverse()) for (const s of jobBook.byId.get(id)?.skills || []) if (!ctx.skills.has(s.name)) ctx.skills.set(s.name, s);
+  for (const [, [, s]] of jobBook.skills) if (!ctx.skills.has(s.name)) ctx.skills.set(s.name, s);
+  const parts = [...open, "common"].flatMap((id) => jobBook.guide.get(id) || []);
+  const chapters = GUIDE_CHAPTERS.map(([kind, label]) => {
+    const mine = parts.filter((p) => p.kind === kind);
+    if (!mine.length) return null;
+    const body = mine.map((p, i) => (p.title && (mine.length > 1 || kind === "skill") ? `<h4>${guideInline(p.title, ctx)}</h4>` : "") + guideBlocks(p.lines, ctx)).join("");
+    return [kind, label, `<section class="gd-ch" id="gd-${kind}"><h3>${guideIcon(kind)}${label}</h3>${body}</section>`];
   }).filter(Boolean);
-  box.innerHTML = (parts.join("") || '<p class="note">這個職業還沒有攻略。</p>')
-    + (jobBook.job !== 0 && jobBook.guide.has(0) ? '<a class="go" href="#job/0/guide" data-job-go="0">轉職流程、練功地圖、必解任務 →</a>' : "");
+  // 上面：這條路線一轉一轉的職業（四轉標未開放），同一個系統有好幾條路線時可以直接換
+  const jobTag = (id) => {
+    const job = jobBook.byId.get(id), sk = job.skills.find((s) => !s.hidden && s.ic != null);
+    return `<span class="gd-job${job.stage === "四轉" ? " off" : ""}">${sk ? skillIconAt(sk, 28) : ""}<span><b>${esc(job.name)}</b><small>${esc(job.stage || "零轉")}${job.stage === "四轉" ? " · 未開放" : ""}</small></span></span>`;
+  };
+  const lines = g.lines.length > 1 ? `<div class="gd-lines" role="tablist" aria-label="轉職路線">${g.lines.map((l) => `<button role="tab" data-gd-line="${l[0]}" aria-selected="${l === line}">${esc(l.filter((id) => jobBook.byId.get(id)?.stage !== "四轉").map((id) => jobBook.byId.get(id).name).join(" › "))}</button>`).join("")}</div>` : "";
+  box.innerHTML = `<header class="gd-head">${lines}<div class="gd-path">${path.map(jobTag).join('<span class="gd-arrow" aria-hidden="true">›</span>')}</div></header>`
+    + `<div class="gd-body"><nav class="gd-toc" aria-label="攻略目錄">${chapters.map(([kind, label]) => `<button type="button" data-gd-go="${kind}">${guideIcon(kind)}${label}</button>`).join("")}</nav>`
+    + `<div class="gd-main">${chapters.map((c) => c[2]).join("") || '<p class="note">這個職業還沒有攻略。</p>'}</div></div>`;
   box.scrollTop = 0;
 }
-// 選一個職業：切到它的系統、清掉搜尋、記下來
+// 選一個職業：切到它的系統、記下來
 function jobPick(id) {
   if (!jobBook.data.jobs.some((job) => job.id === id)) id = jobBook.data.jobs[0].id;
   jobBook.job = id;
   jobBook.group = Math.max(0, jobGroupOf(id));
-  $("job-q").value = "";
   jobSave();
   jobUrl();
   renderJobs();
@@ -6137,7 +6286,6 @@ $("job-tree").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-job]");
   if (btn) jobPick(Number(btn.dataset.job));
 });
-$("job-q").addEventListener("input", () => { if (jobBook.data) renderJobSkills(); });
 $("job-view").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-job-view]");
   if (!btn || !jobBook.data || btn.dataset.jobView === jobBook.view) return;
@@ -6147,10 +6295,12 @@ $("job-view").addEventListener("click", (e) => {
   renderJobs();
 });
 $("job-guide").addEventListener("click", (e) => {
-  const a = e.target.closest("[data-job-go]");
-  if (!a) return;
-  e.preventDefault();
-  jobPick(Number(a.dataset.jobGo));
+  const line = e.target.closest("[data-gd-line]");
+  if (line) { jobPick(Number(line.dataset.gdLine)); return; }
+  const go = e.target.closest("[data-gd-go]");
+  if (!go) return;
+  const box = $("job-guide"), sec = $(`gd-${go.dataset.gdGo}`);
+  box.scrollTo({ top: box.scrollTop + sec.getBoundingClientRect().top - box.getBoundingClientRect().top - 4, behavior: "smooth" });
 });
 $("job-hidden").addEventListener("change", (e) => { jobBook.hidden = e.target.checked; jobSave(); renderJobs(); });
 
