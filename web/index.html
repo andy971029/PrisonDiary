@@ -504,6 +504,7 @@
   .rank-list b, .rank-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rank-list small { font: 400 12px var(--body); color: var(--muted); }
   .rank-list small:empty { display: none; }
+  .rank-list .who small.map { white-space: normal; overflow-wrap: anywhere; }
   .rank-list .who b { font-size: 14px; }
   .rank-list .val { text-align: right; font: 500 15px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   #rank-train table.hist td b { font: 500 15px var(--mono); }
@@ -1090,7 +1091,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.50.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.50.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -5766,11 +5767,11 @@ const rankNum = (n) => Math.round(n).toLocaleString();
 const rankJoin = (...parts) => parts.filter(Boolean).join(" · ");
 const rankLv = (level) => (level ? `Lv.${level}` : "");
 const RANK_FACE = { w: 40, h: 40, x: 24, y: 68 };     // 頭像從站姿裡切哪一塊：腳底在 (x, y)，頭大約在往上 29～64 像素的地方
-// 每一塊：top 是頒獎台上名字底下那行，who 是名單裡名字底下的小字，val 與 sub 是名單右邊的數值與小字
+// 每一塊：top 是頒獎台上名字底下那行，who 是名單裡名字底下的小字，map 是再下一行的地圖（自己一行、可換行，名稱才看得完整），val 與 sub 是名單右邊的數值與小字
 const RANK_BOARDS = [
   { id: "exp", top: (r) => rankNum(r.exp), who: (r) => rankJoin(r.job, rankLv(r.level)),
     val: (r) => rankNum(r.exp), sub: (r) => `活躍 ${fmtDuration(r.activeSec)} · ${r.records} 段` },
-  { id: "rate", top: (r) => `${rankNum(r.rate)} / hr`, who: (r) => rankJoin(r.job, rankLv(r.level), r.mapName),
+  { id: "rate", top: (r) => `${rankNum(r.rate)} / hr`, who: (r) => rankJoin(r.job, rankLv(r.level)), map: (r) => r.mapName || "",
     val: (r) => rankNum(r.rate), sub: (r) => `活躍 ${fmtDuration(r.activeSec)}` },
   { id: "level", top: (r) => rankLv(r.level), who: (r) => r.job, val: (r) => rankLv(r.level), sub: () => "" },
 ];
@@ -5790,7 +5791,7 @@ function renderPeople(data) {
         + `<span class="podium-val">${r ? esc(board.top(r)) : "--"}</span><div class="podium-step" aria-label="第 ${i + 1} 名">${i + 1}</div></li>`;
     }).join("");
     box.querySelector(".rank-list").innerHTML = rows.map((r, i) =>
-      `<li><span class="no">${i + 1}</span>${rankSlot("rank-face", r)}<span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small></span>`
+      `<li><span class="no">${i + 1}</span>${rankSlot("rank-face", r)}<span class="who"><b title="${esc(r.character)}">${esc(r.character)}</b><small>${esc(board.who(r))}</small>${board.map ? `<small class="map">${esc(board.map(r))}</small>` : ""}</span>`
       + `<span class="val">${esc(board.val(r))}<small>${esc(board.sub(r))}</small></span></li>`).join("");
     box.querySelector(".rank-none").hidden = rows.length > 0;
   }
