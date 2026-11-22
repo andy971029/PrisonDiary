@@ -951,11 +951,14 @@ class WebSession:
         return time.monotonic() - self._level_last_try >= LEVEL_SLOW_RETRY_SEC
 
     def _finish_level(self, zone, texts) -> None:
-        """每個倍率各給一個答案，同樣位數的答案要至少兩個、且全部一致才採用。
+        """每個倍率各給一個答案，同樣位數的答案至少兩個一致才採用。
 
         位數用 ``zone.digits``（色鍵切出來的字形數）當基準：Tesseract 在糊掉的畫面上常
         只回答半個數字（實測 59 在 8 倍讀成 9），這種答案位數不對，直接當作沒回答，
-        而不是讓它否決其他倍率的正確答案。位數對卻互相矛盾的才算分歧，整次不信。
+        而不是讓它否決其他倍率的正確答案。
+        位數對卻互相矛盾的才算分歧：全部一致才拿來教模板；不一致時，票數最多的答案至少兩票、
+        而且贏過其他答案，只在還不知道等級（或剛好升一級）時採用，不教模板、之後慢慢重試。
+        實測 72 在 1366x768 的小視窗讀成 72 / 72 / 52 / 22，以前全部一致才採用，等級就一直讀不出來。
         """
         self._level_last_try = time.monotonic()
         expected = len(zone.digits)
@@ -967,17 +970,24 @@ class WebSession:
         self.level_status = "OCR：" + " / ".join(t or "空" for t in raw)
         # 位數對的答案優先；一個都沒有時，全體一致的答案仍採用但不拿來教模板
         # （字形切分很可能是錯的，教進去會記住錯字形）。
-        answers = exact or valid
-        if len(answers) < 2 or len(set(answers)) != 1:
-            key = zone.shape_key
+        answers = Counter(exact or valid).most_common()
+        key = zone.shape_key
+        value, votes = answers[0] if answers else (None, 0)
+        unanimous = len(answers) == 1
+        clear = votes >= 2 and (unanimous or answers[1][1] < votes)
+        # 意見分歧時不拿來改掉已知的等級（除了升一級），免得模糊的一格把 72 改成 22
+        if not clear or (not unanimous and self.level is not None and value != self.level + 1):
             self._level_misses[key] = self._level_misses.get(key, 0) + 1
             return
-        value = answers[0]
-        self._level_misses.pop(zone.shape_key, None)
         self.level_status = ""
+        self.level = value
+        if not unanimous:
+            # 沒教模板，下一格還是會走 OCR；當作已經試過幾次，改成慢慢重試
+            self._level_misses[key] = OCR_RETRY_LIMIT
+            return
+        self._level_misses.pop(key, None)
         if exact:
             self._teach("level", self.level_reader.templates, lambda: self.level_reader.teach(zone, value), value)
-        self.level = value
 
     def _finish_character(self, ctx: dict, texts) -> None:
         """``texts`` 是 [[行1各倍率], [行2各倍率]]：職業那行取字數最多的，名字那行各倍率投票。"""

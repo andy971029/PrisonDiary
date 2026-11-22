@@ -364,11 +364,28 @@ class TestIdentityOcr(unittest.TestCase):
         self.assertEqual(session.level, 45)
         self.assertEqual(self.taught, [45])
 
-    def test_level_disagreement_is_rejected_and_counted(self):
+    def test_level_majority_is_used_but_not_taught(self):
+        """實測 72 在小視窗讀成 72 / 72 / 52 / 22：還不知道等級時採用多數，但不教模板、改成慢慢重試。"""
         session = self.make_session()
-        session._finish_level(FakeZone(), ["45", "46", "45", "45"])
+        session._finish_level(FakeZone(), ["72", "72", "52", "22"])
+        self.assertEqual(session.level, 72)
+        self.assertEqual(self.taught, [])
+        self.assertEqual(session._level_misses["zone-a"], bridge.OCR_RETRY_LIMIT)
+
+    def test_level_tie_is_rejected_and_counted(self):
+        session = self.make_session()
+        session._finish_level(FakeZone(), ["45", "46", "45", "46"])
         self.assertIsNone(session.level)
         self.assertEqual(session._level_misses["zone-a"], 1)
+        self.assertEqual(self.taught, [])
+
+    def test_split_answer_does_not_change_a_known_level(self):
+        session = self.make_session()
+        session.level = 45
+        session._finish_level(FakeZone(), ["25", "25", "45", "75"])
+        self.assertEqual(session.level, 45)
+        session._finish_level(FakeZone(), ["46", "46", "48", "16"])
+        self.assertEqual(session.level, 46)        # 升一級照樣跟上
         self.assertEqual(self.taught, [])
 
     def test_level_that_is_not_a_number_is_rejected(self):

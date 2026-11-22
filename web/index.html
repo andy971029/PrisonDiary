@@ -1011,7 +1011,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.46.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.46.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1747,6 +1747,7 @@ async function share(media = navigator.mediaDevices) {
   shareSettings = settings;
   anomalySince.clear();
   anomalySent.clear();
+  restartSnaps = 0;
   sourceW = sourceH = 0;        // 下一格一定重新判斷畫面有沒有被放大
   if (settings.displaySurface && settings.displaySurface !== "window") {
     $("hint").textContent = `你分享的是「${settings.displaySurface}」。分享整個螢幕也能用，但分享遊戲「視窗」才不會被其他視窗蓋到。`;
@@ -1872,6 +1873,7 @@ function tick() {
   trackHistory(out);
   rememberRead(out, performance.now() - started);
   watchAnomalies(out);
+  watchRestarts(out);
   queueGlyphs(out);
   if (ocr) for (const req of out.ocr || []) runOcr(req);
 }
@@ -1984,10 +1986,10 @@ function shortSegments() {
 // 結算確認後才呼叫：把暫存的段正式寫入歷史。
 function commitPending() {
   const done = pendingSegments();
+  // 快照要在 discardPending 清掉之前拿出來（以前順序反了，每段的快照都沒送出去）
+  const snaps = segSnaps;
   discardPending();
   if (!done.length) return;
-  const snaps = segSnaps;
-  segSnaps = new Map();
   if (uploadOn) {
     ensureUids(done);
     for (const r of done) queueSegmentSnapshot(r, snaps.get(r.id));
@@ -2412,6 +2414,23 @@ function watchAnomalies(out) {
     queueSnapshot({
       kind: "anomaly", reason, version: snap.state.version,
       state: { ...snap.state, reads: recentReads.slice(-30) }, crops: snap.crops,
+    });
+  }
+}
+
+// 統計被重新計算（引擎判斷換了地圖或角色）也拍一份，看是不是讀錯了；每次分享最多 RESTART_SNAPS_MAX 份
+const RESTART_SNAPS_MAX = 5;
+let restartSnaps = 0;
+function watchRestarts(out) {
+  if (!uploadOn) return;
+  for (const text of out.notices || []) {
+    if (!text.includes("統計重新計算") || restartSnaps >= RESTART_SNAPS_MAX) continue;
+    restartSnaps++;
+    const snap = takeSnapshot(out);
+    queueSnapshot({
+      kind: "anomaly", reason: text.startsWith("換角色") ? "統計重新計算：換角色" : "統計重新計算：換地圖",
+      version: snap.state.version,
+      state: { ...snap.state, notice: text, reads: recentReads.slice(-60) }, crops: snap.crops,
     });
   }
 }
