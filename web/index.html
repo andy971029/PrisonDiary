@@ -533,6 +533,10 @@
   .job-card .sec-head { align-items: center; flex-wrap: wrap; }
   .job-card .sec-head .switch { min-width: 0; font-size: 13px; }
   .job-card .sec-head { justify-content: flex-start; gap: 10px 14px; }
+  /* 系統分頁靠左；技能／攻略固定在最右邊，含隱藏技能（只在看技能時出現）緊貼在它左邊 */
+  #job-view { margin-left: auto; }
+  .job-card .sec-head .switch { margin-left: auto; }
+  .job-card .sec-head .switch:not([hidden]) + #job-view { margin-left: 0; }
   /* 分支圖：左邊是起點的職業，拉一條線到主幹，主幹分岔到每一條路，同一條路一轉一轉往右用線串起來 */
   .job-tree { display: flex; align-items: center; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); overflow-x: auto; }
   .job-tree:empty { display: none; }
@@ -1088,7 +1092,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.48.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.48.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1442,11 +1446,11 @@
   <!-- 職業：每個職業的轉職分支與技能，資料是客戶端的快照 web/skillbook.json（見下面的「職業」那一段程式） -->
   <div id="tab-job" class="tab-panel book-card job-card" role="tabpanel" aria-labelledby="tab-btn-job" hidden>
     <div class="sec-head">
+      <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
+      <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
       <nav class="subtabs" id="job-view" role="tablist" aria-label="技能或攻略">
         <button role="tab" data-job-view="skills" aria-selected="true">技能</button><button role="tab" data-job-view="guide" aria-selected="false">攻略</button>
       </nav>
-      <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
-      <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
     </div>
     <p class="note rank-error" id="job-error" role="alert"></p>
     <div class="job-tree" id="job-tree"></div>
