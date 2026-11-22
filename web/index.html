@@ -546,7 +546,9 @@
   .job-tree > .job-node + .job-lines > .job-line::after { content: ""; position: absolute; left: -18px; top: -3px; bottom: -3px; border-left: 1px solid var(--muted); }
   .job-tree > .job-node + .job-lines > .job-line:first-child::after { top: 50%; }
   .job-tree > .job-node + .job-lines > .job-line:last-child::after { bottom: 50%; }
-  .job-node { display: inline-flex; flex-direction: column; align-items: flex-start; flex: none; min-width: 96px; padding: 6px 12px; margin: 0;
+  /* 框寬：同一個職業系統的框都跟名字最長的那個一樣寬（--job-node-w 由 fitJobNodes 量出來） */
+  .job-node { display: inline-flex; flex-direction: column; align-items: flex-start; flex: none; width: var(--job-node-w, auto); padding: 6px 12px; margin: 0;
+    white-space: nowrap;
     font: 700 14px var(--body); text-align: left; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
   .job-node:hover { border-color: var(--ink); }
   .job-node.empty { opacity: .55; }
@@ -1009,7 +1011,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.46.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.46.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -5951,8 +5953,19 @@ function renderJobs() {
   const link = '<span class="job-link" aria-hidden="true"></span>';
   $("job-tree").innerHTML = (g.root != null ? node(g.root) : "")
     + (g.lines.length ? `<div class="job-lines">${g.lines.map((line) => `<div class="job-line">${line.map(node).join(link)}</div>`).join("")}</div>` : "");
+  fitJobNodes();
   renderJobSkills();
 }
+// 分支圖的框都改成這個系統裡最寬的名字那麼寬：先讓每個框照字縮到剛好，量最寬的，再全部設成那個寬度
+function fitJobNodes() {
+  const tree = $("job-tree");
+  tree.style.removeProperty("--job-node-w");
+  const nodes = [...tree.querySelectorAll(".job-node")];
+  if (!nodes.length || tree.offsetParent === null) return;     // 頁籤沒顯示時量不到，切過來時再量
+  const w = Math.max(...nodes.map((b) => b.getBoundingClientRect().width));
+  tree.style.setProperty("--job-node-w", `${Math.ceil(w)}px`);
+}
+document.fonts?.ready.then(() => { if (jobBook.data) fitJobNodes(); });
 // 選一個職業：切到它的系統、清掉搜尋、記下來
 function jobPick(id) {
   if (!jobBook.data.jobs.some((job) => job.id === id)) id = jobBook.data.jobs[0].id;
