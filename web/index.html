@@ -982,8 +982,8 @@
     body.mini.compact { height: auto; padding: 6px 10px 6px; }
     body.compact > :not(.m-compact, .m-clock), body:not(.compact) > .m-compact { display: none; }
     /* 現在時間：永遠貼在浮窗最下方 */
-    .m-clock { margin-top: auto; text-align: center; font: 700 12px var(--mono); color: var(--muted);
-      font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+    .m-clock { margin-top: auto; text-align: right; font: 400 11px var(--body); color: var(--muted); white-space: nowrap; }
+    .m-clock b { font: 700 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
     .m-compact { display: flex; flex-direction: column; gap: 4px; }
     /* 經驗那一行不換行：視窗窄時縮速率字級，按鈕永遠在同一行 */
     .m-crow { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -1083,7 +1083,7 @@
     <div class="coin"><dt>目前楓幣</dt><dd id="m-meso-cur">--</dd></div>
     <div class="coin"><dt>總累計楓幣</dt><dd id="m-meso-total">--</dd></div>
   </dl>
-  <div class="m-clock" id="m-clock"></div>
+  <div class="m-clock">現在時間：<b id="m-clock"></b></div>
 </template>
 </head>
 <body>
@@ -1091,7 +1091,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.50.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.50.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3369,13 +3369,13 @@ function setMiniCompact(win, compact) {
 // 開窗時只能先猜高度，內容實際多高要等版面排好才知道（字型、寬度都會影響）。
 // 排好後量一次、把視窗縮到剛好包住內容，量到的高度記下來，下次開窗直接用。
 const MINI_WIDTH = 340;
-const MINI_HEIGHT_KEY = "mapleexp.miniHeight";
+const MINI_HEIGHT_KEY = "mapleexp.miniHeight2";   // 加了現在時間那一行後換新的 key，舊的量測值偏矮
 function savedMiniHeight() {
   try {
     const h = Number(localStorage.getItem(MINI_HEIGHT_KEY));
     if (h >= 120 && h <= 600) return h;
   } catch { /* 讀不到就用預設 */ }
-  return 240;
+  return 330;
 }
 
 function fitMiniHeight(win) {
