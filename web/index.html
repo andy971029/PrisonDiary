@@ -95,7 +95,7 @@
     .page-scroll:has(> #tab-job:not([hidden])) { display: flex; flex-direction: column; padding-bottom: 20px; }
     #tab-job:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #tab-job > * { flex: none; }
-    #tab-job > .job-skills { flex: 1; min-height: 160px; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
+    #tab-job > .job-skills, #tab-job > .job-guide { flex: 1; min-height: 160px; overflow-y: auto; margin-right: -12px; padding-right: 12px; }
   }
   /* 視窗太矮（手機橫放）時頂列會吃掉大半畫面，改回整頁捲動 */
   @media (max-height: 520px) { main { height: auto; } .page-scroll { overflow: visible; } }
@@ -551,6 +551,26 @@
     white-space: nowrap;
     font: 700 14px var(--body); text-align: left; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; }
   .job-node:hover { border-color: var(--ink); }
+  #tab-job [hidden] { display: none !important; }
+  /* 攻略：web/jobguide.md 的內容，選到的職業從一轉一路印到它自己，每個職業一塊 */
+  .job-guide { font: 400 14px/1.75 var(--body); color: var(--ink); }
+  .job-guide > section + section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .job-guide h3 { margin: 0 0 6px; font: 700 18px var(--body); letter-spacing: .04em; }
+  .job-guide h3:not(:first-child) { margin-top: 24px; }
+  .job-guide h3 small { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .job-guide h4 { margin: 16px 0 4px; font: 700 15px var(--body); }
+  .job-guide h5 { margin: 12px 0 4px; font: 700 13px var(--body); letter-spacing: .08em; color: var(--muted); }
+  .job-guide p, .job-guide ul { margin: 4px 0 8px; }
+  .job-guide ul { padding-left: 20px; }
+  .job-guide li + li { margin-top: 2px; }
+  .job-guide a { color: var(--accent); }
+  .job-guide .tbl { overflow-x: auto; margin: 6px 0 10px; }
+  .job-guide table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.6; }
+  .job-guide th, .job-guide td { padding: 6px 10px; text-align: left; vertical-align: top; border: 1px solid var(--line); }
+  .job-guide th { font-weight: 700; color: var(--muted); background: var(--ground); white-space: nowrap; }
+  .job-guide td:first-child { min-width: 5em; font-weight: 600; }
+  .job-guide .go { display: inline-block; margin-top: 14px; font-size: 13px; }
+  .job-guide .note { margin: 0; }
   .job-node.empty { opacity: .55; }
   .job-node[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); opacity: 1; }
   /* 技能：一個技能一張卡片，只放圖示、名稱、最高等級與說明；每一級的效果點了才彈小卡（跟圖鑑的小卡同一個） */
@@ -1011,7 +1031,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.46.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.47.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1366,12 +1386,16 @@
   <div id="tab-job" class="tab-panel book-card job-card" role="tabpanel" aria-labelledby="tab-btn-job" hidden>
     <div class="sec-head">
       <nav class="subtabs" id="job-groups" role="tablist" aria-label="職業系統"></nav>
+      <nav class="subtabs" id="job-view" role="tablist" aria-label="技能或攻略">
+        <button role="tab" data-job-view="skills" aria-selected="true">技能</button><button role="tab" data-job-view="guide" aria-selected="false">攻略</button>
+      </nav>
       <input type="search" id="job-q" placeholder="搜尋技能名稱" aria-label="搜尋技能名稱">
       <label class="switch" title="客戶端標成不在技能視窗顯示的技能：還沒開放的四轉技能、騎寵、活動技能這些"><input type="checkbox" id="job-hidden"><i></i>含隱藏技能</label>
     </div>
     <p class="note rank-error" id="job-error" role="alert"></p>
     <div class="job-tree" id="job-tree"></div>
     <div class="job-skills" id="job-skills"></div>
+    <div class="job-guide" id="job-guide" hidden></div>
     <div class="rank-mask" id="job-mask" role="status" hidden><div><i aria-hidden="true"></i>載入中…</div></div>
   </div>
 
@@ -5889,7 +5913,8 @@ if (syncApi) {
 // 切到這個頁籤才載。選了哪個職業、開關記在瀏覽器裡；網址 #job/110 直接開那個職業。
 const JOB_KEY = "mapleexp.job";
 const JOB_SEARCH_CAP = 80;
-const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null };
+const jobBook = { data: null, promise: null, byId: new Map(), names: new Map(), skills: new Map(), group: 0, job: null, hidden: false, want: null,
+  view: "skills", guide: null, guidePromise: null };
 // 先不顯示的職業系統（資料裡有，還沒開放）：分頁、技能搜尋、網址或上次選的都不會開到它們
 const JOB_GROUPS_OFF = new Set(["皇家騎士團", "狂狼勇士"]);
 function loadJobs() {
@@ -5920,7 +5945,7 @@ const jobLabel = (job) => job.name + (job.stage ? ` ${job.stage}` : "");
 const jobSkills = (job) => job.skills.filter((skill) => jobBook.hidden || !skill.hidden);
 const jobGroupOf = (id) => jobBook.data.groups.findIndex((g) => g.root === id || g.lines.some((line) => line.includes(id)));
 function jobSave() {
-  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, showHidden: jobBook.hidden })); } catch { /* 存不了就算了 */ }
+  try { localStorage.setItem(JOB_KEY, JSON.stringify({ job: jobBook.job, showHidden: jobBook.hidden, view: jobBook.view })); } catch { /* 存不了就算了 */ }
 }
 // 圖示：ic 是它在圖集 icons/skills.png 裡的序號（跟道具圖示同一種排法，每格 cell 像素、一列 cols 格）；沒有圖示的用名稱的第一個字
 function skillIcon(skill) {
@@ -5973,7 +5998,13 @@ function renderJobs() {
   $("job-tree").innerHTML = (g.root != null ? node(g.root) : "")
     + (g.lines.length ? `<div class="job-lines">${g.lines.map((line) => `<div class="job-line">${line.map(node).join(link)}</div>`).join("")}</div>` : "");
   fitJobNodes();
-  renderJobSkills();
+  for (const btn of $("job-view").querySelectorAll("[data-job-view]")) btn.setAttribute("aria-selected", String(btn.dataset.jobView === jobBook.view));
+  const guide = jobBook.view === "guide";
+  $("job-q").hidden = guide;
+  $("job-hidden").closest("label").hidden = guide;
+  $("job-skills").hidden = guide;
+  $("job-guide").hidden = !guide;
+  if (guide) renderJobGuide(); else renderJobSkills();
 }
 // 分支圖的框都改成這個系統裡最寬的名字那麼寬：先讓每個框照字縮到剛好，量最寬的，再全部設成那個寬度
 function fitJobNodes() {
@@ -5985,6 +6016,82 @@ function fitJobNodes() {
   tree.style.setProperty("--job-node-w", `${Math.ceil(w)}px`);
 }
 document.fonts?.ready.then(() => { if (jobBook.data) fitJobNodes(); });
+const jobUrl = () => { if (!$("tab-job").hidden) history.replaceState(null, "", `#job/${jobBook.job}${jobBook.view === "guide" ? "/guide" : ""}`); };
+// ---------- 攻略：web/jobguide.md，「# @職業代號」分段，切到攻略才載
+function loadGuide() {
+  if (!jobBook.guidePromise) {
+    jobBook.guidePromise = (async () => {
+      const res = await fetch("jobguide.md", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      jobBook.guide = parseGuide(await res.text());
+    })();
+    jobBook.guidePromise.catch(() => { jobBook.guidePromise = null; });
+  }
+  return jobBook.guidePromise;
+}
+// 只認幾種寫法：## 標題、### 小標、- 條列、| 表格 |（第一列是表頭）、**粗體**、[文字](網址)，其他當段落
+function parseGuide(md) {
+  const out = new Map();
+  let id = null, lines = [];
+  const flush = () => { if (id != null) out.set(id, guideBlocks(lines)); };
+  for (const line of md.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/)) {
+    const m = line.match(/^# @(\d+)\s*$/);
+    if (m) { flush(); id = Number(m[1]); lines = []; } else lines.push(line);
+  }
+  flush();
+  return out;
+}
+const guideInline = (s) => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+function guideBlocks(lines) {
+  let html = "", para = [], list = [], rows = [];
+  const close = () => {
+    if (para.length) html += `<p>${guideInline(para.join(""))}</p>`;
+    if (list.length) html += `<ul>${list.map((t) => `<li>${guideInline(t)}</li>`).join("")}</ul>`;
+    if (rows.length) {
+      const [head, ...body] = rows;
+      html += `<div class="tbl"><table><thead><tr>${head.map((c) => `<th>${guideInline(c)}</th>`).join("")}</tr></thead>`
+        + `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${guideInline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    }
+    para = []; list = []; rows = [];
+  };
+  for (const raw of lines) {
+    const line = raw.trim(), h = line.match(/^(#{2,3}) (.+)$/);
+    if (!line) close();
+    else if (h) { close(); html += h[1].length === 2 ? `<h3>${guideInline(h[2])}</h3>` : `<h4>${guideInline(h[2])}</h4>`; }
+    else if (line.startsWith("- ")) { if (para.length || rows.length) close(); list.push(line.slice(2)); }
+    else if (line.startsWith("|")) { if (para.length || list.length) close(); rows.push(line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim())); }
+    else { if (list.length || rows.length) close(); para.push(line); }
+  }
+  close();
+  return html;
+}
+// 從系統的起點沿著那條路走到這個職業：十字軍是 劍士 → 狂戰士 → 十字軍
+function jobPath(id) {
+  const g = jobBook.data.groups[jobGroupOf(id)];
+  if (!g) return [id];
+  const line = g.lines.find((l) => l.includes(id)) || [];
+  return [g.root, ...line.slice(0, line.indexOf(id) + 1)].filter((x) => x != null);
+}
+async function renderJobGuide() {
+  const box = $("job-guide");
+  if (!jobBook.guide) {
+    $("job-mask").hidden = false;
+    try { await loadGuide(); } catch (err) { box.innerHTML = `<p class="note">讀不到攻略（${esc(err.message)}）。</p>`; return; }
+    finally { $("job-mask").hidden = true; }
+    if (jobBook.view !== "guide") return;
+  }
+  const parts = jobPath(jobBook.job).map((id) => {
+    const job = jobBook.byId.get(id), html = jobBook.guide.get(id);
+    if (html) return `<section>${html}</section>`;
+    if (job?.stage === "四轉") return `<section><h3>${esc(job.name)}（四轉）</h3><p class="note">四轉尚未開放。</p></section>`;
+    return "";
+  }).filter(Boolean);
+  box.innerHTML = (parts.join("") || '<p class="note">這個職業還沒有攻略。</p>')
+    + (jobBook.job !== 0 && jobBook.guide.has(0) ? '<a class="go" href="#job/0/guide" data-job-go="0">轉職流程、練功地圖、必解任務 →</a>' : "");
+  box.scrollTop = 0;
+}
 // 選一個職業：切到它的系統、清掉搜尋、記下來
 function jobPick(id) {
   if (!jobBook.data.jobs.some((job) => job.id === id)) id = jobBook.data.jobs[0].id;
@@ -5992,11 +6099,11 @@ function jobPick(id) {
   jobBook.group = Math.max(0, jobGroupOf(id));
   $("job-q").value = "";
   jobSave();
-  if (!$("tab-job").hidden) history.replaceState(null, "", `#job/${id}`);
+  jobUrl();
   renderJobs();
 }
 async function jobOpen() {
-  if (jobBook.data) { jobPick(jobBook.want ?? jobBook.job); jobBook.want = null; return; }
+  if (jobBook.data) { jobBook.view = jobBook.wantView ?? jobBook.view; jobBook.wantView = null; jobPick(jobBook.want ?? jobBook.job); jobBook.want = null; return; }
   $("job-mask").hidden = false;
   try {
     await loadJobs();
@@ -6011,6 +6118,8 @@ async function jobOpen() {
   try { saved = JSON.parse(localStorage.getItem(JOB_KEY) || "{}") || {}; } catch { /* 壞了就用預設 */ }
   // 預設不含隱藏技能，只有自己打開過才含。withHidden 是預設開著那兩版點職業時順手存的，不算數
   jobBook.hidden = saved.showHidden === true;
+  jobBook.view = jobBook.wantView ?? (saved.view === "guide" ? "guide" : "skills");
+  jobBook.wantView = null;
   $("job-hidden").checked = jobBook.hidden;
   // 先看網址指定的，再來是上次選的；都沒有的話，正在分享遊戲畫面而且讀到職業就開那個職業，不然從劍士開始
   const read = $("id-job").textContent.trim();
@@ -6029,11 +6138,25 @@ $("job-tree").addEventListener("click", (e) => {
   if (btn) jobPick(Number(btn.dataset.job));
 });
 $("job-q").addEventListener("input", () => { if (jobBook.data) renderJobSkills(); });
+$("job-view").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-job-view]");
+  if (!btn || !jobBook.data || btn.dataset.jobView === jobBook.view) return;
+  jobBook.view = btn.dataset.jobView;
+  jobSave();
+  jobUrl();
+  renderJobs();
+});
+$("job-guide").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-job-go]");
+  if (!a) return;
+  e.preventDefault();
+  jobPick(Number(a.dataset.jobGo));
+});
 $("job-hidden").addEventListener("change", (e) => { jobBook.hidden = e.target.checked; jobSave(); renderJobs(); });
 
 // ---------------------------------------------------------------- 功能頁籤
 // 練功助手是原本的整頁，怪物圖鑑另外一頁。選了哪頁記在瀏覽器裡，下次開頁沿用；
-// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備；#rank、#rank/train 是排行榜，#job/110 是職業分頁的狂戰士），網址上的優先於記住的。
+// 網址加 #book 可以直接開圖鑑（分享連結用，#book/items、#book/equips 直接開道具、裝備；#rank、#rank/train 是排行榜，#job/110 是職業分頁的狂戰士、#job/110/guide 是它的攻略），網址上的優先於記住的。
 const TAB_KEY = "mapleexp.tab";
 const hasTab = (id) => !!document.querySelector(`.tabs [data-tab="${id}"]`);
 function setTab(id) {
@@ -6052,10 +6175,11 @@ for (const btn of document.querySelectorAll(".tabs [data-tab]")) btn.addEventLis
 {
   let saved = "";
   try { saved = localStorage.getItem(TAB_KEY) || ""; } catch { /* 讀不到就用預設 */ }
-  const [fromUrl, sub] = location.hash.slice(1).split("/");
+  const [fromUrl, sub, sub2] = location.hash.slice(1).split("/");
   if (fromUrl === "book" && sub) ibook.sub = sub;
   if (fromUrl === "rank" && sub) rank.board = sub;
   if (fromUrl === "job" && /^\d+$/.test(sub || "")) jobBook.want = Number(sub);
+  if (fromUrl === "job" && sub2) jobBook.wantView = sub2 === "guide" ? "guide" : "skills";
   setTab(hasTab(fromUrl) ? fromUrl : hasTab(saved) ? saved : "train");
 }
 

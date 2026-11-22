@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 KINDS = ("mobs", "npcs", "minimaps")
-EXTRA = ("skillbook.json", "avatar-effects.json")       # 「職業」分頁的資料；紙娃娃特效的定位
+EXTRA = ("skillbook.json", "jobguide.md", "avatar-effects.json")       # 「職業」分頁的技能與攻略；紙娃娃特效的定位
 LIMIT = 2 << 20
 
 
