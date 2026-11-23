@@ -1105,7 +1105,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.0</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.1</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -3788,8 +3788,9 @@ function bookDetail(m, q, here) {
   const maps = (m.live ? m.spawn : m.maps).map((id) => mapChip(id, "tip", !!here?.has(id)));
   const portrait = picTag(m, 240, 200, ' decoding="async"');
   // 重生時間列在圖鑑說明底下，只寫時間（只有 BOSS 有）；各張圖不一樣就全列
-  const respawn = [...new Set((m.live ? m.spawn : []).map((id) => wbook.respawn.get(`${m.id}:${id}`)).filter(Boolean))].sort((a, b) => a - b);
-  const desc = m.desc || respawn.length ? `<div class="desc">${m.desc ? `<h4>圖鑑說明</h4><p>${esc(m.desc)}</p>` : ""}${respawn.length ? `<h4 title="客戶端資料，伺服器不一定照這個">重生時間</h4><p>${respawn.map(respawnText).join("、")}</p>` : ""}</div>` : "";
+  const rs = (m.live ? m.spawn : []).map((id) => wbook.respawn.get(`${m.id}:${id}`)).filter(Boolean).sort((a, b) => a.order - b.order);
+  const respawn = [...new Set(rs.map((r) => r.text))], rsrc = [...new Set(rs.map((r) => RESPAWN_SRC[r.src]))].join("；");
+  const desc = m.desc || respawn.length ? `<div class="desc">${m.desc ? `<h4>圖鑑說明</h4><p>${esc(m.desc)}</p>` : ""}${respawn.length ? `<h4 title="${rsrc}">重生時間</h4><p>${respawn.join("、")}</p>` : ""}</div>` : "";
   return `<div class="mob-detail">
     ${portrait || desc ? `<div class="portrait">${portrait}${desc}</div>` : ""}
     <div><h4>掉落物 ${m.drops.length}</h4>${drops.length ? `<div class="drop-groups">${drops.join("")}</div>` : '<p class="note">圖鑑上沒有列掉落物。</p>'}</div>
@@ -4208,17 +4209,34 @@ function npcPicTag(n, maxW, maxH, extra = "") {
   return `<img data-pk="npcs/${n.id}.png" width="${Math.round(w * k)}" height="${Math.round(h * k)}" alt="${esc(n.name)}"${extra}>`;
 }
 const countTag = (n, title = "") => n > 1 ? `<small class="n"${title ? ` title="${title}"` : ""}>×${fmtInt(n)}</small>` : "";
-// 重生時間：地圖生成點的 mobTime（客戶端的值，只記十分鐘以上的、只標 BOSS），整點的寫小時、其他寫分鐘
-const respawnText = (secs) => secs % 3600 ? `${Math.round(secs / 60)} 分` : `${secs / 3600} 小時`;
-const respawnTag = (secs) => secs ? `<small class="respawn" title="重生時間（客戶端資料，伺服器不一定照這個）">重生 ${respawnText(secs)}</small>` : "";
+// 重生時間 {text, src, order}：先看經典版玩家實測的表，沒有才用地圖生成點的 mobTime（客戶端的值，只記十分鐘以上的、只標 BOSS），整點的寫小時、其他寫分鐘
+// 實測表：Bobo 攻略站「BOSS 計時主控板」的玩家回報統計（截至 2026-09-08），伺服器沒公布，只是觀測值。[下限, 上限] 分鐘，沒上限的寫「約」
+// https://bobogameguides.com/maplestory-classic/guides/boss-respawn.html
+// 這些 BOSS 很多不在地圖生成點裡（伺服器生的），出現的地圖照怪物圖鑑的 spawn 補到地圖上
+const CLASSIC_RESPAWN = new Map([
+  [2220000, [45]],      // 紅寶王
+  [3220000, [45]],      // 樹妖王
+  [5220002, [45]],      // 殭屍猴王
+  [6220000, [45]],      // 沼澤巨鱷（九成落在 45±3，偶爾 60）
+  [5220000, [90]],      // 巨居蟹
+  [6130101, [45, 60]],  // 蘑菇王（客戶端寫 30 分，實測中位數約 51 分）
+  [6300005, [45, 60]],  // 殭屍蘑菇王（同上）
+]);
+const RESPAWN_SRC = { classic: "經典版玩家回報統計，截至 2026-09-08，僅供參考", client: "客戶端資料，伺服器不一定照這個" };
+const classicRespawn = (id) => {
+  const r = CLASSIC_RESPAWN.get(id);
+  return r && { text: r[1] ? `${r[0]}–${r[1]} 分` : `約 ${r[0]} 分`, src: "classic", order: r[0] * 60 };
+};
+const clientRespawn = (secs) => secs ? { text: secs % 3600 ? `${Math.round(secs / 60)} 分` : `${secs / 3600} 小時`, src: "client", order: secs } : null;
+const respawnTag = (r) => r ? `<small class="respawn" title="重生時間（${RESPAWN_SRC[r.src]}）">重生 ${r.text}</small>` : "";
 // 道具 chip：道具圖鑑有的帶圖示、點了彈小卡；沒有的（現金道具之類）只列名字
 function itemChip(id, count = 1, act = "tip", extra = "") {
   const eq = ibook.equipById.get(id), e = eq || ibook.itemById.get(id);
   if (!e) return `<span>${esc(itemName(id))}${countTag(count)}${extra}</span>`;
   return `<button type="button" data-${act}="${eq ? "equip" : "item"}" data-id="${id}">${iconTag(e, eq ? "equips" : "items", 24)}${esc(e.name)}${countTag(count)}${extra}</button>`;
 }
-const mobChipById = (id, count = 1, act = "tip", title = "", secs = 0) => {
-  const m = ibook.mobById.get(id), extra = countTag(count, title) + respawnTag(secs);
+const mobChipById = (id, count = 1, act = "tip", title = "", respawn = null) => {
+  const m = ibook.mobById.get(id), extra = countTag(count, title) + respawnTag(respawn);
   return m ? mobChip(m, act, extra) : `<span>${esc(String(id))}${extra}</span>`;
 };
 const questChip = (q, act = "tip") => `<button type="button" data-${act}="quest" data-id="${q.id}">${q.lv[0] ? `<small class="pre">Lv.${q.lv[0]}</small>` : ""}${esc(q.name)}${q.live ? "" : `<i class="soon">${q.expired ? "已結束" : "接不到"}</i>`}</button>`;
@@ -4268,6 +4286,9 @@ async function loadWorldNow() {
       n.quests = wbook.questsByNpc.get(n.id) || [];
       n.hay = [n.name, n.func, ...n.maps.map(mapLabelW), ...n.quests.map((q) => q.name)].join("\n").toLowerCase();
     }
+    // 實測表上的 BOSS 照怪物圖鑑列的出現地圖補進去（伺服器生的不在地圖生成點裡）
+    const classicAt = new Map();
+    for (const id of CLASSIC_RESPAWN.keys()) for (const map of ibook.mobById.get(id)?.spawn || []) classicAt.set(map, [...(classicAt.get(map) || []), id]);
     for (const m of maps.maps) {
       // 地圖的生成清單留著一些客戶端沒有名字也沒有資料的 NPC，不列
       m.npcs = m.npcs.filter((id) => wbook.npcById.has(id));
@@ -4279,8 +4300,9 @@ async function loadWorldNow() {
         mobs.set(main, (mobs.get(main) || 0) + n);
         if (t > (secs.get(main) || 0) && ibook.mobById.get(main)?.boss) secs.set(main, t);
       }
-      m.mobs = [...mobs].map(([id, n]) => [id, n, secs.get(id) || 0]);
-      for (const [id, t] of secs) wbook.respawn.set(`${id}:${m.id}`, t);
+      for (const id of classicAt.get(m.id) || []) if (!mobs.has(id)) mobs.set(id, 1);
+      m.mobs = [...mobs].map(([id, n]) => [id, n, classicRespawn(id) || clientRespawn(secs.get(id))]);
+      for (const [id, , r] of m.mobs) if (r) wbook.respawn.set(`${id}:${m.id}`, r);
       if (m.mini) m.mini.npcs = m.mini.npcs.filter(([id]) => wbook.npcById.has(id));
       const levels = m.mobs.map(([id]) => ibook.mobById.get(id)?.level).filter((l) => l != null);
       m.lvLo = levels.length ? Math.min(...levels) : null;
