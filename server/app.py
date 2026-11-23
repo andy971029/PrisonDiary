@@ -42,7 +42,8 @@ uid 與上傳者的 IP 只存不對外，任何回應裡都不會出現。
                                只收不出：之後直接讀資料檔，整理各台電腦學到的長相、挑出可以放進內建字形的
     POST   /api/snapshots      {"key"?, "kind": "segment"|"anomaly", "uid"?, "reason"?, "version", "state", "crops": {名稱: PNG}}，
                                回 {"code"}。segment 是一段紀錄的快照（uid 是那筆紀錄），anomaly 是辨識一直讀不到東西時拍的
-    POST   /api/reports        {"key"?, "version", "note", "state", "log", "crops", "frame": JPEG}，回 {"code", "relayed"}；
+    POST   /api/reports        {"key"?, "version", "note", "state", "log", "crops", "frame": JPEG, "attachments": [JPEG]}，
+                               回 {"code", "relayed"}。attachments 是使用者自己附的圖（最多 3 張）；
                                relayed 是有沒有設 Discord（轉發在背景做，失敗只寫 log）
     GET    /api/health         {"ok": true, "records": 筆數, "counted": 算進排行榜的筆數}
     GET    /                   轉去網站的排行榜頁籤
@@ -93,7 +94,7 @@ GLYPH_VALUE = re.compile(r"[0-9]{1,13}\Z")
 NAMES_PATH = Path(__file__).resolve().parent / "names.json"
 SNAP_KINDS = ("segment", "anomaly")
 MAX_SNAP_BODY = 256 * 1024        # 自動快照：原尺寸的小裁切圖，一份通常不到 20 KB
-MAX_REPORT_BODY = 6 * 1024 * 1024  # 回報帶整張畫面（JPEG）
+MAX_REPORT_BODY = 16 * 1024 * 1024  # 回報帶整張畫面與使用者附的圖（JPEG，base64 後大三分之一）
 SNAP_CROPS = 16                   # 一段紀錄的快照有開頭、最後各一組，一組最多 8 塊
 SNAP_CROP_BYTES = 96 * 1024
 SNAP_NAME = re.compile(r"[a-z][a-z0-9_-]{0,23}\Z")
@@ -101,6 +102,8 @@ SNAP_STATE_BYTES = 64 * 1024
 REPORT_NOTE = 2000
 REPORT_LOG = 30_000
 REPORT_FRAME_BYTES = 4 * 1024 * 1024
+REPORT_ATTACHMENTS = 3            # 使用者自己附的圖最多幾張；網頁先轉成 JPEG、壓到 1 MB 左右
+REPORT_ATTACH_BYTES = 2 * 1024 * 1024
 SNAP_DAILY = 300                  # 一個瀏覽器一天最多幾份自動快照
 REPORT_DAILY = 30                 # 一個瀏覽器一天最多回報幾次
 SNAP_KEEP_MS = 30 * 86_400_000
@@ -411,6 +414,7 @@ def validate_snapshot(raw: object, *, report: bool = False) -> dict:
         "state": _state_json(raw.get("state")),
         "log": "",
         "frame": None,
+        "attachments": [],
     }
     state = raw["state"]
     character = state.get("character")
@@ -420,6 +424,11 @@ def validate_snapshot(raw: object, *, report: bool = False) -> dict:
         out["log"] = _text(raw, "log", REPORT_LOG, multiline=True)
         if raw.get("frame") is not None:
             out["frame"] = _blob(raw["frame"], JPEG_MAGIC, REPORT_FRAME_BYTES, "frame")
+        attachments = raw.get("attachments") if raw.get("attachments") is not None else []
+        if not isinstance(attachments, list) or len(attachments) > REPORT_ATTACHMENTS:
+            raise Invalid(f"attachments 要是最多 {REPORT_ATTACHMENTS} 張的陣列")
+        out["attachments"] = [_blob(value, JPEG_MAGIC, REPORT_ATTACH_BYTES, f"attachments[{i}]")
+                              for i, value in enumerate(attachments)]
     else:
         kind = raw.get("kind")
         if kind not in SNAP_KINDS:
@@ -658,6 +667,8 @@ class Store:
             files["report.txt"] = f"{snap['note']}\n\n----- log -----\n{snap['log']}\n".encode("utf-8")
         if snap["frame"]:
             files["frame.jpg"] = snap["frame"]
+        for i, data in enumerate(snap["attachments"], 1):
+            files[f"attach-{i}.jpg"] = data
         for name, data in snap["crops"].items():
             files[f"{name}.png"] = data
         size = sum(len(data) for data in files.values())
@@ -854,7 +865,7 @@ def _multipart(payload: dict, files: list[tuple[str, bytes, str]]) -> tuple[byte
 
 
 def discord_message(code: str, snap: dict, state: dict) -> tuple[dict, list[tuple[str, bytes, str]]]:
-    """一則回報要送給 Discord 的內容：文字、整張畫面、狀態與 log、裁切圖（Discord 一則最多 10 個附件）。"""
+    """一則回報要送給 Discord 的內容：文字、整張畫面、使用者附的圖、狀態與 log、裁切圖（Discord 一則最多 10 個附件）。"""
     def show(value: object) -> str:
         return str(value) if value not in (None, "") else "--"
 
@@ -870,6 +881,8 @@ def discord_message(code: str, snap: dict, state: dict) -> tuple[dict, list[tupl
     files: list[tuple[str, bytes, str]] = []
     if snap["frame"]:
         files.append(("frame.jpg", snap["frame"], "image/jpeg"))
+    for i, data in enumerate(snap["attachments"], 1):
+        files.append((f"attach-{i}.jpg", data, "image/jpeg"))
     text = f"{snap['note']}\n\n----- state -----\n{snap['state']}\n\n----- log -----\n{snap['log']}\n"
     files.append(("report.txt", text.encode("utf-8"), "text/plain; charset=utf-8"))
     for name, data in list(snap["crops"].items())[: 10 - len(files)]:

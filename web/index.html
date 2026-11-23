@@ -203,6 +203,20 @@
     border: 1px solid var(--line); border-radius: 2px; }
   .report-pic { margin-top: 12px; border: 1px solid var(--line); background: var(--ground); max-height: 40vh; overflow: auto; }
   .report-pic[hidden] { display: none; }
+  .report-att { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .report-att[hidden] { display: none; }
+  .report-att .att { position: relative; width: 84px; height: 84px; border: 1px solid var(--line); background: var(--ground); }
+  .report-att .att img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .report-att .att button { position: absolute; top: 2px; right: 2px; padding: 3px; line-height: 0; border: 0;
+    border-radius: 2px; background: rgba(0, 0, 0, .6); color: #fff; }
+  .report-att .att button .ic { margin: 0; width: 12px; height: 12px; }
+  .report-att .att.busy::after { content: "…"; position: absolute; inset: 0; display: grid; place-items: center;
+    font: 700 18px var(--body); color: var(--muted); }
+  .report-att > button.add { width: 84px; height: 84px; padding: 0; border: 1px dashed var(--line); background: transparent;
+    color: var(--muted); font: 500 13px/1.4 var(--body); }
+  .report-att > button.add:hover, .report-att > button.add:focus-visible { border-color: var(--ink); color: var(--ink); }
+  .report-att > button.add b { display: block; font: 400 24px/1 var(--body); }
+  .report.drop { outline: 2px dashed var(--accent); outline-offset: -8px; }
   .report-pic img { display: block; width: 100%; height: auto; }
   .report .note { margin-top: 10px; }
   .report-code { font: 700 18px var(--mono); color: var(--accent); letter-spacing: .08em; }
@@ -1091,7 +1105,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.50.3</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.0</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -1533,6 +1547,10 @@
 <dialog id="report-dlg" class="settings report" aria-label="回報問題">
   <h2>回報問題</h2>
   <textarea id="report-note" maxlength="2000" placeholder="發生了什麼事？例如：地圖名稱一直讀成別張圖、經驗值停在 --、祈禱倒數不準"></textarea>
+  <div class="report-att" id="report-att">
+    <button type="button" class="add" id="report-add" title="附上自己的截圖，最多 3 張；也可以直接貼上（Ctrl+V）或把圖拖進來"><b>+</b><span id="report-add-n">附加圖片</span></button>
+    <input type="file" id="report-file" accept="image/*" multiple hidden>
+  </div>
   <div class="report-pic" id="report-pic" title="會跟描述一起送出的畫面" hidden><img id="report-img" alt="會一起送出的畫面"></div>
   <p class="note" id="report-status" role="status" hidden></p>
   <div class="btns">
@@ -2388,6 +2406,9 @@ const ANOMALY_MS = 15000;
 const READS_KEEP = 150;
 const REPORT_LOG_MAX = 30000;
 const REPORT_FRAME_MAX = 3 * 1024 * 1024;
+const REPORT_ATTACH_MAX = 3;            // 使用者自己附的圖；後端 server/app.py 的 REPORT_ATTACHMENTS
+const REPORT_ATTACH_BYTES = 1024 * 1024; // 一張壓到 1 MB 以內（後端收到 2 MB），連整張畫面一起送 Discord 也不會超過上限
+const REPORT_ATTACH_SIDE = 2560;
 let segSnaps = new Map();              // 暫存段的 id → { first, last, lastAt }；不寫進紀錄，結算時拿出來傳
 let snapQueue = readSnapQueue();
 let snapBusy = false;
@@ -2567,6 +2588,82 @@ window.addEventListener("online", syncSnapshots);
 
 // 「回報問題」：打開時先把當下的畫面凍結起來給使用者看，送出的就是看到的這張
 let reportPack = null;
+// 使用者自己附的圖（按鈕選檔、貼上、拖進來），一律轉成 JPEG 的 data URL；取消時留著，送出後才清掉
+let reportAttach = [];                  // { url } ；url 是 null 表示還在轉
+
+// 圖片轉成 JPEG：最長邊不超過 2560，透明的地方鋪白底；太大就先降品質、再縮小
+async function reportImage(file) {
+  const bmp = await createImageBitmap(file);
+  try {
+    const cvs = document.createElement("canvas");
+    let scale = Math.min(1, REPORT_ATTACH_SIDE / Math.max(bmp.width, bmp.height));
+    for (let round = 0; ; round++) {
+      cvs.width = Math.max(1, Math.round(bmp.width * scale));
+      cvs.height = Math.max(1, Math.round(bmp.height * scale));
+      const g = cvs.getContext("2d");
+      g.fillStyle = "#fff";
+      g.fillRect(0, 0, cvs.width, cvs.height);
+      g.drawImage(bmp, 0, 0, cvs.width, cvs.height);
+      for (const quality of [0.88, 0.75]) {
+        const url = cvs.toDataURL("image/jpeg", quality);
+        if (url.length * 0.75 <= REPORT_ATTACH_BYTES || round >= 8) return url;
+      }
+      scale *= 0.75;
+    }
+  } finally {
+    bmp.close();
+  }
+}
+
+function renderReportAttach() {
+  const box = $("report-att");
+  box.querySelectorAll(".att").forEach(el => el.remove());
+  const add = $("report-add");
+  reportAttach.forEach((item, i) => {
+    const tile = document.createElement("div");
+    tile.className = "att" + (item.url ? "" : " busy");
+    if (item.url) {
+      const img = document.createElement("img");
+      img.src = item.url;
+      img.alt = `附加的第 ${i + 1} 張圖`;
+      tile.append(img);
+    }
+    const del = document.createElement("button");
+    del.type = "button";
+    del.title = "拿掉這張";
+    del.setAttribute("aria-label", "拿掉這張");
+    del.innerHTML = ICONS.close;
+    del.addEventListener("click", () => {
+      reportAttach = reportAttach.filter(x => x !== item);
+      renderReportAttach();
+    });
+    tile.append(del);
+    box.insertBefore(tile, add);
+  });
+  add.hidden = reportAttach.length >= REPORT_ATTACH_MAX;
+  $("report-add-n").textContent = reportAttach.length ? `${reportAttach.length} / ${REPORT_ATTACH_MAX}` : "附加圖片";
+  $("report-send").disabled = reportAttach.some(x => !x.url);
+}
+
+function addReportFiles(list) {
+  if (!reportPack) return;
+  const files = [...list].filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;
+  const room = REPORT_ATTACH_MAX - reportAttach.length;
+  const status = $("report-status");
+  status.hidden = files.length <= room;
+  if (files.length > room) status.textContent = `最多附 ${REPORT_ATTACH_MAX} 張圖，多的沒有加進來。`;
+  for (const file of files.slice(0, Math.max(0, room))) {
+    const item = { url: null };
+    reportAttach.push(item);
+    reportImage(file).then(url => { item.url = url; }, () => {
+      reportAttach = reportAttach.filter(x => x !== item);
+      status.hidden = false;
+      status.textContent = `讀不到「${file.name || "貼上的圖"}」這張圖，換一張試試。`;
+    }).finally(renderReportAttach);
+  }
+  renderReportAttach();
+}
 $("report").hidden = !syncApi;
 
 function openReport() {
@@ -2579,6 +2676,8 @@ function openReport() {
   }
   const snap = takeSnapshot(sharing ? lastOut : null);
   reportPack = { image, snap };
+  $("report-att").hidden = false;
+  renderReportAttach();
   $("report-pic").hidden = !image;
   if (image) $("report-img").src = image;
   $("report-status").hidden = true;
@@ -2597,6 +2696,7 @@ async function sendReport() {
   status.hidden = false;
   status.textContent = "送出中…";
   const { image, snap } = reportPack;
+  const attachments = reportAttach.map(x => x.url).filter(Boolean);
   const body = {
     key: syncKey() ?? undefined,
     version: snap.state.version,
@@ -2613,6 +2713,7 @@ async function sendReport() {
     },
     crops: snap.crops,
     frame: image ?? undefined,
+    attachments: attachments.length ? attachments : undefined,
   };
   try {
     const res = await fetch(syncApi + "/api/reports", {
@@ -2637,8 +2738,10 @@ async function sendReport() {
     tag.className = "report-code";
     tag.textContent = code;
     status.append(tag, copied ? "（已複製）。跟作者聯絡時附上這個代碼就好。" : "。跟作者聯絡時附上這個代碼就好。");
-    log(`已送出問題回報 ${code}。`);
+    log(`已送出問題回報 ${code}${attachments.length ? `（附 ${attachments.length} 張圖）` : ""}。`);
     btn.hidden = true;
+    reportAttach = [];
+    $("report-att").hidden = true;
     $("report-cancel").textContent = "關閉";
     $("report-note").value = "";
     reportPack = null;
@@ -2651,6 +2754,33 @@ async function sendReport() {
 $("report").addEventListener("click", openReport);
 $("report-send").addEventListener("click", sendReport);
 $("report-cancel").addEventListener("click", () => $("report-dlg").close());
+$("report-add").addEventListener("click", () => $("report-file").click());
+$("report-file").addEventListener("change", e => {
+  addReportFiles(e.target.files);
+  e.target.value = "";
+});
+$("report-dlg").addEventListener("paste", e => {
+  const files = [...(e.clipboardData?.files ?? [])].filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;           // 貼的是文字就照常貼進描述
+  e.preventDefault();
+  addReportFiles(files);
+});
+{
+  const dlg = $("report-dlg");
+  const hasFiles = e => [...(e.dataTransfer?.types ?? [])].includes("Files");
+  dlg.addEventListener("dragover", e => {
+    if (!hasFiles(e) || !reportPack) return;
+    e.preventDefault();
+    dlg.classList.add("drop");
+  });
+  dlg.addEventListener("dragleave", e => { if (!dlg.contains(e.relatedTarget)) dlg.classList.remove("drop"); });
+  dlg.addEventListener("drop", e => {
+    dlg.classList.remove("drop");
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    addReportFiles(e.dataTransfer.files);
+  });
+}
 
 // ---------------------------------------------------------------- 修正角色名字
 // 文字辨識認不得少見的字（「婗」三個倍率讀成 媚／如／盡），使用者自己把名字改對：

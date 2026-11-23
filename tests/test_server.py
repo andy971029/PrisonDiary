@@ -741,6 +741,18 @@ class SnapshotsTest(unittest.TestCase):
         self.assertIn("一直是別張", (folder / "report.txt").read_text(encoding="utf-8"))
         self.assertEqual(self.rows()[0][1:5], ("report", None, "", "地圖讀錯\n一直是別張"))
 
+    def test_report_keeps_user_attachments(self):
+        pics = [base64.b64encode(app.JPEG_MAGIC + bytes([i])).decode() for i in range(3)]
+        snap = app.validate_snapshot({"version": "0.51.0", "state": {}, "attachments": pics}, report=True)
+        code = self.store.add_snapshot(snap, "k", "::1", NOW)
+        folder = self.dir / "snapshots" / code
+        self.assertEqual([(folder / f"attach-{i + 1}.jpg").read_bytes() for i in range(3)],
+                         [app.JPEG_MAGIC + bytes([i]) for i in range(3)])
+        self.assertIn("attach-3.jpg", self.rows()[0][7])
+        for bad in (pics + pics[:1], [PNG], "x", [None]):
+            with self.subTest(bad=str(bad)[:40]), self.assertRaises(app.Invalid):
+                app.validate_snapshot({"version": "1", "state": {}, "attachments": bad}, report=True)
+
     def test_rejects_bad_snapshots(self):
         bad = [
             snapshot(kind="report"), snapshot(uid="x"), snapshot(kind="anomaly"), snapshot(version=""),
@@ -799,13 +811,14 @@ class SnapshotsTest(unittest.TestCase):
     def test_discord_message(self):
         state = {"character": "阿明", "level": 70, "job": "龍騎士", "mapName": ""}
         snap = app.validate_snapshot({"version": "0.45.0", "note": "@everyone 救命", "log": "x", "state": state,
-                                      "crops": {f"c{i}": PNG for i in range(12)}, "frame": JPEG}, report=True)
+                                      "crops": {f"c{i}": PNG for i in range(12)}, "frame": JPEG,
+                                      "attachments": [JPEG, JPEG]}, report=True)
         payload, files = app.discord_message("ABC234", snap, state)
         self.assertIn("#ABC234", payload["content"])
         self.assertIn("阿明｜龍騎士｜Lv. 70｜--", payload["content"])
         self.assertEqual(payload["allowed_mentions"], {"parse": []})
         self.assertEqual(len(files), 10)
-        self.assertEqual([f[0] for f in files[:2]], ["frame.jpg", "report.txt"])
+        self.assertEqual([f[0] for f in files[:4]], ["frame.jpg", "attach-1.jpg", "attach-2.jpg", "report.txt"])
         body, ctype = app._multipart(payload, files)
         self.assertIn(b'name="files[9]"', body)
         self.assertTrue(ctype.startswith("multipart/form-data; boundary="))
