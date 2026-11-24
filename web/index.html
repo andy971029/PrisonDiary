@@ -1105,7 +1105,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.1</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.2</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -6023,6 +6023,30 @@ function rankPick(e) {
   dollRankHint(slot.dataset.character);
 }
 
+// 職業下拉照職業系分組，組內照轉職順序；清單跟 core/jobvocab.py 的 JOB_NAMES 一致，不認得的放「其他」
+const JOB_GROUPS = [
+  ["劍士", ["劍士", "狂戰士", "十字軍", "英雄", "見習騎士", "騎士", "聖騎士", "槍騎兵", "龍騎士", "黑騎士", "聖魂劍士", "狂狼勇士"]],
+  ["法師", ["法師", "巫師(火、毒)", "魔導士(火、毒)", "大魔導士(火、毒)", "巫師(冰、雷)", "魔導士(冰、雷)", "大魔導士(冰、雷)", "僧侶", "祭司", "主教", "烈焰巫師"]],
+  ["弓箭手", ["弓箭手", "獵人", "遊俠", "箭神", "弩弓手", "狙擊手", "神射手", "破風使者"]],
+  ["盜賊", ["盜賊", "刺客", "暗殺者", "夜使者", "俠盜", "神偷", "暗影神偷", "暗夜行者"]],
+  ["海盜", ["海盜", "打手", "格鬥家", "拳霸", "槍手", "神槍手", "槍神", "閃雷悍將"]],
+];
+function fillJobPick(jobs, current) {
+  const have = new Set(jobs.map(String));
+  if (current) have.add(current);
+  const opt = (v) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(v)}</option>`;
+  const known = new Set();
+  let html = `<option value="">全部職業</option>`;
+  for (const [group, names] of JOB_GROUPS) {
+    names.forEach((n) => known.add(n));
+    const hit = names.filter((n) => have.has(n));
+    if (hit.length) html += `<optgroup label="${group}">${hit.map(opt).join("")}</optgroup>`;
+  }
+  const rest = [...have].filter((n) => !known.has(n));
+  if (rest.length) html += `<optgroup label="其他">${rest.map(opt).join("")}</optgroup>`;
+  $("rank-pick-job").innerHTML = html;
+}
+
 function renderTraining(data) {
   // 選項是後端說這段期間有資料的職業與區間；目前選的就算不在裡面也留著，下拉選單才不會跟實際的篩選對不上
   const fill = (id, all, list, current, label) => {
@@ -6031,7 +6055,7 @@ function renderTraining(data) {
     $(id).innerHTML = `<option value="">${all}</option>`
       + values.map((v) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(label(v))}</option>`).join("");
   };
-  fill("rank-pick-job", "全部職業", data?.jobs || [], rank.job, (v) => v);
+  fillJobPick(data?.jobs || [], rank.job);
   fill("rank-pick-level", "全部等級", data?.levels || [], rank.level, (v) => `Lv.${v} – ${Number(v) + RANK_BAND - 1}`);
   const rows = data?.rows || [];
   $("rank-train-body").innerHTML = rows.map((r, i) =>
