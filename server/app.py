@@ -119,6 +119,9 @@ EARLIEST_MS = 1_577_836_800_000   # 2020-01-01，比這更早的時間一定是�
 DAY_MS = 86_400_000
 MAX_SEC = 30 * 86_400             # 一段紀錄不可能超過 30 天
 MAX_EXP = 10 ** 13
+# 每小時經驗超過這個量的紀錄不算排行榜：一定是經驗值讀錯位數（2026-11 有一筆每小時 44 億）。
+# 目前真的最高大約每小時 170 萬，經典版高等級也遠不到這個數，留很大的餘裕。
+MAX_RATE_PER_HOUR = 30_000_000
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (
@@ -300,6 +303,8 @@ def status_of(row: dict, names: Names) -> str:
         return "地圖不在清單裡"
     if row["map_name"] in names.no_board_maps:
         return "女神組隊任務的地圖"
+    if row["active_sec"] > 0 and row["cum_net"] * 3600 / row["active_sec"] > MAX_RATE_PER_HOUR:
+        return "效率不合理（經驗值疑似讀錯）"
     return ""
 
 
@@ -518,7 +523,7 @@ class Store:
             self._db.close()
 
     def _restatus(self) -> None:
-        cur = self._db.execute("SELECT uid, level, job, map_name, status FROM records")
+        cur = self._db.execute("SELECT uid, level, job, map_name, cum_net, active_sec, status FROM records")
         cols = [d[0] for d in cur.description]
         changes = []
         for values in cur.fetchall():

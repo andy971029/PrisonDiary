@@ -305,6 +305,41 @@ class TestGlitchFiltering(unittest.TestCase):
         self.assertEqual(snap.cum_gross, 100)
 
 
+    def test_persistent_extra_digit_misread_is_not_counted(self):
+        """多讀好幾位數的錯誤讀值，用它自己推出的所需經驗檢查會放行；連續兩格互相佐證也不行。"""
+        t = make_tracker()
+        feed_all(
+            t,
+            [
+                reading(0, 5000, need=NEED, level=30),
+                reading(1, 5100, need=NEED, level=30),
+                reading(2, 51_000_000, pct=51.0, level=30),  # 多讀了位數，所需經驗看起來是一億
+                reading(3, 51_000_000, pct=51.0, level=30),
+                reading(4, 5200, need=NEED, level=30),
+                reading(5, 5300, need=NEED, level=30),
+            ],
+        )
+        snap = t.snapshot()
+        self.assertEqual(snap.levelups, 0)
+        # 讀錯那兩格到恢復正常的那一段不估增量（5100→5200 的 100 也一起放掉），只留前後各 100
+        self.assertEqual(snap.cum_gross, 200)
+
+    def test_misread_without_level_is_not_counted(self):
+        t = make_tracker()
+        feed_all(
+            t,
+            [
+                reading(0, 5000, need=NEED),
+                reading(1, 5100, need=NEED),
+                reading(2, 51_000_000, pct=51.0),
+                reading(3, 51_000_000, pct=51.0),
+                reading(4, 5200, need=NEED),
+                reading(5, 5300, need=NEED),
+            ],
+        )
+        self.assertEqual(t.snapshot().cum_gross, 200)
+
+
 class TestPauseAndGaps(unittest.TestCase):
     def test_consecutive_misses_pause_the_clock(self):
         t = make_tracker()

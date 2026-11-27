@@ -42,6 +42,11 @@ IMPLAUSIBLE = "implausible"
 LEVELUP_DROP_RATIO = 0.5
 LEVELUP_MIN_PROGRESS = 0.5
 
+# 同一級的所需經驗是固定的。兩筆取樣各自由（經驗值, 百分比）推出的所需經驗差到這個倍數，
+# 一定有一筆讀錯了位數（多讀一位就差 10 倍）。真的升級時相鄰兩級最多差 2.3 倍（1→2 級），
+# 所以等級沒讀到、升級只能從經驗歸零看出來的時候也不會被誤擋。
+NEED_MISMATCH_RATIO = 3.0
+
 
 @dataclass(frozen=True)
 class Transition:
@@ -441,6 +446,18 @@ class Tracker:
 
         need_prev = self._need_for(prev)
         need_cur = self._need_for(cur)
+
+        same_level = prev.level is None or cur.level is None or cur.level == prev.level
+        if same_level and need_prev and need_cur:
+            ratio = max(need_prev, need_cur) / min(need_prev, need_cur)
+            if ratio >= NEED_MISMATCH_RATIO:
+                # 讀錯位數的那筆會用自己的（錯的）所需經驗通過增量檢查，升級接續也會補上一大段
+                # 假經驗；不估增量，等下一筆確認後當新基準。
+                return Transition(
+                    kind=IMPLAUSIBLE,
+                    surprising=True,
+                    note=f"本級所需經驗前後差 {ratio:.0f} 倍，疑似讀錯位數",
+                )
 
         if prev.level is not None and cur.level is not None:
             if cur.level < prev.level:

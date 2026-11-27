@@ -154,14 +154,15 @@ class CountedTest(unittest.TestCase):
             "沒有地圖名稱": record(5, mapName=""),
             "地圖不在清單裡": record(6, mapName="死亡森林林"),
             "女神組隊任務的地圖": record(7, mapName=PQ_MAP),
+            "效率不合理（經驗值疑似讀錯）": record(8, cumNet=9_996_766_652, activeSec=8174),
         }
         accepted, rejected, uncounted = self.store.add(list(cases.values()), "::1", NOW)
-        self.assertEqual((len(accepted), rejected), (7, []))
+        self.assertEqual((len(accepted), rejected), (8, []))
         self.assertEqual({u["uid"]: u["reason"] for u in uncounted},
                          {r["uid"]: why for why, r in cases.items() if why})
         self.assertEqual(self.store._db.execute("SELECT status FROM records ORDER BY uid").fetchall(),
                          [(why,) for why in cases])
-        self.assertEqual((self.store.count(), self.store.count(counted=True)), (7, 1))
+        self.assertEqual((self.store.count(), self.store.count(counted=True)), (8, 1))
 
     def test_uncounted_records_stay_off_every_board(self):
         self.store.add([
