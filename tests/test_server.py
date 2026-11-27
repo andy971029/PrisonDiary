@@ -732,6 +732,15 @@ class SnapshotsTest(unittest.TestCase):
         self.assertEqual(json.loads((folder / "state.json").read_text(encoding="utf-8"))["character"], "阿明")
         self.assertEqual(self.rows(), [(code, "segment", uid(1), "", "", "阿明", "k", "state.json,first-exp.png,first-map.png")])
 
+    def test_jpeg_crop_up_to_128kb_is_saved_as_jpg(self):
+        big = app.JPEG_MAGIC + bytes(app.SNAP_CROP_BYTES - len(app.JPEG_MAGIC))
+        corner = "data:image/jpeg;base64," + base64.b64encode(big).decode()
+        snap = app.validate_snapshot(snapshot(crops={"first-exp": PNG, "corner": corner}))
+        code = self.store.add_snapshot(snap, "k", "::1", NOW)
+        folder = self.dir / "snapshots" / code
+        self.assertEqual((folder / "corner.jpg").read_bytes(), big)
+        self.assertTrue((folder / "first-exp.png").exists())
+
     def test_report_keeps_frame_note_and_log(self):
         snap = app.validate_snapshot({"version": "0.45.0", "note": "地圖讀錯\n一直是別張", "log": "[1] a\n[2] b",
                                       "state": {"character": "阿明"}, "crops": {"exp": PNG}, "frame": JPEG}, report=True)
@@ -758,7 +767,8 @@ class SnapshotsTest(unittest.TestCase):
             snapshot(kind="report"), snapshot(uid="x"), snapshot(kind="anomaly"), snapshot(version=""),
             snapshot(state="x"), snapshot(state={"big": "x" * 70_000}),
             snapshot(crops={"Bad Name": PNG}), snapshot(crops={"a": "not base64!"}),
-            snapshot(crops={"a": JPEG}),       # 檔頭不是 PNG
+            snapshot(crops={"a": "data:image/gif;base64," + base64.b64encode(b"GIF89a").decode()}),  # 不是 PNG/JPEG
+            snapshot(crops={"a": base64.b64encode(app.PNG_MAGIC + bytes(app.SNAP_CROP_BYTES)).decode()}),
             snapshot(crops={f"c{i}": PNG for i in range(17)}),
             snapshot(reason="\x00"),
         ]

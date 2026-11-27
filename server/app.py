@@ -93,10 +93,10 @@ GLYPH_VALUE = re.compile(r"[0-9]{1,13}\Z")
 
 NAMES_PATH = Path(__file__).resolve().parent / "names.json"
 SNAP_KINDS = ("segment", "anomaly")
-MAX_SNAP_BODY = 256 * 1024        # 自動快照：原尺寸的小裁切圖，一份通常不到 20 KB
+MAX_SNAP_BODY = 3 * 1024 * 1024   # 自動快照：原尺寸的小裁切圖，一份通常不到 20 KB；左上角那塊可能上百 KB
 MAX_REPORT_BODY = 16 * 1024 * 1024  # 回報帶整張畫面與使用者附的圖（JPEG，base64 後大三分之一）
 SNAP_CROPS = 16                   # 一段紀錄的快照有開頭、最後各一組，一組最多 8 塊
-SNAP_CROP_BYTES = 96 * 1024
+SNAP_CROP_BYTES = 128 * 1024      # 一塊裁切圖（PNG，太大的前端改存 JPEG）；web/index.html 的 SNAP_CROP_BYTES
 SNAP_NAME = re.compile(r"[a-z][a-z0-9_-]{0,23}\Z")
 SNAP_STATE_BYTES = 64 * 1024
 REPORT_NOTE = 2000
@@ -377,7 +377,12 @@ def validate_glyph(raw: object) -> dict:
     }
 
 
-def _blob(value: object, magic: bytes, limit: int, name: str) -> bytes:
+def crop_ext(data: bytes) -> str:
+    """裁切圖的副檔名：PNG 或 JPEG。"""
+    return "jpg" if data.startswith(JPEG_MAGIC) else "png"
+
+
+def _blob(value: object, magic: bytes | tuple[bytes, ...], limit: int, name: str) -> bytes:
     """base64（可以帶 data: 開頭）解成位元組，檢查檔頭與大小。"""
     if not isinstance(value, str) or len(value) > limit * 4 // 3 + 64:
         raise Invalid(f"{name} 不是文字或太大")
@@ -448,7 +453,7 @@ def validate_snapshot(raw: object, *, report: bool = False) -> dict:
     for name, value in crops.items():
         if not isinstance(name, str) or not SNAP_NAME.match(name):
             raise Invalid("crops 的名稱不對")
-        out["crops"][name] = _blob(value, PNG_MAGIC, SNAP_CROP_BYTES, f"crops.{name}")
+        out["crops"][name] = _blob(value, (PNG_MAGIC, JPEG_MAGIC), SNAP_CROP_BYTES, f"crops.{name}")
     return out
 
 
@@ -670,7 +675,7 @@ class Store:
         for i, data in enumerate(snap["attachments"], 1):
             files[f"attach-{i}.jpg"] = data
         for name, data in snap["crops"].items():
-            files[f"{name}.png"] = data
+            files[f"{name}.{crop_ext(data)}"] = data
         size = sum(len(data) for data in files.values())
         report = snap["kind"] == "report"
         with self._lock:
@@ -886,7 +891,8 @@ def discord_message(code: str, snap: dict, state: dict) -> tuple[dict, list[tupl
     text = f"{snap['note']}\n\n----- state -----\n{snap['state']}\n\n----- log -----\n{snap['log']}\n"
     files.append(("report.txt", text.encode("utf-8"), "text/plain; charset=utf-8"))
     for name, data in list(snap["crops"].items())[: 10 - len(files)]:
-        files.append((f"{name}.png", data, "image/png"))
+        ext = crop_ext(data)
+        files.append((f"{name}.{ext}", data, "image/jpeg" if ext == "jpg" else "image/png"))
     payload = {
         "content": content,
         "allowed_mentions": {"parse": []},     # 使用者寫的描述裡有 @everyone 也不會真的通知

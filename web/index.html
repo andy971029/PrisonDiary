@@ -1105,7 +1105,7 @@
   <header>
     <div class="brand">
       <img class="logo" src="favicon.png" alt="">
-      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.2</span><small>陪你練等坐牢的好幫手</small></div>
+      <div class="mark">服刑日誌<span class="ver" id="app-version">v0.51.3</span><small>陪你練等坐牢的好幫手</small></div>
     </div>
     <!-- 控制鈕與讀到的角色、地圖在哪個分頁都看得到：切去查圖鑑時分享還在跑，狀態、暫停、祈禱倒數都要在手邊 -->
     <div class="controls">
@@ -2398,6 +2398,7 @@ window.addEventListener("online", syncRecords);
 // 找不到小地圖時另外裁畫面左上角一塊，才看得出為什麼找不到。整張畫面只有使用者自己按「回報問題」才會送（/api/reports）。
 const SNAP_CROP_KEYS = ["exp", "level", "job", "name", "map", "meso", "prayer"];
 const SNAP_CORNER = { w: 360, h: 260 };
+const SNAP_CROP_BYTES = 128 * 1024;    // 一塊裁切圖的上限；後端 server/app.py 的 SNAP_CROP_BYTES
 const SNAP_EVERY_MS = 60000;
 const SNAP_QUEUE_KEY = "mapleexp.snapshots.v1";
 const SNAP_QUEUE_MAX = 30;
@@ -2430,8 +2431,15 @@ function writeSnapQueue() {
   try { localStorage.setItem(SNAP_QUEUE_KEY, JSON.stringify(snapQueue)); } catch { /* 存不了就只在這次開頁有效 */ }
 }
 
-// 從辨識用的畫面裁一塊原尺寸的 PNG（data URL）；範圍不合理回 null
-function cropPng(rect) {
+// data URL 解開後的位元組數
+function dataUrlBytes(url) {
+  const b64 = url.slice(url.indexOf(",") + 1);
+  return Math.floor(b64.length * 3 / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+}
+
+// 從辨識用的畫面裁一塊原尺寸的圖（data URL）。先存 PNG，超過 SNAP_CROP_BYTES 改存 JPEG，
+// 還是太大就不附；範圍不合理也回 null
+function cropImage(rect) {
   if (!rect || !frame.width || !frame.height) return null;
   const l = Math.max(0, Math.floor(rect[0])), t = Math.max(0, Math.floor(rect[1]));
   const r = Math.min(frame.width, Math.ceil(rect[2])), b = Math.min(frame.height, Math.ceil(rect[3]));
@@ -2440,7 +2448,10 @@ function cropPng(rect) {
   canvas.width = r - l;
   canvas.height = b - t;
   canvas.getContext("2d").drawImage(frame, l, t, r - l, b - t, 0, 0, r - l, b - t);
-  return canvas.toDataURL("image/png");
+  const png = canvas.toDataURL("image/png");
+  if (dataUrlBytes(png) <= SNAP_CROP_BYTES) return png;
+  const jpeg = canvas.toDataURL("image/jpeg", 0.85);
+  return jpeg.startsWith("data:image/jpeg") && dataUrlBytes(jpeg) <= SNAP_CROP_BYTES ? jpeg : null;
 }
 
 function snapState(out) {
@@ -2464,11 +2475,11 @@ function takeSnapshot(out) {
   const crops = {};
   const rois = out?.rois || {};
   for (const k of SNAP_CROP_KEYS) {
-    const png = cropPng(rois[k]);
-    if (png) crops[k] = png;
+    const img = cropImage(rois[k]);
+    if (img) crops[k] = img;
   }
   if (!rois.map) {
-    const corner = cropPng([0, 0, Math.min(frame.width, SNAP_CORNER.w), Math.min(frame.height, SNAP_CORNER.h)]);
+    const corner = cropImage([0, 0, Math.min(frame.width, SNAP_CORNER.w), Math.min(frame.height, SNAP_CORNER.h)]);
     if (corner) crops.corner = corner;
   }
   return { state: snapState(out), crops };
